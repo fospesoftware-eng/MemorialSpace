@@ -5,6 +5,7 @@ import {
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
+  Spline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +25,13 @@ import {
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "draw" | "spot" | "pan";
+type Tool = "select" | "draw" | "path" | "spot" | "pan";
 type View = "2d" | "3d";
+
+/** Default stroke thickness for new path/road plots, in SVG units. */
+const DEFAULT_PATH_WIDTH = 14;
+/** Hard cap on vertices per drawn path — guards against runaway clicks. */
+const MAX_PATH_VERTICES = 200;
 
 interface Plot {
   id: string;
@@ -44,6 +50,17 @@ interface Plot {
    * existing select / move / resize handles still work.
    */
   points?: [number, number][];
+  /**
+   * Optional polyline vertices in absolute SVG coordinates. When present
+   * (≥ 2 points) the plot renders as a stroked open `<polyline>` — the
+   * "Path" tool uses this for flexible paths/roads/bridges that can't be
+   * expressed as a rectangle. Mutually exclusive with `points` (a plot is
+   * either a closed polygon or an open polyline, not both). Bounding box
+   * (x/y/w/h) is kept in sync with these points so move/select work.
+   */
+  pathPoints?: [number, number][];
+  /** Stroke width (SVG units) for polyline plots. Defaults to DEFAULT_PATH_WIDTH. */
+  pathWidth?: number;
 }
 
 interface MapDoc {
@@ -106,6 +123,29 @@ function migrateDoc(raw: unknown): MapDoc {
         }
         if (pts.length >= 3) points = pts;
       }
+      // Polyline / path vertices (optional). Coerce, clamp to MAX, drop
+      // the field if fewer than 2 valid vertices remain so the rest of the
+      // editor stays on the rect/polygon code paths.
+      let pathPoints: [number, number][] | undefined;
+      const rawPath = (p as LegacyPlot & { pathPoints?: unknown }).pathPoints;
+      if (Array.isArray(rawPath)) {
+        const pts: [number, number][] = [];
+        for (const pt of rawPath.slice(0, MAX_PATH_VERTICES)) {
+          if (Array.isArray(pt) && pt.length >= 2) {
+            const px = safeOptNum(pt[0]);
+            const py = safeOptNum(pt[1]);
+            if (px !== undefined && py !== undefined) pts.push([px, py]);
+          }
+        }
+        if (pts.length >= 2) pathPoints = pts;
+      }
+      // Clamp `pathWidth` to the same range exposed by the inspector slider
+      // (2..60) so a poisoned saved doc can't load with a runaway / negative
+      // stroke that paints over the rest of the map. Falls back to the
+      // default when the field is missing or non-finite.
+      const pathWidth = pathPoints
+        ? Math.max(2, Math.min(60, safeOptNum((p as LegacyPlot & { pathWidth?: unknown }).pathWidth) ?? DEFAULT_PATH_WIDTH))
+        : undefined;
       return {
         id: safeStr(p.id, newId("p")),
         typeId: safeStr(p.typeId ?? p.type, "_unknown"),
@@ -114,6 +154,8 @@ function migrateDoc(raw: unknown): MapDoc {
         x: safeNum(p.x, 0), y: safeNum(p.y, 0),
         w: safeNum(p.w, 40), h: safeNum(p.h, 25),
         points,
+        pathPoints,
+        pathWidth,
       };
     }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
@@ -187,6 +229,16 @@ export default function MapMaker() {
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
   const dragState = useRef<{ mode: "create" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
+  // ----- Path tool draft state -----
+  // The Path tool builds up a polyline through discrete clicks (NOT a drag),
+  // so it keeps its own draft separate from `draftRect` / `dragState`. The ref
+  // is the source of truth (committed during synchronous handlers); the state
+  // mirror exists purely to trigger re-renders so the live preview updates.
+  const draftPathRef = useRef<{ typeId: string; pathWidth: number; points: [number, number][] } | null>(null);
+  const [draftPath, setDraftPath] = useState<{ typeId: string; pathWidth: number; points: [number, number][] } | null>(null);
+  // Latest pointer position (SVG units) while the Path tool is active — used
+  // to draw a "rubber band" segment from the last vertex to the cursor.
+  const [pathCursor, setPathCursor] = useState<{ x: number; y: number } | null>(null);
   const viewRef = useRef<View>("2d");
 
   useEffect(() => { viewRef.current = view; }, [view]);
@@ -380,6 +432,31 @@ export default function MapMaker() {
       return;
     }
 
+    // Path tool: each click adds a vertex to the in-progress polyline.
+    // Double-click / Enter / Esc finishes; Backspace pops the last vertex.
+    // We deliberately ignore plot/spot underlays so a road can pass over a
+    // plot without flipping selection mid-draw. We also do NOT capture the
+    // pointer — the tool relies on discrete clicks, not drags.
+    if (tool === "path") {
+      if (!activePlotTypeId) return;
+      const cur = draftPathRef.current;
+      if (!cur) {
+        const next = { typeId: activePlotTypeId, pathWidth: DEFAULT_PATH_WIDTH, points: [[x, y]] as [number, number][] };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      } else if (cur.points.length < MAX_PATH_VERTICES) {
+        // Skip duplicate vertices (the second pointerdown of a dblclick lands
+        // on the same point as the first; the dblclick handler will commit).
+        const [lx, ly] = cur.points[cur.points.length - 1];
+        if (Math.hypot(x - lx, y - ly) < 0.5) return;
+        const next = { ...cur, points: [...cur.points, [x, y] as [number, number]] };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      }
+      setPathCursor({ x, y });
+      return;
+    }
+
     if (tool === "spot" && !isPlotEl && !isResizeEl && !isSpotEl) {
       if (!activeSpotTypeId) return;
       const id = newId("s");
@@ -426,7 +503,16 @@ export default function MapMaker() {
   };
 
   const onCanvasPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (!dragState.current || viewRef.current === "3d") return;
+    if (viewRef.current === "3d") return;
+    // Path tool: track the cursor for the live "rubber band" preview from
+    // the last placed vertex to the pointer. Runs even when no drag is
+    // active (the path tool is click-based, not drag-based).
+    if (tool === "path" && draftPathRef.current) {
+      const { x, y } = toSvgPoint(e);
+      setPathCursor({ x, y });
+      return;
+    }
+    if (!dragState.current) return;
     const ds = dragState.current;
 
     // Hand / pan tool: scroll the viewport. Compute the delta in SCREEN
@@ -461,12 +547,13 @@ export default function MapMaker() {
           if (p.id !== ds.id) return p;
           const nx = x - ds.offsetX!;
           const ny = y - ds.offsetY!;
-          // Translate the polygon outline by the same delta so the rendered
-          // shape stays glued to the bounding box.
+          // Translate the polygon outline AND the polyline path by the same
+          // delta so any rendered shape stays glued to the bounding box.
           const dx = nx - p.x;
           const dy = ny - p.y;
           const points = p.points ? p.points.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
-          return { ...p, x: nx, y: ny, points };
+          const pathPoints = p.pathPoints ? p.pathPoints.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
+          return { ...p, x: nx, y: ny, points, pathPoints };
         }),
       }));
     }
@@ -485,8 +572,8 @@ export default function MapMaker() {
           if (p.id !== ds.id) return p;
           const nw = Math.max(8, x - p.x);
           const nh = Math.max(8, y - p.y);
-          // Scale the polygon outline relative to the top-left so the shape
-          // stays inside (and proportional to) the new bounding box.
+          // Scale the polygon / polyline outline relative to the top-left so
+          // the shape stays inside (and proportional to) the new bounding box.
           let points = p.points;
           if (points && p.w > 0 && p.h > 0) {
             const sx = nw / p.w;
@@ -496,7 +583,16 @@ export default function MapMaker() {
               p.y + (py - p.y) * sy,
             ] as [number, number]);
           }
-          return { ...p, w: nw, h: nh, points };
+          let pathPoints = p.pathPoints;
+          if (pathPoints && p.w > 0 && p.h > 0) {
+            const sx = nw / p.w;
+            const sy = nh / p.h;
+            pathPoints = pathPoints.map(([px, py]) => [
+              p.x + (px - p.x) * sx,
+              p.y + (py - p.y) * sy,
+            ] as [number, number]);
+          }
+          return { ...p, w: nw, h: nh, points, pathPoints };
         }),
       }));
     }
@@ -544,10 +640,105 @@ export default function MapMaker() {
     try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch {}
   };
 
+  // Commit the in-progress polyline as a real Plot. Trims trailing
+  // near-duplicate vertices (the dblclick gesture leaves one behind), drops
+  // the draft if too few real vertices remain. By default switches back to
+  // Select; pass `switchToSelect: false` when an outer caller is itself
+  // switching the user to a different tool (e.g. tool-change auto-commit)
+  // so we don't clobber their target.
+  // Returns true if a plot was committed, false otherwise.
+  const commitDraftPath = useCallback((opts?: { switchToSelect?: boolean }): boolean => {
+    const switchToSelect = opts?.switchToSelect ?? true;
+    const cur = draftPathRef.current;
+    draftPathRef.current = null;
+    setDraftPath(null);
+    setPathCursor(null);
+    if (!cur) return false;
+    // Trim trailing near-duplicates so a dblclick that places the second
+    // pointerdown ~on top of the previous vertex doesn't create a zero-length
+    // tail segment. 4 SVG units ≈ what the browser treats as the same point.
+    const pts: [number, number][] = [];
+    for (const pt of cur.points) {
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(pt[0] - last[0], pt[1] - last[1]) > 4) pts.push(pt);
+    }
+    if (pts.length < 2) return false;
+    // Bounding box auto-derived so move/select hit-test still works. We
+    // include a half-stroke padding so the visible polyline never spills
+    // outside the bounding rect.
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const pad = cur.pathWidth / 2;
+    const bx = Math.min(...xs) - pad;
+    const by = Math.min(...ys) - pad;
+    const bw = Math.max(8, Math.max(...xs) - Math.min(...xs) + cur.pathWidth);
+    const bh = Math.max(8, Math.max(...ys) - Math.min(...ys) + cur.pathWidth);
+    const finalPlot: Plot = {
+      id: newId("p"),
+      typeId: cur.typeId,
+      label: "",
+      status: "available",
+      x: bx, y: by, w: bw, h: bh,
+      pathPoints: pts,
+      pathWidth: cur.pathWidth,
+    };
+    setDoc((d) => ({ ...d, plots: [...d.plots, finalPlot], updatedAt: Date.now() }));
+    setSelection({ kind: "plot", id: finalPlot.id });
+    if (switchToSelect) setTool("select");
+    return true;
+  }, []);
+
+  // Cancel the current path draft without committing (used by Esc when the
+  // user wants to throw away the in-progress shape, or by tool changes).
+  const cancelDraftPath = useCallback(() => {
+    draftPathRef.current = null;
+    setDraftPath(null);
+    setPathCursor(null);
+  }, []);
+
+  // Switching tools mid-draw should not strand a partial polyline — commit
+  // if it's a usable shape, otherwise discard. Pass switchToSelect=false so
+  // we honour whichever tool the user actually picked instead of forcing
+  // them into Select.
+  useEffect(() => {
+    if (tool !== "path" && draftPathRef.current) {
+      commitDraftPath({ switchToSelect: false });
+    }
+  }, [tool, commitDraftPath]);
+
+  // Double-click on the canvas finishes the in-progress path. Wired on the
+  // SVG element so the user can dblclick anywhere — including on the last
+  // vertex they just placed — to signal "done".
+  const onCanvasDoubleClick = () => {
+    if (tool === "path" && draftPathRef.current) commitDraftPath();
+  };
+
   // ----- Keyboard shortcuts -----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Path-drawing keys take priority — Backspace pops the last vertex,
+      // Enter commits, Escape discards the in-progress draft. We branch
+      // first so they don't fall through to the global Backspace=delete
+      // selection / Esc=clear selection behaviour.
+      if (draftPathRef.current) {
+        if (e.key === "Backspace" || e.key === "Delete") {
+          e.preventDefault();
+          const cur = draftPathRef.current;
+          if (cur.points.length <= 1) {
+            cancelDraftPath();
+          } else {
+            const next = { ...cur, points: cur.points.slice(0, -1) };
+            draftPathRef.current = next;
+            setDraftPath(next);
+          }
+          return;
+        }
+        if (e.key === "Enter") { e.preventDefault(); commitDraftPath(); return; }
+        if (e.key === "Escape") { e.preventDefault(); cancelDraftPath(); return; }
+      }
+
       if ((e.key === "Delete" || e.key === "Backspace") && selection) {
         e.preventDefault();
         if (selection.kind === "plot") {
@@ -561,6 +752,7 @@ export default function MapMaker() {
       const k = e.key.toLowerCase();
       if (k === "v") setTool("select");
       if (k === "r") setTool("draw");
+      if (k === "p") setTool("path");
       if (k === "s") setTool("spot");
       if (k === "h") setTool("pan");
       if (k === "f") {
@@ -570,7 +762,7 @@ export default function MapMaker() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, enterFullscreen]);
+  }, [selection, enterFullscreen, commitDraftPath, cancelDraftPath]);
 
   // ----- Background image management -----
   // Returns true on success, false on failure. Caller should only show
@@ -839,6 +1031,7 @@ export default function MapMaker() {
 
   const cursorClass =
     tool === "draw" ? "cursor-crosshair" :
+    tool === "path" ? "cursor-crosshair" :
     tool === "spot" ? "cursor-cell" :
     tool === "pan"  ? "cursor-grab active:cursor-grabbing" :
     "cursor-default";
@@ -1004,6 +1197,7 @@ export default function MapMaker() {
           <aside className="w-12 shrink-0 border-r border-border bg-card flex flex-col items-center py-2 gap-1">
             <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
             <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
+            <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path-mini" iconOnly />
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
             <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
             <Separator className="my-1 w-8" />
@@ -1028,11 +1222,13 @@ export default function MapMaker() {
               <div className="grid grid-cols-2 gap-1">
                 <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select" />
                 <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw" />
+                <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path" />
                 <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot" />
                 <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan" />
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 {tool === "draw"  && "Drag on the canvas to place a plot."}
+                {tool === "path"  && "Click to place points along a path or road. Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
                 {tool === "spot"  && "Click on the canvas to drop a burial spot."}
                 {tool === "select"&& "Click an item to edit. Drag to move."}
                 {tool === "pan"   && "Drag the canvas to pan around the map."}
@@ -1233,6 +1429,7 @@ export default function MapMaker() {
                   onPointerMove={onCanvasPointerMove}
                   onPointerUp={onCanvasPointerUp}
                   onPointerCancel={onCanvasPointerCancel}
+                  onDoubleClick={onCanvasDoubleClick}
                   data-testid="map-canvas"
                 >
                   {!doc.image && (
@@ -1251,17 +1448,32 @@ export default function MapMaker() {
                   )}
 
                   {/* 3D plot shadows */}
-                  {view === "3d" && doc.plots.map((p) => (
-                    p.points && p.points.length >= 3 ? (
-                      <polygon
-                        key={`shadow-${p.id}`}
-                        points={p.points.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
-                        fill="rgba(0,0,0,0.35)" pointerEvents="none"
-                      />
-                    ) : (
-                      <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />
-                    )
-                  ))}
+                  {view === "3d" && doc.plots.map((p) => {
+                    if (p.pathPoints && p.pathPoints.length >= 2) {
+                      return (
+                        <polyline
+                          key={`shadow-${p.id}`}
+                          points={p.pathPoints.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
+                          fill="none"
+                          stroke="rgba(0,0,0,0.35)"
+                          strokeWidth={p.pathWidth ?? DEFAULT_PATH_WIDTH}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          pointerEvents="none"
+                        />
+                      );
+                    }
+                    if (p.points && p.points.length >= 3) {
+                      return (
+                        <polygon
+                          key={`shadow-${p.id}`}
+                          points={p.points.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
+                          fill="rgba(0,0,0,0.35)" pointerEvents="none"
+                        />
+                      );
+                    }
+                    return <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />;
+                  })}
 
                   {/* Plots */}
                   {doc.plots.map((p) => {
@@ -1271,15 +1483,63 @@ export default function MapMaker() {
                     // Show this plot's label when the global toggle is on,
                     // OR the user is hovering it, OR it's currently selected.
                     const showThisLabel = (showLabels || isHov || isSel) && p.w > 24 && p.h > 14;
-                    // Polygon plots (typically AI-imported, non-rectangular)
-                    // render their true outline. Plain plots render as the
-                    // classic axis-aligned rectangle.
-                    const hasPolygon = p.points && p.points.length >= 3;
+                    // Three render shapes, in priority order:
+                    //   1. Polyline (path/road) — `pathPoints` defines an open
+                    //      stroked line; we render two stacked polylines so a
+                    //      thin road still has a generously thick hit area.
+                    //   2. Polygon (typically AI-imported, non-rectangular).
+                    //   3. Plain axis-aligned rectangle.
+                    const hasPath = p.pathPoints && p.pathPoints.length >= 2;
+                    const hasPolygon = !hasPath && p.points && p.points.length >= 3;
                     const onPlotEnter = () => setHoveredPlotId(p.id);
                     const onPlotLeave = () => setHoveredPlotId((cur) => (cur === p.id ? null : cur));
                     return (
                       <g key={p.id}>
-                        {hasPolygon ? (
+                        {hasPath ? (
+                          <>
+                            {/* Wide invisible hit-strip so narrow roads are easy to click. */}
+                            <polyline
+                              data-plot="true"
+                              data-plot-id={p.id}
+                              data-testid={`plot-${p.id}-hit`}
+                              points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                              fill="none"
+                              stroke="transparent"
+                              strokeWidth={Math.max((p.pathWidth ?? DEFAULT_PATH_WIDTH) + 8, 18)}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                              onPointerEnter={onPlotEnter}
+                              onPointerLeave={onPlotLeave}
+                            />
+                            {/* Visible stroke. When selected, draw a thicker
+                                halo underneath the visible body using paintOrder. */}
+                            <polyline
+                              data-testid={`plot-${p.id}`}
+                              points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                              fill="none"
+                              stroke={meta.fill}
+                              strokeOpacity={doc.image ? 0.92 : 1}
+                              strokeWidth={p.pathWidth ?? DEFAULT_PATH_WIDTH}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              pointerEvents="none"
+                            />
+                            {isSel && (
+                              <polyline
+                                points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                                fill="none"
+                                stroke="#0ea5e9"
+                                strokeWidth={(p.pathWidth ?? DEFAULT_PATH_WIDTH) + 3}
+                                strokeOpacity={0.55}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeDasharray="6 4"
+                                pointerEvents="none"
+                              />
+                            )}
+                          </>
+                        ) : hasPolygon ? (
                           <polygon
                             data-plot="true"
                             data-plot-id={p.id}
@@ -1310,10 +1570,12 @@ export default function MapMaker() {
                             onPointerLeave={onPlotLeave}
                           />
                         )}
-                        {p.w > 12 && p.h > 12 && (
+                        {/* Status dot — skip on path plots (no obvious anchor). */}
+                        {!hasPath && p.w > 12 && p.h > 12 && (
                           <circle cx={p.x + p.w - 6} cy={p.y + 6} r={3} fill={STATUS_COLORS[p.status]} pointerEvents="none" />
                         )}
-                        {showThisLabel && (
+                        {/* Label — paths get the label centred on their middle vertex. */}
+                        {showThisLabel && !hasPath && (
                           <text
                             x={p.x + p.w / 2}
                             y={p.y + p.h / 2 + 3}
@@ -1329,7 +1591,23 @@ export default function MapMaker() {
                             {p.label || meta.code}
                           </text>
                         )}
-                        {isSel && (
+                        {hasPath && (showLabels || isHov || isSel) && (() => {
+                          const mid = p.pathPoints![Math.floor(p.pathPoints!.length / 2)];
+                          return (
+                            <text
+                              x={mid[0]} y={mid[1] - (p.pathWidth ?? DEFAULT_PATH_WIDTH) / 2 - 4}
+                              textAnchor="middle" fontSize={11} fontWeight={600}
+                              fill={isLightFill(meta.fill) ? "#1f2937" : "#ffffff"}
+                              stroke="#ffffff" strokeWidth={3} paintOrder="stroke"
+                              pointerEvents="none"
+                            >
+                              {p.label || meta.code}
+                            </text>
+                          );
+                        })()}
+                        {/* Resize handle — only meaningful for rect/polygon plots.
+                            Path plots edit their thickness via the inspector slider. */}
+                        {isSel && !hasPath && (
                           <rect
                             data-resize="true"
                             x={p.x + p.w - 5} y={p.y + p.h - 5}
@@ -1338,6 +1616,16 @@ export default function MapMaker() {
                             className="cursor-nwse-resize"
                           />
                         )}
+                        {/* Path vertex handles when selected — visual only,
+                            help the user understand the shape they drew. */}
+                        {isSel && hasPath && p.pathPoints!.map(([vx, vy], i) => (
+                          <circle
+                            key={`v-${i}`}
+                            cx={vx} cy={vy} r={3.5}
+                            fill="#0ea5e9" stroke="#fff" strokeWidth={1.5}
+                            pointerEvents="none"
+                          />
+                        ))}
                       </g>
                     );
                   })}
@@ -1399,6 +1687,48 @@ export default function MapMaker() {
                       pointerEvents="none"
                     />
                   )}
+
+                  {/* Draft path preview — committed segments solid, the
+                      "rubber band" segment from the last vertex to the cursor
+                      dashed so the user knows it's not placed yet. */}
+                  {draftPath && (() => {
+                    const meta = getPlotType(draftPath.typeId);
+                    const placed = draftPath.points;
+                    const placedStr = placed.map(([px, py]) => `${px},${py}`).join(" ");
+                    const last = placed[placed.length - 1];
+                    return (
+                      <g pointerEvents="none">
+                        {placed.length >= 2 && (
+                          <polyline
+                            points={placedStr}
+                            fill="none"
+                            stroke={meta.fill}
+                            strokeOpacity={0.9}
+                            strokeWidth={draftPath.pathWidth}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        )}
+                        {pathCursor && (
+                          <line
+                            x1={last[0]} y1={last[1]}
+                            x2={pathCursor.x} y2={pathCursor.y}
+                            stroke={meta.fill}
+                            strokeOpacity={0.55}
+                            strokeWidth={draftPath.pathWidth}
+                            strokeDasharray="6 5"
+                            strokeLinecap="round"
+                          />
+                        )}
+                        {placed.map(([vx, vy], i) => (
+                          <circle
+                            key={`dv-${i}`} cx={vx} cy={vy} r={4}
+                            fill="#ffffff" stroke={meta.stroke} strokeWidth={1.5}
+                          />
+                        ))}
+                      </g>
+                    );
+                  })()}
                 </svg>
               </div>
             </div>
@@ -1406,7 +1736,7 @@ export default function MapMaker() {
 
           <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border border-border rounded px-2 py-1 pointer-events-none">
             <Hand className="h-3 w-3" />
-            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">H</kbd> Pan · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
+            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">P</kbd> Path · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">H</kbd> Pan · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
           </div>
 
           {saveError && (
@@ -1587,12 +1917,46 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div><Label className="text-xs">Width</Label><Input type="number" value={Math.round(plot.w)} onChange={(e) => onChange({ w: Math.max(8, +e.target.value) })} className="h-8" /></div>
-        <div><Label className="text-xs">Height</Label><Input type="number" value={Math.round(plot.h)} onChange={(e) => onChange({ h: Math.max(8, +e.target.value) })} className="h-8" /></div>
-        <div><Label className="text-xs">X</Label><Input type="number" value={Math.round(plot.x)} onChange={(e) => onChange({ x: +e.target.value })} className="h-8" /></div>
-        <div><Label className="text-xs">Y</Label><Input type="number" value={Math.round(plot.y)} onChange={(e) => onChange({ y: +e.target.value })} className="h-8" /></div>
-      </div>
+      {/* Path plots edit their thickness via a slider; rect/polygon plots
+          keep the legacy bbox numeric inputs. The sliders below auto-recompute
+          the bounding box (with half-stroke padding) so move/select stay
+          accurate after a width change. */}
+      {plot.pathPoints && plot.pathPoints.length >= 2 ? (
+        <div>
+          <Label className="text-xs flex items-center justify-between">
+            <span>Path width</span>
+            <span className="tabular-nums text-muted-foreground">{Math.round(plot.pathWidth ?? DEFAULT_PATH_WIDTH)} px</span>
+          </Label>
+          <Input
+            type="range"
+            min={2} max={60} step={1}
+            value={Math.round(plot.pathWidth ?? DEFAULT_PATH_WIDTH)}
+            onChange={(e) => {
+              const w = Math.max(2, Math.min(60, +e.target.value));
+              const xs = plot.pathPoints!.map((p) => p[0]);
+              const ys = plot.pathPoints!.map((p) => p[1]);
+              const pad = w / 2;
+              onChange({
+                pathWidth: w,
+                x: Math.min(...xs) - pad,
+                y: Math.min(...ys) - pad,
+                w: Math.max(8, Math.max(...xs) - Math.min(...xs) + w),
+                h: Math.max(8, Math.max(...ys) - Math.min(...ys) + w),
+              });
+            }}
+            className="h-8 cursor-ew-resize"
+            data-testid="input-path-width"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1">{plot.pathPoints.length} vertices · drag the path on the canvas to reposition it</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-xs">Width</Label><Input type="number" value={Math.round(plot.w)} onChange={(e) => onChange({ w: Math.max(8, +e.target.value) })} className="h-8" /></div>
+          <div><Label className="text-xs">Height</Label><Input type="number" value={Math.round(plot.h)} onChange={(e) => onChange({ h: Math.max(8, +e.target.value) })} className="h-8" /></div>
+          <div><Label className="text-xs">X</Label><Input type="number" value={Math.round(plot.x)} onChange={(e) => onChange({ x: +e.target.value })} className="h-8" /></div>
+          <div><Label className="text-xs">Y</Label><Input type="number" value={Math.round(plot.y)} onChange={(e) => onChange({ y: +e.target.value })} className="h-8" /></div>
+        </div>
+      )}
       <Button size="sm" variant="outline" className="w-full text-destructive hover:text-destructive border-destructive/30" onClick={onDelete} data-testid="delete-plot">
         <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete plot
       </Button>
