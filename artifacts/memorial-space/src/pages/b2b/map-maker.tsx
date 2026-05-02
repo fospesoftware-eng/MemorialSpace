@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect, useMemo, useCallback, type PointerEvent as ReactPointerEvent, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, type PointerEvent as ReactPointerEvent, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
+import { Link } from "wouter";
 import {
   Upload, MousePointer2, Square, Trash2, Save, Download, Image as ImageIcon,
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
-  ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X, User as UserIcon,
+  ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
+  Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,8 +122,15 @@ export default function MapMaker() {
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Refs / mode trackers
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
@@ -138,6 +147,33 @@ export default function MapMaker() {
     const t = setTimeout(() => setSaveError(null), 8000);
     return () => clearTimeout(t);
   }, [backgroundsErr]);
+
+  // Status messages auto-dismiss
+  const flashStatus = useCallback((msg: string) => {
+    setStatusMessage(msg);
+    setTimeout(() => setStatusMessage((cur) => (cur === msg ? null : cur)), 3500);
+  }, []);
+
+  // ----- Browser fullscreen API -----
+  const enterFullscreen = useCallback(async () => {
+    const el = rootRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    } catch (err) {
+      flashStatus(`Couldn't toggle fullscreen: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  }, [flashStatus]);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   // Cancel any active drag when the view changes (mid-drag 3D toggle would
   // mutate the wrong things). We intentionally do NOT depend on `tool` here:
@@ -369,10 +405,14 @@ export default function MapMaker() {
       if (k === "v") setTool("select");
       if (k === "r") setTool("draw");
       if (k === "s") setTool("spot");
+      if (k === "f") {
+        e.preventDefault();
+        void enterFullscreen();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection]);
+  }, [selection, enterFullscreen]);
 
   // ----- Background image management -----
   const setBackgroundFromDataUrl = async (dataUrl: string, sourceName: string) => {
@@ -405,8 +445,40 @@ export default function MapMaker() {
     try {
       const dataUrl = await fileToDataUrl(file);
       await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
+      flashStatus(`Loaded background: ${file.name}`);
     } catch {
       setSaveError("Couldn't read that file.");
+      setTimeout(() => setSaveError(null), 4000);
+    }
+  };
+
+  // Drag & drop image onto canvas
+  const onCanvasDragOver = (e: ReactDragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      if (!isDragOver) setIsDragOver(true);
+    }
+  };
+  const onCanvasDragLeave = (e: ReactDragEvent<HTMLDivElement>) => {
+    if (e.currentTarget === e.target) setIsDragOver(false);
+  };
+  const onCanvasDrop = async (e: ReactDragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setSaveError("Only image files (PNG/JPG/WebP) can be used as backgrounds.");
+      setTimeout(() => setSaveError(null), 4000);
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
+      flashStatus(`Loaded background: ${file.name}`);
+    } catch {
+      setSaveError("Couldn't read the dropped file.");
       setTimeout(() => setSaveError(null), 4000);
     }
   };
@@ -511,86 +583,183 @@ export default function MapMaker() {
 
   const cursorClass = tool === "draw" ? "cursor-crosshair" : tool === "spot" ? "cursor-cell" : "cursor-default";
 
+  // Fit-to-screen: compute zoom that fits the canvas inside the viewport.
+  const fitToScreen = useCallback(() => {
+    const wrap = canvasWrapRef.current;
+    if (!wrap || !doc.imgWidth || !doc.imgHeight) { setZoom(1); return; }
+    const padding = 64;
+    const availW = Math.max(100, wrap.clientWidth - padding);
+    const availH = Math.max(100, wrap.clientHeight - padding);
+    const z = Math.min(availW / doc.imgWidth, availH / doc.imgHeight);
+    setZoom(Math.max(0.1, Math.min(3, z)));
+  }, [doc.imgWidth, doc.imgHeight]);
+
   return (
-    <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 h-[calc(100vh-0rem)] flex flex-col bg-background">
-      {/* Top toolbar */}
-      <div className="flex items-center gap-3 border-b border-border bg-card px-4 h-14 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center">
+    <div
+      ref={rootRef}
+      className="fixed inset-0 z-40 flex flex-col bg-background"
+      data-testid="map-maker-root"
+    >
+      {/* ============ Top toolbar ============ */}
+      <div className="flex items-center gap-2 border-b border-border bg-card px-2 sm:px-3 h-14 shrink-0">
+        {/* Back to dashboard */}
+        <Link href="/dashboard">
+          <Button variant="ghost" size="sm" className="h-9 px-2" data-testid="btn-back-app" title="Back to dashboard">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden md:inline ml-1.5 text-xs">Back</span>
+          </Button>
+        </Link>
+
+        <Separator orientation="vertical" className="h-7" />
+
+        {/* Toggle left panel */}
+        <Button
+          variant="ghost" size="sm"
+          className="h-9 w-9 p-0"
+          onClick={() => setLeftCollapsed((v) => !v)}
+          data-testid="btn-toggle-left"
+          title={leftCollapsed ? "Show tools panel" : "Hide tools panel"}
+        >
+          {leftCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </Button>
+
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
             <Layers className="h-4 w-4 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <Input
               value={doc.name}
               onChange={(e) => setDoc((d) => ({ ...d, name: e.target.value }))}
-              className="h-7 w-64 text-sm font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-2"
+              className="h-7 w-40 sm:w-56 text-sm font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-2"
               data-testid="input-map-name"
             />
-            <div className="text-[10px] text-muted-foreground px-2">
+            <div className="text-[10px] text-muted-foreground px-2 hidden sm:block">
               {counts.totalPlots} plots · {counts.totalSpots} spots · saved {timeAgo(doc.updatedAt)}
             </div>
           </div>
         </div>
 
-        <Separator orientation="vertical" className="h-8" />
+        <Separator orientation="vertical" className="h-7 hidden md:block" />
 
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant={view === "2d" ? "default" : "outline"} onClick={() => setView("2d")} data-testid="view-2d">
+        {/* View 2D/3D */}
+        <div className="hidden md:flex items-center gap-1">
+          <Button size="sm" variant={view === "2d" ? "default" : "outline"} onClick={() => setView("2d")} data-testid="view-2d" className="h-8">
             <Square className="h-3.5 w-3.5 mr-1.5" /> 2D
           </Button>
-          <Button size="sm" variant={view === "3d" ? "default" : "outline"} onClick={() => setView("3d")} data-testid="view-3d">
+          <Button size="sm" variant={view === "3d" ? "default" : "outline"} onClick={() => setView("3d")} data-testid="view-3d" className="h-8">
             <Box className="h-3.5 w-3.5 mr-1.5" /> 3D
           </Button>
         </div>
 
         {view === "3d" && (
-          <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted">
+          <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-md bg-muted">
             <Label className="text-xs text-muted-foreground">Tilt</Label>
-            <Slider value={[tilt]} onValueChange={([v]) => setTilt(v)} min={20} max={75} step={1} className="w-32" />
+            <Slider value={[tilt]} onValueChange={([v]) => setTilt(v)} min={20} max={75} step={1} className="w-24" />
             <span className="text-xs tabular-nums text-muted-foreground w-8">{tilt}°</span>
           </div>
         )}
 
-        <Separator orientation="vertical" className="h-8" />
+        <Separator orientation="vertical" className="h-7 hidden md:block" />
 
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))} data-testid="zoom-out">
+        {/* Zoom controls */}
+        <div className="hidden md:flex items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} data-testid="zoom-out" title="Zoom out">
             <ZoomOut className="h-3.5 w-3.5" />
           </Button>
-          <span className="text-xs tabular-nums text-muted-foreground w-12 text-center">{Math.round(zoom * 100)}%</span>
-          <Button size="sm" variant="ghost" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} data-testid="zoom-in">
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            className="text-xs tabular-nums text-muted-foreground w-12 text-center hover:text-foreground"
+            title="Reset to 100%"
+            data-testid="zoom-reset"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} data-testid="zoom-in" title="Zoom in">
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setZoom(1)} title="Reset zoom">
-            <RotateCcw className="h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={fitToScreen} data-testid="zoom-fit" title="Fit to screen">
+            <Maximize className="h-3.5 w-3.5 mr-1" />
+            <span className="hidden lg:inline text-xs">Fit</span>
           </Button>
         </div>
 
         <div className="flex-1" />
 
-        <Button size="sm" variant="ghost" onClick={() => setShowImage((v) => !v)} data-testid="toggle-image">
-          {showImage ? <Eye className="h-3.5 w-3.5 mr-1.5" /> : <EyeOff className="h-3.5 w-3.5 mr-1.5" />}
-          Image
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setShowLabels((v) => !v)}>
-          {showLabels ? <Eye className="h-3.5 w-3.5 mr-1.5" /> : <EyeOff className="h-3.5 w-3.5 mr-1.5" />}
-          Labels
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setShowSpots((v) => !v)} data-testid="toggle-spots">
-          {showSpots ? <Eye className="h-3.5 w-3.5 mr-1.5" /> : <EyeOff className="h-3.5 w-3.5 mr-1.5" />}
-          Spots
-        </Button>
-        <Separator orientation="vertical" className="h-8" />
-        <Button size="sm" variant="outline" onClick={exportJson} data-testid="export-json">
+        {/* Visibility toggles (compact) */}
+        <div className="hidden lg:flex items-center gap-0.5">
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowImage((v) => !v)} data-testid="toggle-image" title="Toggle background image">
+            {showImage ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
+            <span className="text-xs">Image</span>
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowLabels((v) => !v)} title="Toggle labels">
+            {showLabels ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
+            <span className="text-xs">Labels</span>
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowSpots((v) => !v)} data-testid="toggle-spots" title="Toggle burial spots">
+            {showSpots ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
+            <span className="text-xs">Spots</span>
+          </Button>
+        </div>
+
+        <Separator orientation="vertical" className="h-7" />
+
+        <Button size="sm" variant="outline" onClick={exportJson} data-testid="export-json" className="h-8 hidden md:inline-flex">
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export
         </Button>
-        <Button size="sm" onClick={save} data-testid="save-map">
+        <Button size="sm" onClick={save} data-testid="save-map" className="h-8">
           <Save className="h-3.5 w-3.5 mr-1.5" /> Save
+        </Button>
+
+        <Separator orientation="vertical" className="h-7" />
+
+        {/* Browser fullscreen toggle */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-9 w-9 p-0"
+          onClick={enterFullscreen}
+          data-testid="btn-fullscreen"
+          title={isFullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen"}
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+
+        {/* Toggle right panel */}
+        <Button
+          variant="ghost" size="sm"
+          className="h-9 w-9 p-0"
+          onClick={() => setRightCollapsed((v) => !v)}
+          data-testid="btn-toggle-right"
+          title={rightCollapsed ? "Show inspector" : "Hide inspector"}
+        >
+          {rightCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
       </div>
 
       <div className="flex-1 flex min-h-0">
         {/* ============ Left: Tools, plot palette, spot palette, backgrounds ============ */}
+        {leftCollapsed ? (
+          <aside className="w-12 shrink-0 border-r border-border bg-card flex flex-col items-center py-2 gap-1">
+            <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
+            <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
+            <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
+            <Separator className="my-1 w-8" />
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => fileInputRef.current?.click()} title="Upload background image">
+              <Upload className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={loadSample} title="Load sample map">
+              <Sparkles className="h-4 w-4" />
+            </Button>
+            <Link href="/cemetery-setup">
+              <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="Cemetery setup (types &amp; backgrounds)">
+                <SettingsIcon className="h-4 w-4" />
+              </Button>
+            </Link>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={onUploadImage} className="hidden" data-testid="image-input" />
+          </aside>
+        ) : (
         <aside className="w-60 shrink-0 border-r border-border bg-card flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-3 border-b border-border">
@@ -729,26 +898,52 @@ export default function MapMaker() {
             )}
           </ScrollArea>
         </aside>
+        )}
 
         {/* ============ Center: Canvas ============ */}
-        <div className="flex-1 min-w-0 relative bg-[radial-gradient(circle_at_50%_50%,hsl(var(--muted))_0,hsl(var(--background))_70%)] overflow-hidden">
+        <div
+          ref={canvasWrapRef}
+          className={cn(
+            "flex-1 min-w-0 relative bg-[radial-gradient(circle_at_50%_50%,hsl(var(--muted))_0,hsl(var(--background))_70%)] overflow-hidden",
+            isDragOver && "ring-4 ring-inset ring-primary/60",
+          )}
+          onDragOver={onCanvasDragOver}
+          onDragLeave={onCanvasDragLeave}
+          onDrop={onCanvasDrop}
+        >
           {/* Empty state — hidden once the user starts using a creation tool so it can't intercept canvas clicks. */}
           {tool === "select" && !doc.image && doc.plots.length === 0 && doc.spots.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="text-center max-w-sm">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-6">
+              <div className="text-center max-w-md pointer-events-auto bg-card/85 backdrop-blur border-2 border-dashed border-primary/40 rounded-xl px-8 py-10 shadow-xl">
                 <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-4">
                   <FileImage className="h-7 w-7 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-1">Start your cemetery map</h3>
-                <p className="text-sm text-muted-foreground mb-4">Upload a map image as a base layer, draw plot sections, then drop burial spots on top.</p>
-                <div className="flex justify-center gap-2 pointer-events-auto">
-                  <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+                <h3 className="text-xl font-semibold mb-1">Start your cemetery map</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  Drag &amp; drop a map image here, or upload one as a base layer. Then draw plot sections and drop burial spots on top.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button size="sm" onClick={() => fileInputRef.current?.click()} data-testid="empty-upload-image">
                     <Upload className="h-3.5 w-3.5 mr-1.5" /> Upload image
                   </Button>
-                  <Button size="sm" variant="outline" onClick={loadSample}>
+                  <Button size="sm" variant="outline" onClick={loadSample} data-testid="empty-load-sample">
                     <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Try sample
                   </Button>
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-4">
+                  Tip: press <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">F</kbd> for browser fullscreen.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Drop-zone overlay during drag */}
+          {isDragOver && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/15 backdrop-blur-sm pointer-events-none">
+              <div className="bg-card border-2 border-dashed border-primary rounded-xl px-8 py-6 shadow-2xl">
+                <Upload className="h-8 w-8 mx-auto text-primary mb-2" />
+                <div className="text-base font-semibold text-center">Drop image to set as background</div>
+                <div className="text-xs text-muted-foreground text-center mt-1">PNG, JPG, or WebP</div>
               </div>
             </div>
           )}
@@ -922,7 +1117,31 @@ export default function MapMaker() {
         </div>
 
         {/* ============ Right: Properties + saved maps ============ */}
-        <aside className="w-80 shrink-0 border-l border-border bg-card flex flex-col">
+        {rightCollapsed ? (
+          <aside className="w-12 shrink-0 border-l border-border bg-card flex flex-col items-center py-2 gap-1">
+            <Button
+              variant="ghost" size="sm" className="h-9 w-9 p-0"
+              onClick={() => setRightCollapsed(false)}
+              title="Show inspector"
+              data-testid="btn-expand-right"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {selection && (
+              <div className="h-9 w-9 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center" title="Selection active">
+                {selectedSpot ? <MapPinIcon className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-primary" />}
+              </div>
+            )}
+            <Separator className="my-1 w-8" />
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={save} title="Save map" data-testid="save-map-mini">
+              <Save className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={exportJson} title="Export map">
+              <Download className="h-4 w-4" />
+            </Button>
+          </aside>
+        ) : (
+        <aside className="w-72 lg:w-80 shrink-0 border-l border-border bg-card flex flex-col">
           <ScrollArea className="flex-1">
             {/* SELECTED ITEM */}
             <div className="p-3 border-b border-border">
@@ -1009,7 +1228,15 @@ export default function MapMaker() {
             </div>
           </ScrollArea>
         </aside>
+        )}
       </div>
+
+      {/* Status toast (centred bottom) */}
+      {statusMessage && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-3 py-2 rounded-md shadow-lg z-50 pointer-events-none" role="status">
+          {statusMessage}
+        </div>
+      )}
     </div>
   );
 }
@@ -1203,9 +1430,25 @@ function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onClearHeads
   );
 }
 
-function ToolButton({ active, onClick, icon: Icon, label, testId }: {
-  active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string; testId?: string;
+function ToolButton({ active, onClick, icon: Icon, label, testId, iconOnly }: {
+  active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string; testId?: string; iconOnly?: boolean;
 }) {
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        data-testid={testId}
+        title={label}
+        className={cn(
+          "h-9 w-9 flex items-center justify-center rounded-md border transition-colors",
+          active ? "border-primary bg-primary text-primary-foreground" : "border-transparent bg-background hover:bg-muted",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </button>
+    );
+  }
   return (
     <button
       type="button"

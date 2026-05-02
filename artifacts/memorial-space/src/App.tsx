@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -63,13 +63,17 @@ import AdminSupport from "@/pages/admin/support";
 const queryClient = new QueryClient();
 
 function B2BRoutes() {
+  // Map Maker is a fullscreen editor — render it outside the B2BLayout chrome so it
+  // can use the entire viewport (no sidebar / max-w-7xl constraints).
+  const [location] = useLocation();
+  if (location === "/map-maker") return <MapMaker />;
+
   return (
     <B2BLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/map" component={MapPage} />
-        <Route path="/map-maker" component={MapMaker} />
         <Route path="/plots" component={Plots} />
         <Route path="/burials" component={Burials} />
         <Route path="/bookings" component={Bookings} />
