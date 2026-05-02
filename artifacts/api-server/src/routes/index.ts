@@ -13,6 +13,7 @@ import marketplaceRouter from "./marketplace";
 import dashboardRouter from "./dashboard";
 import publicApiRouter from "./publicApi";
 import aiMapRouter from "./aiMap";
+import columbariaRouter from "./columbaria";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(marketplaceRouter);
 router.use(dashboardRouter);
 router.use(publicApiRouter);
 router.use(aiMapRouter);
+router.use(columbariaRouter);
 
 export default router;

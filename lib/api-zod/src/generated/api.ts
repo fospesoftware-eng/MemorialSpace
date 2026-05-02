@@ -21,6 +21,16 @@ export const ListOrganizationsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -43,6 +53,10 @@ export const ListOrganizationsResponse = zod.array(
 export const CreateOrganizationBody = zod.object({
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .optional(),
+  featuresColumbarium: zod.boolean().optional(),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -65,6 +79,16 @@ export const GetOrganizationResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -88,6 +112,10 @@ export const UpdateOrganizationParams = zod.object({
 export const UpdateOrganizationBody = zod.object({
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .optional(),
+  featuresColumbarium: zod.boolean().optional(),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -103,6 +131,16 @@ export const UpdateOrganizationResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -1250,6 +1288,16 @@ export const PublicGraveSearchResponseItem = zod.object({
     id: zod.number(),
     name: zod.string(),
     slug: zod.string(),
+    cemeteryType: zod
+      .enum(["church", "private", "pet", "municipality", "columbarium"])
+      .describe(
+        "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+      ),
+    featuresColumbarium: zod
+      .boolean()
+      .describe(
+        "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+      ),
     address: zod.string().optional(),
     city: zod.string().optional(),
     country: zod.string().optional(),

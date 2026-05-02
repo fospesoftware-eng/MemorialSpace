@@ -5,10 +5,13 @@
  * MemorialSpace API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateOrganizationBodyCemeteryType } from "./createOrganizationBodyCemeteryType";
 
 export interface CreateOrganizationBody {
   name: string;
   slug: string;
+  cemeteryType?: CreateOrganizationBodyCemeteryType;
+  featuresColumbarium?: boolean;
   address?: string;
   city?: string;
   country?: string;

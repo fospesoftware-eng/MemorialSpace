@@ -9,10 +9,28 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).
+ */
+export type OrganizationCemeteryType =
+  (typeof OrganizationCemeteryType)[keyof typeof OrganizationCemeteryType];
+
+export const OrganizationCemeteryType = {
+  church: "church",
+  private: "private",
+  pet: "pet",
+  municipality: "municipality",
+  columbarium: "columbarium",
+} as const;
+
 export interface Organization {
   id: number;
   name: string;
   slug: string;
+  /** Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module). */
+  cemeteryType: OrganizationCemeteryType;
+  /** True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church. */
+  featuresColumbarium: boolean;
   address?: string;
   city?: string;
   country?: string;
@@ -26,9 +44,22 @@ export interface Organization {
   createdAt: string;
 }
 
+export type CreateOrganizationBodyCemeteryType =
+  (typeof CreateOrganizationBodyCemeteryType)[keyof typeof CreateOrganizationBodyCemeteryType];
+
+export const CreateOrganizationBodyCemeteryType = {
+  church: "church",
+  private: "private",
+  pet: "pet",
+  municipality: "municipality",
+  columbarium: "columbarium",
+} as const;
+
 export interface CreateOrganizationBody {
   name: string;
   slug: string;
+  cemeteryType?: CreateOrganizationBodyCemeteryType;
+  featuresColumbarium?: boolean;
   address?: string;
   city?: string;
   country?: string;

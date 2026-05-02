@@ -5,11 +5,16 @@
  * MemorialSpace API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { OrganizationCemeteryType } from "./organizationCemeteryType";
 
 export interface Organization {
   id: number;
   name: string;
   slug: string;
+  /** Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module). */
+  cemeteryType: OrganizationCemeteryType;
+  /** True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church. */
+  featuresColumbarium: boolean;
   address?: string;
   city?: string;
   country?: string;

@@ -1213,6 +1213,13 @@ components:
           type: string
         slug:
           type: string
+        cemeteryType:
+          type: string
+          enum: [church, private, pet, municipality, columbarium]
+          description: Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).
+        featuresColumbarium:
+          type: boolean
+          description: True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.
         address:
           type: string
         city:
@@ -1240,6 +1247,8 @@ components:
         - id
         - name
         - slug
+        - cemeteryType
+        - featuresColumbarium
         - createdAt
 
     CreateOrganizationBody:
@@ -1249,6 +1258,11 @@ components:
           type: string
         slug:
           type: string
+        cemeteryType:
+          type: string
+          enum: [church, private, pet, municipality, columbarium]
+        featuresColumbarium:
+          type: boolean
         address:
           type: string
         city:

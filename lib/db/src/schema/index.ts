@@ -8,3 +8,4 @@ export * from "./workOrders";
 export * from "./qrCodes";
 export * from "./obituaries";
 export * from "./marketplace";
+export * from "./columbaria";
