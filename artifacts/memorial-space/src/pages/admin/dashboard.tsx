@@ -1,46 +1,85 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, TrendingUp, Activity, AlertCircle, CheckCircle2, Server } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, BarChart, Bar } from "recharts";
-import { useListOrganizations } from "@workspace/api-client-react";
-
-const mrrData = [
-  { month: "Nov", mrr: 78400 }, { month: "Dec", mrr: 82100 }, { month: "Jan", mrr: 89500 },
-  { month: "Feb", mrr: 94200 }, { month: "Mar", mrr: 102800 }, { month: "Apr", mrr: 118600 }, { month: "May", mrr: 127300 },
-];
-const signups = [
-  { month: "Nov", count: 14 }, { month: "Dec", count: 11 }, { month: "Jan", count: 19 },
-  { month: "Feb", count: 23 }, { month: "Mar", count: 28 }, { month: "Apr", count: 34 }, { month: "May", count: 21 },
-];
+import {
+  Building2,
+  DollarSign,
+  TrendingUp,
+  Activity,
+  Hourglass,
+  AlertTriangle,
+  Receipt,
+  Wallet,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip as RTooltip,
+  CartesianGrid,
+  BarChart,
+  Bar,
+} from "recharts";
+import { useAdminMetrics } from "./api";
+import { formatCents, formatDateTime, invoiceStatusClass, relativeTime } from "./_shared";
 
 export default function AdminDashboard() {
-  const { data: orgs } = useListOrganizations();
-  const orgCount = orgs?.length ?? 0;
+  const { data: m, isLoading } = useAdminMetrics();
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <p className="text-xs uppercase tracking-widest text-[#d4a843] mb-1">Super Admin</p>
         <h1 className="text-3xl font-bold tracking-tight">Platform Overview</h1>
-        <p className="text-muted-foreground mt-1">Real-time health and growth across all MemorialSpace customers.</p>
+        <p className="text-muted-foreground mt-1">
+          Real-time SaaS health across all MemorialSpace customers.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI label="Monthly Recurring Revenue" value="$127,300" delta="+8.0%" icon={DollarSign} accent="text-[#d4a843] bg-[#d4a843]/10" />
-        <KPI label="Active Cemeteries" value={String(320 + orgCount)} delta="+21 this month" icon={Building2} accent="text-primary bg-primary/10" />
-        <KPI label="Total Family Users" value="148,420" delta="+4,210 this week" icon={Users} accent="text-sky-400 bg-sky-500/10" />
-        <KPI label="Platform Uptime" value="99.98%" delta="30-day" icon={Activity} accent="text-emerald-400 bg-emerald-500/10" />
+        <KPI
+          label="Monthly Recurring Revenue"
+          value={isLoading ? "…" : formatCents(m?.mrrCents ?? 0)}
+          delta={isLoading ? "" : `ARR ${formatCents(m?.arrCents ?? 0)}`}
+          icon={DollarSign}
+          accent="text-[#d4a843] bg-[#d4a843]/10"
+        />
+        <KPI
+          label="Active Cemeteries"
+          value={isLoading ? "…" : String(m?.activeSubscriptions ?? 0)}
+          delta={`${m?.totalOrganizations ?? 0} total · ${m?.suspendedOrganizations ?? 0} suspended`}
+          icon={Building2}
+          accent="text-primary bg-primary/10"
+        />
+        <KPI
+          label="Trialing"
+          value={isLoading ? "…" : String(m?.trialingSubscriptions ?? 0)}
+          delta={`${m?.pastDueSubscriptions ?? 0} past due`}
+          icon={Hourglass}
+          accent="text-amber-400 bg-amber-500/10"
+        />
+        <KPI
+          label="Outstanding A/R"
+          value={isLoading ? "…" : formatCents(m?.outstandingCents ?? 0)}
+          delta={`${formatCents(m?.collectedCents ?? 0)} collected total`}
+          icon={Wallet}
+          accent="text-emerald-400 bg-emerald-500/10"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-border/60">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-[#d4a843]" />MRR Growth</CardTitle>
-            <p className="text-xs text-muted-foreground">Trailing 7 months · USD</p>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-[#d4a843]" />
+              MRR Growth
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Trailing 12 months · USD</p>
           </CardHeader>
           <CardContent className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mrrData}>
+              <AreaChart data={(m?.monthly ?? []).map((d) => ({ ...d, mrr: d.mrrCents / 100 }))}>
                 <defs>
                   <linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
@@ -49,8 +88,19 @@ export default function AdminDashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
-                <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} formatter={(v: number) => [`$${v.toLocaleString()}`, "MRR"]} />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickFormatter={(v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v}`)}
+                />
+                <RTooltip
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 8,
+                  }}
+                  formatter={(v: number) => [`$${v.toLocaleString()}`, "MRR"]}
+                />
                 <Area type="monotone" dataKey="mrr" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#mrrGrad)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -59,17 +109,26 @@ export default function AdminDashboard() {
 
         <Card className="border-border/60">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" />New Cemeteries</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              New Cemeteries
+            </CardTitle>
             <p className="text-xs text-muted-foreground">Signups per month</p>
           </CardHeader>
           <CardContent className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={signups}>
+              <BarChart data={m?.monthly ?? []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
+                <RTooltip
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 8,
+                  }}
+                />
+                <Bar dataKey="signups" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -78,50 +137,70 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-border/60">
-          <CardHeader><CardTitle>Recent Signups</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { name: "Riverside Memorial Gardens", plan: "Professional", date: "May 1, 2026", region: "Oregon, US" },
-              { name: "St. Mary's Catholic Cemetery", plan: "Starter", date: "Apr 29, 2026", region: "Toronto, CA" },
-              { name: "Mountainview Funeral Group", plan: "Enterprise", date: "Apr 27, 2026", region: "Colorado, US" },
-              { name: "Hillside Eternal Rest", plan: "Professional", date: "Apr 25, 2026", region: "Texas, US" },
-            ].map((s) => (
-              <div key={s.name} className="flex items-center justify-between p-3 rounded-lg border border-border/40 hover:border-border transition-colors">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-[#d4a843]" />
+              Recent invoices
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(m?.recentInvoices ?? []).length === 0 && (
+              <p className="text-sm text-muted-foreground">No invoices yet.</p>
+            )}
+            {(m?.recentInvoices ?? []).map((i) => (
+              <div
+                key={i.id}
+                className="flex items-center justify-between p-3 rounded-lg border border-border/40 hover:border-border transition-colors"
+              >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold shrink-0">
-                    {s.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
+                  <div className="h-9 w-9 rounded-lg bg-[#d4a843]/10 flex items-center justify-center text-[#d4a843] shrink-0">
+                    <Receipt className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{s.name}</p>
-                    <p className="text-xs text-muted-foreground">{s.region}</p>
+                    <p className="font-medium text-sm">
+                      {i.invoiceNumber ?? `Draft #${i.id}`} · {formatCents(i.totalCents, i.currency)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Org #{i.organizationId} · {formatDateTime(i.createdAt)}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Badge variant="outline" className={s.plan === "Enterprise" ? "border-[#d4a843]/40 text-[#d4a843]" : ""}>{s.plan}</Badge>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">{s.date}</span>
-                </div>
+                <Badge variant="outline" className={invoiceStatusClass[i.status]}>
+                  {i.status}
+                </Badge>
               </div>
             ))}
           </CardContent>
         </Card>
 
         <Card className="border-border/60">
-          <CardHeader><CardTitle className="flex items-center gap-2"><Server className="h-5 w-5 text-emerald-400" />System Health</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { svc: "API Gateway", status: "Operational", icon: CheckCircle2, color: "text-emerald-400" },
-              { svc: "Database (Primary)", status: "Operational", icon: CheckCircle2, color: "text-emerald-400" },
-              { svc: "Search Index", status: "Operational", icon: CheckCircle2, color: "text-emerald-400" },
-              { svc: "Email Delivery", status: "Degraded", icon: AlertCircle, color: "text-amber-400" },
-              { svc: "Payments (Stripe)", status: "Operational", icon: CheckCircle2, color: "text-emerald-400" },
-            ].map((s) => (
-              <div key={s.svc} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{s.svc}</span>
-                <span className={`flex items-center gap-1.5 ${s.color}`}>
-                  <s.icon className="h-3.5 w-3.5" /> {s.status}
-                </span>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-emerald-400" />
+              Recent payments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(m?.recentPayments ?? []).length === 0 && (
+              <p className="text-sm text-muted-foreground">No payments collected yet.</p>
+            )}
+            {(m?.recentPayments ?? []).map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{formatCents(p.amountCents)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.method} · {relativeTime(p.paidAt)}
+                  </p>
+                </div>
+                <span className="text-xs text-emerald-400">paid</span>
               </div>
             ))}
+            {m?.pastDueSubscriptions ? (
+              <div className="mt-3 p-3 rounded-md border border-amber-500/30 bg-amber-500/5 flex items-center gap-2 text-xs text-amber-300">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {m.pastDueSubscriptions} subscription{m.pastDueSubscriptions === 1 ? "" : "s"} past due
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -129,7 +208,19 @@ export default function AdminDashboard() {
   );
 }
 
-function KPI({ label, value, delta, icon: Icon, accent }: { label: string; value: string; delta: string; icon: React.ComponentType<{ className?: string }>; accent: string }) {
+function KPI({
+  label,
+  value,
+  delta,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  delta: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: string;
+}) {
   return (
     <Card className="border-border/60">
       <CardContent className="p-5">
@@ -137,7 +228,7 @@ function KPI({ label, value, delta, icon: Icon, accent }: { label: string; value
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
             <p className="text-2xl font-bold mt-2">{value}</p>
-            <p className="text-xs text-emerald-400 mt-1">{delta}</p>
+            <p className="text-xs text-muted-foreground mt-1">{delta}</p>
           </div>
           <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${accent}`}>
             <Icon className="h-5 w-5" />

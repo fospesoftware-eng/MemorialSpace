@@ -150,6 +150,31 @@ A sub-feature within the Map Maker that converts raster or vector cemetery maps 
         -   **Stage 2 (Claude Classification):** Utilizes Anthropic's Claude model (`claude-sonnet-4-6`) to classify the detected color sections based on visual cues and operator-defined plot types.
 - **Constraints:** Optimized for flat-color cemetery plans. Rate-limited to 12 detections per 5 minutes per IP, with a body limit of 12 MB for uploads.
 
+## Super Admin Module
+
+Platform-operator console for managing all cemetery-owner organizations and SaaS billing. Mounted at `/admin/*` on the memorial-space artifact, distinct from per-tenant cemetery dashboards.
+
+- **Backend** (`artifacts/api-server/src/routes/admin.ts`, mounted under `/api/admin`):
+  - `/metrics` — MRR / ARR / active / trialing / past_due counts, outstanding A/R, total collected, plan distribution, last 12 months of signups + MRR, recent invoices/payments.
+  - Plans CRUD (`/plans`) — `DELETE` soft-archives if any subscriptions reference the plan, otherwise hard-deletes.
+  - Subscriptions (`/subscriptions`) — list/create/patch/`/cancel`. Creating a sub takes a `FOR UPDATE` lock on the org row, snapshots `pricePerPeriodCents` from the plan, and enforces only one live (`trialing|active|past_due`) sub per org.
+  - Organizations (`/organizations`) — list/get/patch/`/suspend`/`/reactivate`/`DELETE`. Status mirrors to the live subscription (`suspend` ⇒ sub `suspended`, `reactivate` ⇒ `active`).
+  - Platform invoices (`/platform-invoices`) — money in **cents** (separate from B2B accounting which uses real USD). `/issue` does a status-guarded `UPDATE … WHERE status='draft'` and assigns `PINV-YYYY-NNNN` with retry-on-23505 for race-safe numbering. `/pay` records a payment row and auto-marks invoice `paid` when balance reaches zero. `/void` is allowed from any non-`paid` state.
+  - Audit log (`/audit-log`) — every Super Admin write goes through an `audit()` helper that records actor (from `x-admin-email` header), action key (`organization.suspended` etc.), target, and a JSON details blob.
+  - Cross-org user search (`/users`) for support.
+- **DB** (`lib/db/src/schema/saasBilling.ts`): `subscription_plans`, `subscriptions`, `platform_invoices`, `platform_payments`, `audit_log`. `organizationsTable` extended with `status` (`active|trial|suspended|cancelled`), `suspendedAt`, `suspensionReason`, `internalNotes`. Money is integer cents throughout. `PLATFORM_PAYMENT_METHODS` is namespaced to avoid collision with `cemeterySites.PAYMENT_METHODS` (inquiry/stripe).
+- **Frontend** (`artifacts/memorial-space/src/pages/admin/*`):
+  - `_shared.ts` — formatters (`formatCents`, `formatDate`, `relativeTime`) and status-badge class maps.
+  - `api.ts` — typed react-query hooks for every endpoint, with cross-cutting `["admin"]` invalidation on every mutation.
+  - `dashboard.tsx` — KPI tiles + Recharts area (MRR) + bar (signups) + recent invoices/payments.
+  - `organizations.tsx` — searchable/filterable table; row → `Sheet` drawer with org details, subscription history, recent invoices, team list, internal notes, and inline actions (assign plan, start trial, cancel sub, suspend/reactivate, delete).
+  - `billing.tsx` — three sub-tabs: **Plans** (CRUD with feature checklist, feature-toggle, archive vs delete), **Subscriptions** (filterable list with monthly-equivalent MRR), **Invoices** (filter + create-draft + click-to-detail dialog with line-item table, issue/record-payment/void).
+  - `analytics.tsx` — revenue + signups dual-axis line chart, plan-distribution pie, subscription-state bar.
+  - `support.tsx` — live audit-log feed with action-prefix filter and search; auto-refreshes every 15 s.
+  - `users.tsx` — cross-org user search.
+- **Seed**: `pnpm --filter @workspace/scripts run seed-saas` inserts three default plans (Starter $49 / Professional $149 / Enterprise $499), assigns each existing org to a plan with a mix of trial/active, and seeds one paid invoice (`PINV-YYYY-0001`) so the dashboard has real revenue to show. Idempotent.
+- **Auth note**: admin endpoints are currently open like the rest of the app — admin auth wiring is intentionally deferred and matches the existing pattern.
+
 # External Dependencies
 
 -   **Monorepo:** pnpm workspaces

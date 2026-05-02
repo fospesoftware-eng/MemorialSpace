@@ -21,6 +21,7 @@ import invoicesRouter from "./invoices";
 import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(invoicesRouter);
 router.use(paymentsRouter);
 router.use(accountingRouter);
 router.use(cemeterySitesRouter);
+router.use(adminRouter);
 
 export default router;

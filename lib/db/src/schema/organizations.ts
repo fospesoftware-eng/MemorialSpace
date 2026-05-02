@@ -28,6 +28,15 @@ export const organizationsTable = pgTable("organizations", {
   latitude: real("latitude"),
   longitude: real("longitude"),
   totalPlots: integer("total_plots").default(0),
+  // Platform-level lifecycle status set by Super Admin. `active` is the
+  // default; `suspended` blocks the operator from signing in (UI gate);
+  // `trial` mirrors a trialing subscription; `cancelled` means the operator
+  // has churned but their data is preserved for restoration.
+  status: text("status").default("active").notNull(), // active|trial|suspended|cancelled
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  // Internal notes only Super Admins see — never exposed publicly.
+  internalNotes: text("internal_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
