@@ -19,8 +19,13 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { requirePlatformAdmin } from "../lib/auth";
 
 const router: IRouter = Router();
+
+// Every /api/admin/* endpoint requires a signed-in platform admin. Without
+// this guard the entire SaaS control plane is open to the world.
+router.use("/admin", requirePlatformAdmin);
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -58,9 +63,10 @@ async function audit(
   }
 }
 
-function actor(req: { headers: Record<string, unknown> }): string | undefined {
-  const v = req.headers["x-admin-email"];
-  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+function actor(req: import("express").Request): string | undefined {
+  // Trust ONLY the session for the audit actor — the legacy `x-admin-email`
+  // header was forgeable and is no longer consulted.
+  return req.session?.user?.email;
 }
 
 function periodEndFromStart(start: Date, period: "monthly" | "yearly"): Date {
@@ -220,7 +226,7 @@ router.get("/admin/plans", async (_req, res) => {
 router.post("/admin/plans", async (req, res) => {
   const parsed = insertSubscriptionPlanSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   try {
     const [row] = await db
@@ -236,7 +242,7 @@ router.post("/admin/plans", async (req, res) => {
     res.status(201).json(row);
   } catch (e: unknown) {
     if (typeof e === "object" && e && (e as { code?: string }).code === "23505") {
-      return res.status(409).json({ error: "Plan slug already exists" });
+      res.status(409).json({ error: "Plan slug already exists" }); return;
     }
     throw e;
   }
@@ -244,18 +250,18 @@ router.post("/admin/plans", async (req, res) => {
 
 router.patch("/admin/plans/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const Partial = insertSubscriptionPlanSchema.partial();
   const parsed = Partial.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   const [row] = await db
     .update(subscriptionPlansTable)
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(eq(subscriptionPlansTable.id, id))
     .returning();
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   await audit(actor(req), "plan.updated", {
     targetType: "plan",
     targetId: id,
@@ -267,7 +273,7 @@ router.patch("/admin/plans/:id", async (req, res) => {
 
 router.delete("/admin/plans/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   // Refuse if any non-cancelled subscription is using this plan — preserves
   // historical pricing references.
   const [{ inUse }] = await db
@@ -286,19 +292,20 @@ router.delete("/admin/plans/:id", async (req, res) => {
       .set({ isActive: false, updatedAt: new Date() })
       .where(eq(subscriptionPlansTable.id, id))
       .returning();
-    if (!row) return res.status(404).json({ error: "Not found" });
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
     await audit(actor(req), "plan.archived", {
       targetType: "plan",
       targetId: id,
       summary: `Archived plan ${row.name} (in use by ${inUse} subscriptions)`,
     });
-    return res.json({ archived: true, plan: row });
+    res.json({ archived: true, plan: row });
+    return;
   }
   const [row] = await db
     .delete(subscriptionPlansTable)
     .where(eq(subscriptionPlansTable.id, id))
     .returning();
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   await audit(actor(req), "plan.deleted", {
     targetType: "plan",
     targetId: id,
@@ -348,7 +355,7 @@ const CreateSubscriptionBody = z.object({
 router.post("/admin/subscriptions", async (req, res) => {
   const parsed = CreateSubscriptionBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   const { organizationId, planId, billingPeriod, startTrial, seats, notes } = parsed.data;
 
@@ -430,7 +437,7 @@ router.post("/admin/subscriptions", async (req, res) => {
 
 router.patch("/admin/subscriptions/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const Body = z.object({
     status: z.enum(SUBSCRIPTION_STATUSES).optional(),
     seats: z.number().int().min(1).optional(),
@@ -440,7 +447,7 @@ router.patch("/admin/subscriptions/:id", async (req, res) => {
   });
   const parsed = Body.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   const patch: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
   // If plan is changing, snapshot the new price.
@@ -449,12 +456,12 @@ router.patch("/admin/subscriptions/:id", async (req, res) => {
       .select()
       .from(subscriptionPlansTable)
       .where(eq(subscriptionPlansTable.id, parsed.data.planId));
-    if (!plan) return res.status(400).json({ error: "Plan not found" });
+    if (!plan) { res.status(400).json({ error: "Plan not found" }); return; }
     const [existing] = await db
       .select()
       .from(subscriptionsTable)
       .where(eq(subscriptionsTable.id, id));
-    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     patch.pricePerPeriodCents =
       existing.billingPeriod === "yearly" && plan.billingPeriod === "monthly"
         ? plan.priceCents * 12
@@ -468,7 +475,7 @@ router.patch("/admin/subscriptions/:id", async (req, res) => {
     .set(patch)
     .where(eq(subscriptionsTable.id, id))
     .returning();
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
 
   await audit(actor(req), "subscription.updated", {
     targetType: "subscription",
@@ -482,13 +489,13 @@ router.patch("/admin/subscriptions/:id", async (req, res) => {
 
 router.post("/admin/subscriptions/:id/cancel", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const immediate = req.body?.immediate === true;
   const [existing] = await db
     .select()
     .from(subscriptionsTable)
     .where(eq(subscriptionsTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const now = new Date();
   const [row] = await db
@@ -545,7 +552,7 @@ router.get("/admin/organizations", async (req, res) => {
     .where(conds.length ? and(...conds) : undefined)
     .orderBy(desc(organizationsTable.createdAt));
 
-  if (orgs.length === 0) return res.json([]);
+  if (orgs.length === 0) { res.json([]); return; }
   const orgIds = orgs.map((o) => o.id);
 
   const [subs, userCounts, openInvoices] = await Promise.all([
@@ -601,12 +608,12 @@ router.get("/admin/organizations", async (req, res) => {
 
 router.get("/admin/organizations/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [org] = await db
     .select()
     .from(organizationsTable)
     .where(eq(organizationsTable.id, id));
-  if (!org) return res.status(404).json({ error: "Not found" });
+  if (!org) { res.status(404).json({ error: "Not found" }); return; }
 
   const [subs, invoices, users] = await Promise.all([
     db
@@ -632,7 +639,7 @@ router.get("/admin/organizations/:id", async (req, res) => {
 
 router.patch("/admin/organizations/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const Body = z.object({
     name: z.string().min(1).optional(),
     email: z.string().email().nullable().optional(),
@@ -642,14 +649,14 @@ router.patch("/admin/organizations/:id", async (req, res) => {
   });
   const parsed = Body.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   const [row] = await db
     .update(organizationsTable)
     .set(parsed.data)
     .where(eq(organizationsTable.id, id))
     .returning();
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   await audit(actor(req), "organization.updated", {
     targetType: "organization",
     targetId: id,
@@ -662,7 +669,7 @@ router.patch("/admin/organizations/:id", async (req, res) => {
 
 router.post("/admin/organizations/:id/suspend", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const reason =
     typeof req.body?.reason === "string" && req.body.reason.trim()
       ? req.body.reason.trim()
@@ -685,7 +692,7 @@ router.post("/admin/organizations/:id/suspend", async (req, res) => {
       );
     return org;
   });
-  if (!result) return res.status(404).json({ error: "Not found" });
+  if (!result) { res.status(404).json({ error: "Not found" }); return; }
   await audit(actor(req), "organization.suspended", {
     targetType: "organization",
     targetId: id,
@@ -697,7 +704,7 @@ router.post("/admin/organizations/:id/suspend", async (req, res) => {
 
 router.post("/admin/organizations/:id/reactivate", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const result = await db.transaction(async (tx) => {
     const [org] = await tx
       .update(organizationsTable)
@@ -718,7 +725,7 @@ router.post("/admin/organizations/:id/reactivate", async (req, res) => {
       );
     return org;
   });
-  if (!result) return res.status(404).json({ error: "Not found" });
+  if (!result) { res.status(404).json({ error: "Not found" }); return; }
   await audit(actor(req), "organization.reactivated", {
     targetType: "organization",
     targetId: id,
@@ -730,12 +737,12 @@ router.post("/admin/organizations/:id/reactivate", async (req, res) => {
 
 router.delete("/admin/organizations/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [org] = await db
     .select()
     .from(organizationsTable)
     .where(eq(organizationsTable.id, id));
-  if (!org) return res.status(404).json({ error: "Not found" });
+  if (!org) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(organizationsTable).where(eq(organizationsTable.id, id));
   await audit(actor(req), "organization.deleted", {
     targetType: "organization",
@@ -772,12 +779,12 @@ router.get("/admin/platform-invoices", async (req, res) => {
 
 router.get("/admin/platform-invoices/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [inv] = await db
     .select()
     .from(platformInvoicesTable)
     .where(eq(platformInvoicesTable.id, id));
-  if (!inv) return res.status(404).json({ error: "Not found" });
+  if (!inv) { res.status(404).json({ error: "Not found" }); return; }
   const [org] = await db
     .select()
     .from(organizationsTable)
@@ -813,7 +820,7 @@ const CreateInvoiceBody = z.object({
 router.post("/admin/platform-invoices", async (req, res) => {
   const parsed = CreateInvoiceBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
   const lineItems = parsed.data.lineItems.map((li) => ({
     ...li,
@@ -851,7 +858,7 @@ router.post("/admin/platform-invoices", async (req, res) => {
 
 router.post("/admin/platform-invoices/:id/issue", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Status-guarded UPDATE so concurrent issues collapse: only one wins.
   const result = await db.transaction(async (tx) => {
@@ -890,13 +897,15 @@ router.post("/admin/platform-invoices/:id/issue", async (req, res) => {
     return { code: "RETRY_EXHAUSTED" as const };
   });
 
-  if (result.code === "NOT_FOUND") return res.status(404).json({ error: "Not found" });
-  if (result.code === "BAD_STATUS")
-    return res
-      .status(409)
-      .json({ error: `Cannot issue invoice in status '${result.current}'` });
-  if (result.code === "RETRY_EXHAUSTED")
-    return res.status(503).json({ error: "Could not allocate invoice number" });
+  if (result.code === "NOT_FOUND") { res.status(404).json({ error: "Not found" }); return; }
+  if (result.code === "BAD_STATUS") {
+    res.status(409).json({ error: `Cannot issue invoice in status '${result.current}'` });
+    return;
+  }
+  if (result.code === "RETRY_EXHAUSTED") {
+    res.status(503).json({ error: "Could not allocate invoice number" });
+    return;
+  }
 
   await audit(actor(req), "invoice.issued", {
     targetType: "invoice",
@@ -917,10 +926,10 @@ const RecordPaymentBody = z.object({
 
 router.post("/admin/platform-invoices/:id/pay", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = RecordPaymentBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
 
   const result = await db.transaction(async (tx) => {
@@ -962,11 +971,12 @@ router.post("/admin/platform-invoices/:id/pay", async (req, res) => {
     return { code: "OK" as const, payment, invoice: updated };
   });
 
-  if (result.code === "NOT_FOUND") return res.status(404).json({ error: "Not found" });
-  if (result.code === "BAD_STATUS")
-    return res
-      .status(409)
-      .json({ error: `Cannot pay invoice in status '${result.current}'` });
+  if (result.code === "NOT_FOUND") { res.status(404).json({ error: "Not found" }); return; }
+  if (result.code === "BAD_STATUS") {
+    res.status(409).json({ error: `Cannot pay invoice in status '${result.current}'` });
+    return;
+  }
+  if (result.code !== "OK") return;
 
   await audit(actor(req), "invoice.payment_recorded", {
     targetType: "invoice",
@@ -979,16 +989,20 @@ router.post("/admin/platform-invoices/:id/pay", async (req, res) => {
 
 router.post("/admin/platform-invoices/:id/void", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db
     .select()
     .from(platformInvoicesTable)
     .where(eq(platformInvoicesTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Not found" });
-  if (existing.status === "paid")
-    return res.status(409).json({ error: "Cannot void a paid invoice" });
-  if (existing.status === "void")
-    return res.status(409).json({ error: "Already voided" });
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status === "paid") {
+    res.status(409).json({ error: "Cannot void a paid invoice" });
+    return;
+  }
+  if (existing.status === "void") {
+    res.status(409).json({ error: "Already voided" });
+    return;
+  }
 
   const [row] = await db
     .update(platformInvoicesTable)

@@ -17,3 +17,5 @@ export * from "./invoiceItems";
 export * from "./payments";
 export * from "./cemeterySites";
 export * from "./saasBilling";
+export * from "./platformAdmins";
+export * from "./sessions";

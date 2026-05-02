@@ -8,6 +8,7 @@ export default function SignInCemetery() {
       title="Welcome back"
       subtitle="Sign in to manage plots, burials, bookings, and memorial pages."
       theme="green"
+      kind="cemetery"
       demoEmail="ops@riversidememorial.com"
       demoPassword="Cemetery2026!"
       redirectTo="/app/dashboard"

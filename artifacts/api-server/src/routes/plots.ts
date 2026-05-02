@@ -1,19 +1,20 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { plotsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { readPage } from "../lib/pagination";
 
 const router = Router();
 
 router.get("/plots", async (req, res) => {
   const { organizationId, status, section } = req.query;
+  const { limit, offset } = readPage(req, { defaultLimit: 500, maxLimit: 2000 });
   const conditions = [];
   if (organizationId) conditions.push(eq(plotsTable.organizationId, Number(organizationId)));
-  if (status) conditions.push(eq(plotsTable.status, status as string));
-  if (section) conditions.push(eq(plotsTable.section, section as string));
-  const plots = conditions.length
-    ? await db.select().from(plotsTable).where(and(...conditions))
-    : await db.select().from(plotsTable);
+  if (status) conditions.push(sql`${plotsTable.status} = ${String(status)}`);
+  if (section) conditions.push(eq(plotsTable.section, String(section)));
+  const q = db.select().from(plotsTable).orderBy(desc(plotsTable.id)).limit(limit).offset(offset);
+  const plots = conditions.length ? await q.where(and(...conditions)) : await q;
   res.json(plots);
 });
 
@@ -31,14 +32,14 @@ router.get("/plots/map/:organizationId", async (req, res) => {
 router.get("/plots/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [plot] = await db.select().from(plotsTable).where(eq(plotsTable.id, id));
-  if (!plot) return res.status(404).json({ error: "Not found" });
+  if (!plot) { res.status(404).json({ error: "Not found" }); return; }
   res.json(plot);
 });
 
 router.put("/plots/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [plot] = await db.update(plotsTable).set(req.body).where(eq(plotsTable.id, id)).returning();
-  if (!plot) return res.status(404).json({ error: "Not found" });
+  if (!plot) { res.status(404).json({ error: "Not found" }); return; }
   res.json(plot);
 });
 

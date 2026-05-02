@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
 import organizationsRouter from "./organizations";
 import usersRouter from "./users";
 import plotsRouter from "./plots";
@@ -22,31 +23,59 @@ import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
 import adminRouter from "./admin";
+import { requireAuth, requireOrgUser } from "../lib/auth";
 
 const router: IRouter = Router();
 
+// --- Public surface (no auth) -------------------------------------------------
+// Health is needed for liveness probes. Auth is needed to sign in. publicApi
+// (`/public/search`, `/public/obituaries`) and the cemetery-sites router both
+// expose unauthenticated read-only endpoints used by public-facing cemetery
+// websites (`/c/:slug/*`); per-route writes inside cemeterySites still gate
+// themselves where appropriate.
 router.use(healthRouter);
-router.use(organizationsRouter);
-router.use(usersRouter);
-router.use(plotsRouter);
-router.use(burialsRouter);
-router.use(bookingsRouter);
-router.use(memorialsRouter);
-router.use(workOrdersRouter);
-router.use(qrCodesRouter);
-router.use(obituariesRouter);
-router.use(marketplaceRouter);
-router.use(dashboardRouter);
+router.use(authRouter);
 router.use(publicApiRouter);
-router.use(aiMapRouter);
-router.use(columbariaRouter);
-router.use(mausoleumsRouter);
-router.use(customersRouter);
-router.use(taxRatesRouter);
-router.use(invoicesRouter);
-router.use(paymentsRouter);
-router.use(accountingRouter);
 router.use(cemeterySitesRouter);
+
+// --- Platform admin surface ---------------------------------------------------
+// adminRouter mounts its own `requirePlatformAdmin` middleware internally, so
+// no extra guard is needed here.
 router.use(adminRouter);
+
+// --- B2B cemetery operator surface -------------------------------------------
+// Everything below requires a signed-in cemetery user with an organizationId.
+// `enforceOrgScope` (mounted globally in app.ts) then forces the session's
+// organizationId onto every query/body so a forged `?organizationId=X` cannot
+// reach across tenants.
+const orgRouter: IRouter = Router();
+orgRouter.use(requireOrgUser);
+orgRouter.use(organizationsRouter);
+orgRouter.use(usersRouter);
+orgRouter.use(plotsRouter);
+orgRouter.use(burialsRouter);
+orgRouter.use(bookingsRouter);
+orgRouter.use(memorialsRouter);
+orgRouter.use(workOrdersRouter);
+orgRouter.use(qrCodesRouter);
+orgRouter.use(obituariesRouter);
+orgRouter.use(marketplaceRouter);
+orgRouter.use(dashboardRouter);
+orgRouter.use(columbariaRouter);
+orgRouter.use(mausoleumsRouter);
+orgRouter.use(customersRouter);
+orgRouter.use(taxRatesRouter);
+orgRouter.use(invoicesRouter);
+orgRouter.use(paymentsRouter);
+orgRouter.use(accountingRouter);
+router.use(orgRouter);
+
+// --- AI map detection ---------------------------------------------------------
+// Heavy / cost-bearing endpoint — require any signed-in session. Kept separate
+// because admins may also legitimately call it.
+const aiRouter: IRouter = Router();
+aiRouter.use(requireAuth);
+aiRouter.use(aiMapRouter);
+router.use(aiRouter);
 
 export default router;

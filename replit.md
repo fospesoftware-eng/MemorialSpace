@@ -173,7 +173,30 @@ Platform-operator console for managing all cemetery-owner organizations and SaaS
   - `support.tsx` — live audit-log feed with action-prefix filter and search; auto-refreshes every 15 s.
   - `users.tsx` — cross-org user search.
 - **Seed**: `pnpm --filter @workspace/scripts run seed-saas` inserts three default plans (Starter $49 / Professional $149 / Enterprise $499), assigns each existing org to a plan with a mix of trial/active, and seeds one paid invoice (`PINV-YYYY-0001`) so the dashboard has real revenue to show. Idempotent.
-- **Auth note**: admin endpoints are currently open like the rest of the app — admin auth wiring is intentionally deferred and matches the existing pattern.
+- **Auth note**: admin endpoints require an authenticated platform-admin session (see Authentication section).
+
+## Authentication & Security
+
+End-to-end real authentication shipped May 2026, replacing the earlier "open API + mock sign-in" demo posture.
+
+- **Backend** (`artifacts/api-server/src/lib/auth.ts`, `routes/auth.ts`):
+  - `POST /api/auth/login` accepts `{ email, password, kind }` where `kind ∈ {"cemetery","family","admin"}`. Cemetery/family sign-in checks `usersTable.passwordHash`; admin sign-in checks `platformAdminsTable.passwordHash`. Both use bcrypt cost-12 with constant-time compare.
+  - `POST /api/auth/logout` destroys the session and clears the `ms.sid` cookie.
+  - `GET /api/auth/me` returns the current `SessionUser` or 401.
+  - Sessions are cookie-backed (`httpOnly`, `sameSite=lax`, `secure` in production, 14-day rolling) and stored in Postgres via `connect-pg-simple` against the Drizzle-managed `session` table. `SESSION_SECRET` is required at startup.
+  - Middleware: `requireAuth` (any session), `requirePlatformAdmin` (admin tier), `requireOrgUser` (cemetery tier), `enforceOrgScope` (forces `organizationId` on query/body for cemetery users so a forged `?organizationId=X` cannot cross tenants).
+  - Router-level guards in `routes/index.ts`: only `health`, `auth`, `publicApi` (`/public/*`), and `cemeterySites` (which serves the public `/c/:slug/*` cemetery websites) are unauthenticated. All B2B routers (`organizations`, `users`, `plots`, `burials`, `bookings`, `memorials`, `workOrders`, `qrCodes`, `obituaries`, `marketplace`, `dashboard`, `columbaria`, `mausoleums`, `customers`, `taxRates`, `invoices`, `payments`, `accounting`) are mounted behind `requireOrgUser`. The AI map detection endpoint is mounted behind `requireAuth`. Admin routes use their own `requirePlatformAdmin`.
+  - **Tier verification**: `kind` from the client login payload is treated as a hint only. The server derives the actual tier from `usersTable.role` (`owner|admin|manager|staff` → cemetery, `viewer` → family) and 403s if the requested tier doesn't match the role, so a B2C account cannot escalate by hitting the cemetery sign-in route.
+  - **Session fixation defense**: `req.session.regenerate()` is awaited before attaching the user on every successful login (admin, cemetery, family).
+  - Rate limit: `express-rate-limit` 20 req / 15 min on `/api/auth/login`, with `skipSuccessfulRequests` so honest users aren't punished.
+  - `helmet` for default security headers; global error handler returns `{error}` JSON without stack traces.
+- **Known gaps (not yet implemented)**: per-account login lockout/backoff (only IP-level limiter today); CSRF tokens for cookie-authenticated writes (relying on `SameSite=Lax` + same-origin proxy for now); password complexity policy and password-reset flow; per-tenant scoping on individual `:id` lookups in some routers (currently relies on `enforceOrgScope` rewriting `organizationId` query/body and the route handlers using it — direct `WHERE id = ? AND organizationId = ?` should be added defensively to every by-id read/update/delete in a follow-up pass).
+- **Frontend** (`artifacts/memorial-space/src/lib/auth.tsx`, `pages/auth/sign-in-form.tsx`, `App.tsx`):
+  - `AuthProvider` + `useAuth()` + `RequireAuth` component. All `fetch` calls in admin & app dashboards include `credentials: "include"`.
+  - All three sign-in surfaces (`/sign-in/cemetery`, `/sign-in/family`, `/admin/sign-in`) submit to the real backend with the appropriate `kind` and route the user to the matching dashboard on success.
+  - `/app/*`, `/admin/*`, and `/account/*` route trees are wrapped in `RequireAuth`; on 401/403 the admin api client redirects to the admin sign-in.
+- **Seed** (`pnpm --filter @workspace/scripts run seed-auth`): idempotent. Hashes any existing demo users that lack a `passwordHash`, ensures one platform admin (`admin@memorialspace.com / SuperAdmin2026!`), one cemetery operator (`ops@riversidememorial.com / Cemetery2026!`), and one family demo user (`sarah.chen@email.com / Demo2026!`).
+- **Smoke test**: noauth admin metrics → 403, valid login → 200 + cookie, authed admin metrics → 200, `/me` returns the right tier, bad creds → 401.
 
 # External Dependencies
 

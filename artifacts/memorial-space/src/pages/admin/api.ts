@@ -130,11 +130,18 @@ export interface AuditEntry {
 async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${ADMIN_API_BASE}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       ...(init.headers || {}),
     },
   });
+  if (res.status === 401 || res.status === 403) {
+    // Session expired or never started — kick the user back to the admin sign-in.
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/sign-in")) {
+      window.location.href = "/sign-in/admin";
+    }
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     let parsed: unknown;

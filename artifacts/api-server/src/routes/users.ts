@@ -46,7 +46,7 @@ router.get("/users/:id", async (req, res) => {
     .from(usersTable)
     .where(and(eq(usersTable.id, id), eq(usersTable.organizationId, orgId)))
     .limit(1);
-  if (!user) return res.status(404).json({ error: "User not found" });
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
   res.json(user);
 });
 
@@ -54,12 +54,14 @@ router.post("/users", async (req, res) => {
   const body = req.body ?? {};
   const orgId = Number(body.organizationId);
   if (!Number.isFinite(orgId)) {
-    return res.status(400).json({ error: "organizationId is required in body" });
+    res.status(400).json({ error: "organizationId is required in body" });
+    return;
   }
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!name || !email) {
-    return res.status(400).json({ error: "name and email are required" });
+    res.status(400).json({ error: "name and email are required" });
+    return;
   }
   const role = isValidRole(body.role) ? body.role : "viewer";
   const status = isValidStatus(body.status) ? body.status : "invited";
@@ -71,7 +73,8 @@ router.post("/users", async (req, res) => {
     .where(and(eq(usersTable.organizationId, orgId), eq(usersTable.email, email)))
     .limit(1);
   if (dupe.length > 0) {
-    return res.status(409).json({ error: "A team member with that email already exists" });
+    res.status(409).json({ error: "A team member with that email already exists" });
+    return;
   }
 
   try {
@@ -93,7 +96,8 @@ router.post("/users", async (req, res) => {
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
     if (e?.code === "23505") {
-      return res.status(409).json({ error: "A team member with that email already exists" });
+      res.status(409).json({ error: "A team member with that email already exists" });
+      return;
     }
     res.status(500).json({ error: e?.message ?? "Failed to create user" });
   }
@@ -110,7 +114,7 @@ router.put("/users/:id", async (req, res) => {
     .from(usersTable)
     .where(and(eq(usersTable.id, id), eq(usersTable.organizationId, orgId)))
     .limit(1);
-  if (!existing) return res.status(404).json({ error: "User not found" });
+  if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
   const patch: Record<string, unknown> = {};
   if (typeof body.name === "string") patch.name = body.name.trim();
@@ -132,24 +136,28 @@ router.put("/users/:id", async (req, res) => {
         )
         .limit(1);
       if (dupe.length > 0) {
-        return res.status(409).json({ error: "Another team member already uses that email" });
+        res.status(409).json({ error: "Another team member already uses that email" });
+        return;
       }
       patch.email = newEmail;
     }
   }
 
   if (body.role !== undefined && !isValidRole(body.role)) {
-    return res.status(400).json({ error: "Invalid role" });
+    res.status(400).json({ error: "Invalid role" });
+    return;
   }
   if (body.status !== undefined && !isValidStatus(body.status)) {
-    return res.status(400).json({ error: "Invalid status" });
+    res.status(400).json({ error: "Invalid status" });
+    return;
   }
   if (
     body.status === "suspended" &&
     existing.role === "owner" &&
     body.role === undefined
   ) {
-    return res.status(409).json({ error: "Cannot suspend the cemetery owner" });
+    res.status(409).json({ error: "Cannot suspend the cemetery owner" });
+    return;
   }
 
   // Wrap the role-demotion / owner-suspension paths in a transaction with
@@ -193,11 +201,13 @@ router.put("/users/:id", async (req, res) => {
     res.json(updated);
   } catch (err: unknown) {
     if (err instanceof LastOwnerError) {
-      return res.status(409).json({ error: err.message });
+      res.status(409).json({ error: err.message });
+      return;
     }
     const e = err as { code?: string; message?: string };
     if (e?.code === "23505") {
-      return res.status(409).json({ error: "Another team member already uses that email" });
+      res.status(409).json({ error: "Another team member already uses that email" });
+      return;
     }
     res.status(500).json({ error: e?.message ?? "Failed to update user" });
   }
@@ -244,7 +254,8 @@ router.delete("/users/:id", async (req, res) => {
     res.status(204).send();
   } catch (err: unknown) {
     if (err instanceof LastOwnerError) {
-      return res.status(409).json({ error: err.message });
+      res.status(409).json({ error: err.message });
+      return;
     }
     const e = err as { message?: string };
     res.status(500).json({ error: e?.message ?? "Failed to delete user" });
@@ -261,7 +272,10 @@ router.post("/users/:id/resend-invite", async (req, res) => {
     .set({ invitedAt: new Date(), status: "invited" })
     .where(and(eq(usersTable.id, id), eq(usersTable.organizationId, orgId)))
     .returning();
-  if (!user) return res.status(404).json({ error: "User not found" });
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
   res.json(user);
 });
 

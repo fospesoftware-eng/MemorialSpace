@@ -28,7 +28,8 @@ router.get("/organizations", async (req, res) => {
 router.post("/organizations", async (req, res) => {
   const parsed = insertOrganizationSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const values = reconcileColumbariumFlag(parsed.data);
   const [org] = await db.insert(organizationsTable).values(values).returning();
@@ -38,20 +39,22 @@ router.post("/organizations", async (req, res) => {
 router.get("/organizations/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, id));
-  if (!org) return res.status(404).json({ error: "Not found" });
+  if (!org) { res.status(404).json({ error: "Not found" }); return; }
   res.json(org);
 });
 
 router.put("/organizations/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   // Updates are partial — accept the same keys as create, all optional.
   const PartialSchema = insertOrganizationSchema.partial();
   const parsed = PartialSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const values = reconcileColumbariumFlag(parsed.data);
   const [org] = await db
@@ -59,7 +62,7 @@ router.put("/organizations/:id", async (req, res) => {
     .set(values)
     .where(eq(organizationsTable.id, id))
     .returning();
-  if (!org) return res.status(404).json({ error: "Not found" });
+  if (!org) { res.status(404).json({ error: "Not found" }); return; }
   res.json(org);
 });
 

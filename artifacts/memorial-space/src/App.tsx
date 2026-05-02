@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider, RequireAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
 
 import { B2BLayout } from "@/components/layout/b2b-layout";
@@ -187,9 +188,21 @@ function Router() {
       <Route path="/c/:slug" nest>
         {(params) => <CemeterySiteRoutes slug={String(params.slug)} />}
       </Route>
-      <Route path="/account" nest><CustomerRoutes /></Route>
-      <Route path="/admin" nest><AdminRoutes /></Route>
-      <Route path="/app" nest><B2BRoutes /></Route>
+      <Route path="/account" nest>
+        <RequireAuth kinds={["family"]} signInPath="/sign-in/family">
+          <CustomerRoutes />
+        </RequireAuth>
+      </Route>
+      <Route path="/admin" nest>
+        <RequireAuth kinds={["admin"]} signInPath="/sign-in/admin">
+          <AdminRoutes />
+        </RequireAuth>
+      </Route>
+      <Route path="/app" nest>
+        <RequireAuth kinds={["cemetery"]} signInPath="/sign-in/cemetery">
+          <B2BRoutes />
+        </RequireAuth>
+      </Route>
       <Route path="/demo">
         <SaasMarketingRoutes><DemoCredentials /></SaasMarketingRoutes>
       </Route>
@@ -205,12 +218,14 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark">
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

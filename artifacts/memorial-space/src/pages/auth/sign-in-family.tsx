@@ -8,6 +8,7 @@ export default function SignInFamily() {
       title="Welcome back"
       subtitle="Sign in to manage memorials, leave tributes, and access your saved records."
       theme="rose"
+      kind="family"
       demoEmail="sarah.chen@email.com"
       demoPassword="Demo2026!"
       redirectTo="/account"

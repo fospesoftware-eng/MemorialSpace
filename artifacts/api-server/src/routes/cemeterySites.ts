@@ -58,13 +58,13 @@ router.get("/cemetery-sites", async (req, res) => {
     .select()
     .from(organizationsTable)
     .where(eq(organizationsTable.id, orgId));
-  if (!org) return res.status(404).json({ error: "Organization not found" });
+  if (!org) { res.status(404).json({ error: "Organization not found" }); return; }
 
   const [existing] = await db
     .select()
     .from(cemeterySitesTable)
     .where(eq(cemeterySitesTable.organizationId, orgId));
-  if (existing) return res.json(existing);
+  if (existing) { res.json(existing); return; }
 
   // First-time fetch — seed a sensible default from the org record so the
   // operator sees a half-filled site they can publish quickly.
@@ -100,15 +100,16 @@ router.put("/cemetery-sites", async (req, res) => {
   const body = { ...(req.body ?? {}), organizationId: orgId };
   const parsed = upsertCemeterySiteSchema.safeParse(body);
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const [org] = await db
     .select({ id: organizationsTable.id })
     .from(organizationsTable)
     .where(eq(organizationsTable.id, orgId));
-  if (!org) return res.status(404).json({ error: "Organization not found" });
+  if (!org) { res.status(404).json({ error: "Organization not found" }); return; }
 
   const [row] = await db
     .insert(cemeterySitesTable)
@@ -142,9 +143,10 @@ router.post("/cemetery-categories", async (req, res) => {
   const body = { ...(req.body ?? {}), organizationId: orgId };
   const parsed = insertCemeteryCategorySchema.safeParse(body);
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   try {
     const [row] = await db
@@ -155,7 +157,8 @@ router.post("/cemetery-categories", async (req, res) => {
   } catch (err) {
     // Slug collision within the same org.
     if (err instanceof Error && err.message.includes("cemetery_categories_org_slug_unique")) {
-      return res.status(409).json({ error: "A category with that slug already exists" });
+      res.status(409).json({ error: "A category with that slug already exists" });
+      return;
     }
     throw err;
   }
@@ -165,15 +168,16 @@ router.put("/cemetery-categories/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const PatchSchema = insertCemeteryCategorySchema
     .omit({ organizationId: true })
     .partial();
   const parsed = PatchSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const updated = await db
     .update(cemeteryCategoriesTable)
@@ -185,7 +189,7 @@ router.put("/cemetery-categories/:id", async (req, res) => {
       ),
     )
     .returning();
-  if (updated.length === 0) return res.status(404).json({ error: "Not found" });
+  if (updated.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.json(updated[0]);
 });
 
@@ -193,7 +197,7 @@ router.delete("/cemetery-categories/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const deleted = await db
     .delete(cemeteryCategoriesTable)
     .where(
@@ -203,7 +207,7 @@ router.delete("/cemetery-categories/:id", async (req, res) => {
       ),
     )
     .returning({ id: cemeteryCategoriesTable.id });
-  if (deleted.length === 0) return res.status(404).json({ error: "Not found" });
+  if (deleted.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.status(204).send();
 });
 
@@ -228,9 +232,10 @@ router.post("/cemetery-products", async (req, res) => {
   const body = { ...(req.body ?? {}), organizationId: orgId };
   const parsed = insertCemeteryProductSchema.safeParse(body);
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   // Cross-org safety: if a categoryId is provided, it must belong to this org
   // — otherwise an operator could attach a product to another cemetery's
@@ -245,7 +250,7 @@ router.post("/cemetery-products", async (req, res) => {
           eq(cemeteryCategoriesTable.organizationId, orgId),
         ),
       );
-    if (!cat) return res.status(400).json({ error: "Invalid category for this organization" });
+    if (!cat) { res.status(400).json({ error: "Invalid category for this organization" }); return; }
   }
   try {
     const [row] = await db
@@ -255,7 +260,8 @@ router.post("/cemetery-products", async (req, res) => {
     res.status(201).json(row);
   } catch (err) {
     if (err instanceof Error && err.message.includes("cemetery_products_org_slug_unique")) {
-      return res.status(409).json({ error: "A product with that slug already exists" });
+      res.status(409).json({ error: "A product with that slug already exists" });
+      return;
     }
     throw err;
   }
@@ -265,7 +271,7 @@ router.get("/cemetery-products/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db
     .select()
     .from(cemeteryProductsTable)
@@ -275,7 +281,7 @@ router.get("/cemetery-products/:id", async (req, res) => {
         eq(cemeteryProductsTable.organizationId, orgId),
       ),
     );
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json(row);
 });
 
@@ -283,15 +289,16 @@ router.put("/cemetery-products/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const PatchSchema = insertCemeteryProductSchema
     .omit({ organizationId: true })
     .partial();
   const parsed = PatchSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   if (parsed.data.categoryId != null) {
     const [cat] = await db
@@ -303,7 +310,7 @@ router.put("/cemetery-products/:id", async (req, res) => {
           eq(cemeteryCategoriesTable.organizationId, orgId),
         ),
       );
-    if (!cat) return res.status(400).json({ error: "Invalid category for this organization" });
+    if (!cat) { res.status(400).json({ error: "Invalid category for this organization" }); return; }
   }
   const updated = await db
     .update(cemeteryProductsTable)
@@ -315,7 +322,7 @@ router.put("/cemetery-products/:id", async (req, res) => {
       ),
     )
     .returning();
-  if (updated.length === 0) return res.status(404).json({ error: "Not found" });
+  if (updated.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.json(updated[0]);
 });
 
@@ -323,7 +330,7 @@ router.delete("/cemetery-products/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const deleted = await db
     .delete(cemeteryProductsTable)
     .where(
@@ -333,7 +340,7 @@ router.delete("/cemetery-products/:id", async (req, res) => {
       ),
     )
     .returning({ id: cemeteryProductsTable.id });
-  if (deleted.length === 0) return res.status(404).json({ error: "Not found" });
+  if (deleted.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.status(204).send();
 });
 
@@ -346,7 +353,7 @@ router.get("/cemetery-orders", async (req, res) => {
   if (orgId === null) return;
   const StatusFilter = z.object({ status: z.enum(ORDER_STATUSES).optional() });
   const filter = StatusFilter.safeParse(req.query);
-  if (!filter.success) return res.status(400).json({ error: "Invalid status filter" });
+  if (!filter.success) { res.status(400).json({ error: "Invalid status filter" }); return; }
   const conditions = [eq(cemeteryOrdersTable.organizationId, orgId)];
   if (filter.data.status) conditions.push(eq(cemeteryOrdersTable.status, filter.data.status));
   const rows = await db
@@ -361,7 +368,7 @@ router.get("/cemetery-orders/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db
     .select()
     .from(cemeteryOrdersTable)
@@ -371,7 +378,7 @@ router.get("/cemetery-orders/:id", async (req, res) => {
         eq(cemeteryOrdersTable.organizationId, orgId),
       ),
     );
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json(row);
 });
 
@@ -379,7 +386,7 @@ router.patch("/cemetery-orders/:id", async (req, res) => {
   const orgId = readOrgId(req, res);
   if (orgId === null) return;
   const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
   // Only operator-controlled fields can be patched. The customer-supplied
   // info (name, email, items, totals) is immutable post-submission so the
   // record stays a faithful audit trail.
@@ -390,9 +397,10 @@ router.patch("/cemetery-orders/:id", async (req, res) => {
   });
   const parsed = PatchSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const updated = await db
     .update(cemeteryOrdersTable)
@@ -404,7 +412,7 @@ router.patch("/cemetery-orders/:id", async (req, res) => {
       ),
     )
     .returning();
-  if (updated.length === 0) return res.status(404).json({ error: "Not found" });
+  if (updated.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.json(updated[0]);
 });
 
@@ -495,7 +503,7 @@ router.get("/c/:slug/products", async (req, res) => {
   if (!ctx) return;
   const FilterSchema = z.object({ category: z.string().max(80).optional() });
   const filter = FilterSchema.safeParse(req.query);
-  if (!filter.success) return res.status(400).json({ error: "Invalid filter" });
+  if (!filter.success) { res.status(400).json({ error: "Invalid filter" }); return; }
 
   const conditions = [
     eq(cemeteryProductsTable.organizationId, ctx.org.id),
@@ -512,7 +520,7 @@ router.get("/c/:slug/products", async (req, res) => {
           eq(cemeteryCategoriesTable.slug, filter.data.category),
         ),
       );
-    if (!cat) return res.json({ products: [], categories: [] });
+    if (!cat) { res.json({ products: [], categories: [] }); return; }
     categoryId = cat.id;
     conditions.push(eq(cemeteryProductsTable.categoryId, categoryId));
   }
@@ -537,7 +545,8 @@ router.get("/c/:slug/products/:productSlug", async (req, res) => {
   if (!ctx) return;
   const productSlug = String(req.params.productSlug ?? "");
   if (!/^[a-z0-9-]{1,200}$/.test(productSlug)) {
-    return res.status(400).json({ error: "Invalid product slug" });
+    res.status(400).json({ error: "Invalid product slug" });
+    return;
   }
   const [product] = await db
     .select()
@@ -549,7 +558,7 @@ router.get("/c/:slug/products/:productSlug", async (req, res) => {
         eq(cemeteryProductsTable.isPublished, true),
       ),
     );
-  if (!product) return res.status(404).json({ error: "Product not found" });
+  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   res.json(product);
 });
 
@@ -564,7 +573,8 @@ router.get("/c/:slug/find-grave", async (req, res) => {
   });
   const parsed = QSchema.safeParse(req.query);
   if (!parsed.success) {
-    return res.json({ results: [] });
+    res.json({ results: [] });
+    return;
   }
   const term = `%${parsed.data.q.trim()}%`;
   const rows = await db
@@ -709,7 +719,8 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
   if (!ctx) return;
   const code = String(req.params.code ?? "").toUpperCase();
   if (!/^[A-F0-9]{8,64}$/.test(code)) {
-    return res.status(400).json({ error: "Invalid memorial code" });
+    res.status(400).json({ error: "Invalid memorial code" });
+    return;
   }
   const [qr] = await db
     .select()
@@ -721,7 +732,8 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
       ),
     );
   if (!qr || qr.burialId == null) {
-    return res.status(404).json({ error: "Memorial not found" });
+    res.status(404).json({ error: "Memorial not found" });
+    return;
   }
 
   const [burial] = await db
@@ -733,7 +745,7 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
         eq(burialsTable.organizationId, ctx.org.id),
       ),
     );
-  if (!burial) return res.status(404).json({ error: "Memorial not found" });
+  if (!burial) { res.status(404).json({ error: "Memorial not found" }); return; }
 
   const [memorial] = qr.memorialId
     ? await db
@@ -751,7 +763,8 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
   // public — even though the QR + burial exist. Operators can re-publish
   // by toggling the memorial back to public.
   if (memorial && memorial.isPublic === false) {
-    return res.status(404).json({ error: "Memorial not found" });
+    res.status(404).json({ error: "Memorial not found" });
+    return;
   }
 
   const [plot] = burial.plotId
@@ -824,9 +837,10 @@ router.post("/c/:slug/orders", async (req, res) => {
   if (!ctx) return;
   const parsed = createCemeteryOrderSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res
+    res
       .status(400)
       .json({ error: "Invalid order", details: parsed.error.issues });
+    return;
   }
 
   // Fetch all referenced products in one query; verify they all belong to
@@ -845,9 +859,10 @@ router.post("/c/:slug/orders", async (req, res) => {
   const productById = new Map(products.map((p) => [p.id, p]));
   for (const item of parsed.data.items) {
     if (!productById.has(item.productId)) {
-      return res
+      res
         .status(400)
         .json({ error: `Product ${item.productId} is not available` });
+      return;
     }
   }
 
@@ -925,9 +940,10 @@ router.post("/c/:slug/orders", async (req, res) => {
   } catch (err) {
     // Rare: unique-index collision under extreme contention. Caller can retry.
     if (err instanceof Error && err.message.includes("cemetery_orders_org_number_unique")) {
-      return res
+      res
         .status(409)
         .json({ error: "Could not allocate order number, please try again" });
+      return;
     }
     throw err;
   }

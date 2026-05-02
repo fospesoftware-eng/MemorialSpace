@@ -144,6 +144,7 @@ export const platformInvoicesTable = pgTable(
     uniqueIndex("platform_invoices_number_unique").on(t.invoiceNumber),
     index("platform_invoices_org_idx").on(t.organizationId),
     index("platform_invoices_status_idx").on(t.status),
+    index("platform_invoices_subscription_idx").on(t.subscriptionId),
   ],
 );
 

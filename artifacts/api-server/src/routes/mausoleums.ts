@@ -56,14 +56,15 @@ router.post("/mausoleums", async (req, res) => {
   });
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   // Confirm the org exists; otherwise the FK error would surface as a 500.
   const [org] = await db
     .select({ id: organizationsTable.id })
     .from(organizationsTable)
     .where(eq(organizationsTable.id, parsed.data.organizationId));
-  if (!org) return res.status(404).json({ error: "Organization not found" });
+  if (!org) { res.status(404).json({ error: "Organization not found" }); return; }
 
   const [row] = await db
     .insert(mausoleumsTable)
@@ -82,7 +83,8 @@ router.post("/mausoleums", async (req, res) => {
 router.get("/mausoleums/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   const orgId = readRequiredOrgId(req, res);
   if (orgId === null) return;
@@ -90,7 +92,7 @@ router.get("/mausoleums/:id", async (req, res) => {
     .select()
     .from(mausoleumsTable)
     .where(and(eq(mausoleumsTable.id, id), eq(mausoleumsTable.organizationId, orgId)));
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   const crypts = await db
     .select()
     .from(mausoleumCryptsTable)
@@ -102,7 +104,8 @@ router.get("/mausoleums/:id", async (req, res) => {
 router.put("/mausoleums/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   const orgId = readRequiredOrgId(req, res);
   if (orgId === null) return;
@@ -123,7 +126,8 @@ router.put("/mausoleums/:id", async (req, res) => {
   });
   const parsed = PartialSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const { force, ...patch } = parsed.data;
 
@@ -196,8 +200,8 @@ router.put("/mausoleums/:id", async (req, res) => {
     res.json(result);
   } catch (err) {
     const httpErr = err as Error & { httpStatus?: number; payload?: unknown };
-    if (httpErr.httpStatus === 404) return res.status(404).json({ error: "Not found" });
-    if (httpErr.httpStatus === 409 && httpErr.payload) return res.status(409).json(httpErr.payload);
+    if (httpErr.httpStatus === 404) { res.status(404).json({ error: "Not found" }); return; }
+    if (httpErr.httpStatus === 409 && httpErr.payload) { res.status(409).json(httpErr.payload); return; }
     throw err;
   }
 });
@@ -205,7 +209,8 @@ router.put("/mausoleums/:id", async (req, res) => {
 router.delete("/mausoleums/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   const orgId = readRequiredOrgId(req, res);
   if (orgId === null) return;
@@ -215,7 +220,7 @@ router.delete("/mausoleums/:id", async (req, res) => {
     .delete(mausoleumsTable)
     .where(and(eq(mausoleumsTable.id, id), eq(mausoleumsTable.organizationId, orgId)))
     .returning({ id: mausoleumsTable.id });
-  if (deleted.length === 0) return res.status(404).json({ error: "Not found" });
+  if (deleted.length === 0) { res.status(404).json({ error: "Not found" }); return; }
   res.status(204).send();
 });
 
@@ -241,7 +246,8 @@ const POSITION = z.object({
 router.put("/mausoleums/:id/crypts/:row/:col", async (req, res) => {
   const params = POSITION.safeParse(req.params);
   if (!params.success) {
-    return res.status(400).json({ error: "Invalid position" });
+    res.status(400).json({ error: "Invalid position" });
+    return;
   }
   const { id, row, col } = params.data;
   const orgId = readRequiredOrgId(req, res);
@@ -252,7 +258,8 @@ router.put("/mausoleums/:id/crypts/:row/:col", async (req, res) => {
     .partial();
   const parsed = CryptBodySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
 
   // INSERT values fill defaults for a brand-new crypt. UPDATE values only
@@ -359,10 +366,14 @@ router.put("/mausoleums/:id/crypts/:row/:col", async (req, res) => {
     res.status(wasInsert ? 201 : 200).json(row_);
   } catch (err) {
     const httpErr = err as Error & { httpStatus?: number };
-    if (httpErr.httpStatus === 404)
-      return res.status(404).json({ error: "Mausoleum not found" });
-    if (httpErr.httpStatus === 400)
-      return res.status(400).json({ error: "Position out of bounds for this mausoleum" });
+    if (httpErr.httpStatus === 404) {
+      res.status(404).json({ error: "Mausoleum not found" });
+      return;
+    }
+    if (httpErr.httpStatus === 400) {
+      res.status(400).json({ error: "Position out of bounds for this mausoleum" });
+      return;
+    }
     throw err;
   }
 });
@@ -370,7 +381,8 @@ router.put("/mausoleums/:id/crypts/:row/:col", async (req, res) => {
 router.delete("/mausoleums/:id/crypts/:row/:col", async (req, res) => {
   const params = POSITION.safeParse(req.params);
   if (!params.success) {
-    return res.status(400).json({ error: "Invalid position" });
+    res.status(400).json({ error: "Invalid position" });
+    return;
   }
   const { id, row, col } = params.data;
   const orgId = readRequiredOrgId(req, res);

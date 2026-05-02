@@ -24,9 +24,17 @@ function publicOrigin(req: import("express").Request): string {
 
 router.get("/qr-codes", async (req, res) => {
   const { organizationId } = req.query;
+  // Cap to 1000 codes per request — operators paginate in the UI.
+  const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
   const qrCodes = organizationId
-    ? await db.select().from(qrCodesTable).where(eq(qrCodesTable.organizationId, Number(organizationId)))
-    : await db.select().from(qrCodesTable);
+    ? await db
+        .select()
+        .from(qrCodesTable)
+        .where(eq(qrCodesTable.organizationId, Number(organizationId)))
+        .limit(limit)
+        .offset(offset)
+    : await db.select().from(qrCodesTable).limit(limit).offset(offset);
   res.json(qrCodes);
 });
 
@@ -59,7 +67,7 @@ router.post("/qr-codes", async (req, res) => {
 router.get("/qr-codes/:code", async (req, res) => {
   const { code } = req.params;
   const [qrCode] = await db.select().from(qrCodesTable).where(eq(qrCodesTable.code, code));
-  if (!qrCode) return res.status(404).json({ error: "QR code not found" });
+  if (!qrCode) { res.status(404).json({ error: "QR code not found" }); return; }
 
   // Increment scan count
   await db.update(qrCodesTable).set({ scanCount: (qrCode.scanCount ?? 0) + 1 }).where(eq(qrCodesTable.id, qrCode.id));

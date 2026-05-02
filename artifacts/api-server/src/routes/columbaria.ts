@@ -23,7 +23,8 @@ const ORG_ID_QUERY = z.object({ orgId: z.coerce.number().int().positive() });
 router.get("/columbaria", async (req, res) => {
   const parsed = ORG_ID_QUERY.safeParse(req.query);
   if (!parsed.success) {
-    return res.status(400).json({ error: "orgId query parameter is required" });
+    res.status(400).json({ error: "orgId query parameter is required" });
+    return;
   }
   const orgId = parsed.data.orgId;
   const rows = await db
@@ -45,14 +46,15 @@ router.post("/columbaria", async (req, res) => {
   });
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   // Confirm the org actually exists; otherwise the FK error would be a 500.
   const [org] = await db
     .select({ id: organizationsTable.id })
     .from(organizationsTable)
     .where(eq(organizationsTable.id, parsed.data.organizationId));
-  if (!org) return res.status(404).json({ error: "Organization not found" });
+  if (!org) { res.status(404).json({ error: "Organization not found" }); return; }
 
   const [row] = await db
     .insert(columbariaTable)
@@ -66,10 +68,11 @@ router.post("/columbaria", async (req, res) => {
 router.get("/columbaria/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   const [row] = await db.select().from(columbariaTable).where(eq(columbariaTable.id, id));
-  if (!row) return res.status(404).json({ error: "Not found" });
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
   const niches = await db
     .select()
     .from(nichesTable)
@@ -81,7 +84,8 @@ router.get("/columbaria/:id", async (req, res) => {
 router.put("/columbaria/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   // Allow partial updates of name / description / dimensions. organizationId
   // is intentionally NOT modifiable here — moving a wall between orgs would
@@ -99,7 +103,8 @@ router.put("/columbaria/:id", async (req, res) => {
   });
   const parsed = PartialSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
   const { force, ...patch } = parsed.data;
 
@@ -108,7 +113,7 @@ router.put("/columbaria/:id", async (req, res) => {
     .select()
     .from(columbariaTable)
     .where(eq(columbariaTable.id, id));
-  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const newRows = patch.rows ?? existing.rows;
   const newCols = patch.cols ?? existing.cols;
@@ -126,11 +131,12 @@ router.put("/columbaria/:id", async (req, res) => {
       );
     const occupied = orphaned.filter((n) => n.status !== "available");
     if (occupied.length > 0) {
-      return res.status(409).json({
+      res.status(409).json({
         error: "Resize would remove non-empty niches",
         occupiedCount: occupied.length,
         hint: "Re-send with { force: true } to delete them, or empty them first.",
       });
+      return;
     }
   }
 
@@ -158,7 +164,8 @@ router.put("/columbaria/:id", async (req, res) => {
 router.delete("/columbaria/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    res.status(400).json({ error: "Invalid id" });
+    return;
   }
   await db.delete(columbariaTable).where(eq(columbariaTable.id, id));
   res.status(204).send();
@@ -180,15 +187,17 @@ const POSITION = z.object({
 router.put("/columbaria/:id/niches/:row/:col", async (req, res) => {
   const params = POSITION.safeParse(req.params);
   if (!params.success) {
-    return res.status(400).json({ error: "Invalid position" });
+    res.status(400).json({ error: "Invalid position" });
+    return;
   }
   const { id, row, col } = params.data;
 
   // Confirm the wall exists and the position is in bounds.
   const [wall] = await db.select().from(columbariaTable).where(eq(columbariaTable.id, id));
-  if (!wall) return res.status(404).json({ error: "Columbarium not found" });
+  if (!wall) { res.status(404).json({ error: "Columbarium not found" }); return; }
   if (row >= wall.rows || col >= wall.cols) {
-    return res.status(400).json({ error: "Position out of bounds for this wall" });
+    res.status(400).json({ error: "Position out of bounds for this wall" });
+    return;
   }
 
   const NicheBodySchema = upsertNicheSchema
@@ -196,7 +205,8 @@ router.put("/columbaria/:id/niches/:row/:col", async (req, res) => {
     .partial();
   const parsed = NicheBodySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
   }
 
   // INSERT values fill defaults for a brand-new niche. UPDATE values only
@@ -255,7 +265,8 @@ router.put("/columbaria/:id/niches/:row/:col", async (req, res) => {
 router.delete("/columbaria/:id/niches/:row/:col", async (req, res) => {
   const params = POSITION.safeParse(req.params);
   if (!params.success) {
-    return res.status(400).json({ error: "Invalid position" });
+    res.status(400).json({ error: "Invalid position" });
+    return;
   }
   const { id, row, col } = params.data;
   await db
