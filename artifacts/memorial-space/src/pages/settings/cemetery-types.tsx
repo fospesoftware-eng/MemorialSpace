@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, Image as ImageIcon, RotateCcw, AlertCircle, Square, Circle as CircleIcon, Spline } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, RotateCcw, AlertCircle, Square, Circle as CircleIcon, Spline, Hexagon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,15 +19,17 @@ import {
 // here changes which canvas tool the Map Maker auto-activates when the
 // user clicks this plot type in the palette.
 const PLOT_SHAPE_OPTIONS: { value: PlotShape; label: string; hint: string }[] = [
-  { value: "rect",   label: "Rectangle", hint: "Drag to draw an axis-aligned rectangle (sections, buildings)." },
-  { value: "circle", label: "Circle",    hint: "Drag from center outward to set radius (ponds, gardens)." },
-  { value: "path",   label: "Flexible",  hint: "Click vertices to draw a polyline (roads, paths, bridges)." },
+  { value: "rect",    label: "Rectangle", hint: "Drag to draw an axis-aligned rectangle (sections, buildings)." },
+  { value: "circle",  label: "Circle",    hint: "Drag from center outward to set radius (ponds, gardens)." },
+  { value: "polygon", label: "Polygon",   hint: "Click vertices to form a closed filled shape (irregular sections, plazas)." },
+  { value: "path",    label: "Flexible",  hint: "Click vertices to draw a polyline (roads, paths, bridges)." },
 ];
 
 const SHAPE_ICONS: Record<PlotShape, typeof Square> = {
-  rect:   Square,
-  circle: CircleIcon,
-  path:   Spline,
+  rect:    Square,
+  circle:  CircleIcon,
+  polygon: Hexagon,
+  path:    Spline,
 };
 
 export default function CemeteryTypes() {
@@ -210,7 +212,7 @@ export default function CemeteryTypes() {
             );
           })}
           <p className="text-xs text-muted-foreground pt-2">
-            <strong>Tip:</strong> The <strong>Shape</strong> column controls which drawing tool the Map Maker auto-selects when you click this plot type in its palette. You can still pick any tool manually from the Map Maker toolbar (R = Rectangle, C = Circle, P = Path). Existing plots on saved maps that reference a deleted type will render in gray with a "?" code until you re-assign them.
+            <strong>Tip:</strong> The <strong>Shape</strong> column controls which drawing tool the Map Maker auto-selects when you click this plot type in its palette. You can still pick any tool manually from the Map Maker toolbar (R = Rectangle, C = Circle, G = Polygon, P = Path). Existing plots on saved maps that reference a deleted type will render in gray with a "?" code until you re-assign them.
           </p>
         </CardContent>
       </Card>

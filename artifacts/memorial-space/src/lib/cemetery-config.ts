@@ -7,14 +7,15 @@ import type { LucideIcon } from "lucide-react";
  * per plot type in Cemetery Setup; clicking that type in the Map Maker's
  * palette auto-switches the canvas tool to match.
  *
- *   - "rect"   — drag-to-create axis-aligned rectangle (the original behaviour)
- *   - "circle" — drag-from-center to define radius
- *   - "path"   — click-to-place flexible polyline (roads, paths, bridges)
+ *   - "rect"    — drag-to-create axis-aligned rectangle (the original behaviour)
+ *   - "circle"  — drag-from-center to define radius
+ *   - "polygon" — click-to-place vertices forming a closed filled shape
+ *   - "path"    — click-to-place flexible polyline (roads, paths, bridges)
  *
  * The user can still pick any tool manually from the toolbar; the default
  * is purely a convenience for the most common shape per type.
  */
-export type PlotShape = "rect" | "circle" | "path";
+export type PlotShape = "rect" | "circle" | "polygon" | "path";
 
 export interface PlotType {
   id: string;
