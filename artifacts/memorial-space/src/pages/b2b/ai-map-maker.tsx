@@ -64,7 +64,9 @@ interface DetectedPlot {
   label: string;
   typeId: string;
   status: PlotStatus;
-  x: number; y: number; w: number; h: number; // normalised 0..1
+  x: number; y: number; w: number; h: number; // normalised 0..1, bounding box
+  /** Optional polygon outline (normalised 0..1 vertices, in perimeter order). */
+  points?: [number, number][];
 }
 interface DetectedSpot {
   label: string;
@@ -273,6 +275,14 @@ export default function AiMapMaker() {
       y: Math.max(0, Math.min(h, p.y * h)),
       w: Math.max(8, Math.min(w, p.w * w)),
       h: Math.max(8, Math.min(h, p.h * h)),
+      // Denormalise polygon outline into absolute SVG coordinates so the
+      // editor can render the true plot shape, not a generic rectangle.
+      points: p.points && p.points.length >= 3
+        ? p.points.map(([px, py]) => [
+            Math.max(0, Math.min(w, px * w)),
+            Math.max(0, Math.min(h, py * h)),
+          ] as [number, number])
+        : undefined,
     }));
 
     const spots: BurialSpot[] = result.spots.map((s) => ({
@@ -454,18 +464,31 @@ export default function AiMapMaker() {
                   >
                     {result.plots.map((p, i) => {
                       const t = getPlotType(p.typeId);
+                      const labelX = p.x * source.width + 6;
+                      const labelY = p.y * source.height + 18;
+                      // Render the polygon outline when present so the
+                      // operator can see whether the AI matched the actual
+                      // plot shape, not just a generic rectangle.
+                      const shape = p.points && p.points.length >= 3 ? (
+                        <polygon
+                          points={p.points.map(([px, py]) => `${px * source.width},${py * source.height}`).join(" ")}
+                          fill={t.fill} fillOpacity={0.35}
+                          stroke={t.stroke} strokeWidth={2}
+                        />
+                      ) : (
+                        <rect
+                          x={p.x * source.width} y={p.y * source.height}
+                          width={p.w * source.width} height={p.h * source.height}
+                          fill={t.fill} fillOpacity={0.35}
+                          stroke={t.stroke} strokeWidth={2}
+                        />
+                      );
                       return (
                         <g key={`p${i}`}>
-                          <rect
-                            x={p.x * source.width} y={p.y * source.height}
-                            width={p.w * source.width} height={p.h * source.height}
-                            fill={t.fill} fillOpacity={0.35}
-                            stroke={t.stroke} strokeWidth={2}
-                          />
+                          {shape}
                           {p.label && (
                             <text
-                              x={p.x * source.width + 6}
-                              y={p.y * source.height + 18}
+                              x={labelX} y={labelY}
                               fill="#ffffff" stroke="#000000" strokeWidth={3}
                               paintOrder="stroke"
                               fontSize={14} fontWeight={600}

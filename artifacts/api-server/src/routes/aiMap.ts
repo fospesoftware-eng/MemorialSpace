@@ -61,6 +61,8 @@ const DetectMapBody = z.object({
   spotTypes: z.array(SpotTypeSchema).max(50).optional(),
 });
 
+const Point01 = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]);
+
 const DetectedPlot = z.object({
   label: z.string().default(""),
   typeId: z.string(),
@@ -69,6 +71,11 @@ const DetectedPlot = z.object({
   y: z.number().min(0).max(1),
   w: z.number().min(0).max(1),
   h: z.number().min(0).max(1),
+  // Optional polygon outline of the region. When present we render a polygon
+  // in the editor instead of a plain bounding box, so non-rectangular plots
+  // (curved sections, angled blocks, irregular plots) keep their shape.
+  // 3-32 normalised vertices.
+  points: z.array(Point01).min(3).max(32).optional(),
 });
 
 const DetectedSpot = z.object({
@@ -123,16 +130,26 @@ router.post("/ai/detect-map", async (req, res) => {
     ? spotTypes.map((t) => `  - id="${t.id}", name="${t.name}"`).join("\n")
     : "  (none — return spots:[])";
 
-  const systemPrompt = `You are a cemetery cartography assistant. You analyse scanned or photographed cemetery maps and convert them into a structured digital representation.
+  const systemPrompt = `You are a cemetery cartography assistant. You analyse scanned or photographed cemetery maps and convert them into a structured digital representation that PRESERVES the actual shape of every region, not just rough rectangles.
 
-Your job: identify every clearly-distinguishable burial section, plot block, path/road and building shown in the image, and return them as axis-aligned bounding boxes in NORMALISED coordinates (0..1 of the image width/height).
+Your job: identify every clearly-distinguishable burial section, plot block, lawn, path/road, garden and building shown in the image. For EACH region return BOTH:
+  (a) "points": a polygon outline that traces the region's true outline as drawn on the map (4-12 vertices typically, up to 32 if needed for curves), AND
+  (b) "x","y","w","h": the axis-aligned bounding box of those points.
 
-Coordinate system: x and y are the TOP-LEFT corner of the box; w and h are the box width and height. (0,0) is the top-left of the image, (1,1) is the bottom-right. Boxes must lie fully inside [0,1].
+Coordinate system: ALL numbers are NORMALISED 0..1 — x = pixel_x / imgWidth, y = pixel_y / imgHeight. (0,0) is the top-left, (1,1) is the bottom-right. Every coordinate must lie inside [0,1].
+
+CRITICAL — match the actual shape, not a rough rectangle:
+- If a section is rectangular and axis-aligned, polygon = its 4 corners (still include points).
+- If it is rotated/angled (very common on real cemetery plans), polygon = its 4 rotated corners — DO NOT snap it back to axis-aligned, the bounding box will be larger than the section.
+- If it is curved (e.g. along a road, around a chapel, or a "lawn" / "garden of remembrance"), use 6-12 points to approximate the curve.
+- If it is L-shaped, T-shaped or otherwise non-convex, return the full outline (5-12 points) — DO NOT split into multiple boxes and DO NOT collapse into a single rectangle.
+- Vertices must be in order around the perimeter (either clockwise or counter-clockwise), no self-intersections.
+- Make polygons TIGHT to the printed boundary; do not pad with whitespace. Different sections must not overlap each other.
 
 Classification:
-- Match each detected region to ONE of the available plot type ids below by reading any visible labels, shading or legend hints. If a region is clearly a path/road, use the path id; if a building, use the building id. If unsure, pick the closest semantic match.
-- Status: most regions on a printed plan should be "available" unless visually marked as occupied (e.g. shaded with names) or reserved.
-- Label: copy any visible section name/letter/number from the map (e.g. "A", "Sec 12", "RC-3"). If none, leave as "".
+- Match each region to ONE of the available plot type ids below by reading visible labels, shading, color and legend hints. Paths/roads → the path/road id; buildings/chapels → the building id; lawns/gardens → the lawn or garden id if available, otherwise the closest match.
+- Status: most regions on a printed plan are "available" unless visually marked as occupied (shaded with names) or reserved.
+- Label: copy any visible section name/letter/number ("A", "Sec 12", "RC-3"). If none, leave as "".
 
 Available plot type ids (use ONLY these ids, exactly):
 ${plotTypeList}
@@ -149,7 +166,8 @@ Reply with ONLY a single JSON object, no prose, no markdown, matching this TypeS
     "label": string,
     "typeId": string,        // must be one of the plot type ids above
     "status": "available" | "reserved" | "occupied",
-    "x": number, "y": number, "w": number, "h": number   // all in 0..1
+    "points": [[number, number], ...],  // 3-32 vertices, each [x,y] in 0..1, in perimeter order
+    "x": number, "y": number, "w": number, "h": number   // bounding box of "points", all in 0..1
   }>,
   "spots": Array<{
     "label": string,
@@ -159,7 +177,7 @@ Reply with ONLY a single JSON object, no prose, no markdown, matching this TypeS
   "notes": string            // 1-2 sentence summary of what you saw
 }
 
-Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 60 plots and 30 spots — focus on the largest / most clearly defined regions.`;
+Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 60 plots and 30 spots — focus on the largest / most clearly defined regions and prefer fewer, accurate polygons over many sloppy ones.`;
 
   try {
     const message = await anthropic.messages.create({
@@ -236,15 +254,42 @@ Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 
       plots: rawPlots
         .map((p) => {
           const o = (p ?? {}) as Record<string, unknown>;
-          const x = clamp01(o.x), y = clamp01(o.y);
-          // Width/height also clamped, then trimmed so the box stays inside the unit square.
-          const w = Math.max(0, Math.min(1 - x, clamp01(o.w)));
-          const h = Math.max(0, Math.min(1 - y, clamp01(o.h)));
+
+          // Sanitise the polygon outline if present: clamp every vertex to [0,1],
+          // drop degenerate ones, cap to 32 points.
+          let points: [number, number][] | undefined;
+          if (Array.isArray(o.points)) {
+            const cleaned: [number, number][] = [];
+            for (const pt of o.points.slice(0, 32)) {
+              if (Array.isArray(pt) && pt.length >= 2) {
+                cleaned.push([clamp01(pt[0]), clamp01(pt[1])]);
+              }
+            }
+            if (cleaned.length >= 3) points = cleaned;
+          }
+
+          // If we have points, derive the bbox from them — that's far more
+          // reliable than trusting a separately-emitted x/y/w/h that often
+          // disagrees with the polygon. Otherwise fall back to model bbox.
+          let x: number, y: number, w: number, h: number;
+          if (points && points.length >= 3) {
+            const xs = points.map((q) => q[0]);
+            const ys = points.map((q) => q[1]);
+            x = Math.min(...xs);
+            y = Math.min(...ys);
+            w = Math.max(0, Math.min(1 - x, Math.max(...xs) - x));
+            h = Math.max(0, Math.min(1 - y, Math.max(...ys) - y));
+          } else {
+            x = clamp01(o.x);
+            y = clamp01(o.y);
+            w = Math.max(0, Math.min(1 - x, clamp01(o.w)));
+            h = Math.max(0, Math.min(1 - y, clamp01(o.h)));
+          }
           return DetectedPlot.safeParse({
             label: typeof o.label === "string" ? o.label : "",
             typeId: typeof o.typeId === "string" ? o.typeId : "",
             status: typeof o.status === "string" ? o.status : "available",
-            x, y, w, h,
+            x, y, w, h, points,
           });
         })
         .filter((p): p is { success: true; data: z.infer<typeof DetectedPlot> } => p.success)

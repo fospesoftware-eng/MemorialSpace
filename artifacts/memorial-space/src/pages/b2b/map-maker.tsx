@@ -36,6 +36,14 @@ interface Plot {
   y: number;
   w: number;
   h: number;
+  /**
+   * Optional polygon outline in absolute SVG coordinates (perimeter order).
+   * When present, the plot renders as a `<polygon>` instead of a `<rect>`,
+   * which is how AI-imported plots preserve their true (non-rectangular) shape.
+   * The bounding box (x,y,w,h) is kept in sync with these points so the
+   * existing select / move / resize handles still work.
+   */
+  points?: [number, number][];
 }
 
 interface MapDoc {
@@ -63,7 +71,7 @@ const DEFAULT_DOC: MapDoc = {
 };
 
 // Migrate plots that used `type` (old) to `typeId` (new). Tolerant of unknown shapes.
-type LegacyPlot = { id?: string; type?: string; typeId?: string; label?: string; status?: string; x?: number; y?: number; w?: number; h?: number };
+type LegacyPlot = { id?: string; type?: string; typeId?: string; label?: string; status?: string; x?: number; y?: number; w?: number; h?: number; points?: unknown };
 type LegacySpot = Partial<BurialSpot>;
 type LegacyDoc = { name?: string; image?: string | null; imgWidth?: number; imgHeight?: number; plots?: LegacyPlot[]; spots?: LegacySpot[]; updatedAt?: number };
 
@@ -81,14 +89,33 @@ function migrateDoc(raw: unknown): MapDoc {
     image: typeof d.image === "string" ? d.image : null,
     imgWidth:  safeNum(d.imgWidth,  1200),
     imgHeight: safeNum(d.imgHeight, 800),
-    plots: (Array.isArray(d.plots) ? d.plots : []).map((p) => ({
-      id: safeStr(p.id, newId("p")),
-      typeId: safeStr(p.typeId ?? p.type, "_unknown"),
-      label: safeStr(p.label, ""),
-      status: safeStatus(p.status),
-      x: safeNum(p.x, 0), y: safeNum(p.y, 0),
-      w: safeNum(p.w, 40), h: safeNum(p.h, 25),
-    })),
+    plots: (Array.isArray(d.plots) ? d.plots : []).map((p) => {
+      // Polygon outline (optional). Accept any array of [x,y] tuples and
+      // coerce to finite numbers; drop the field entirely if fewer than 3
+      // valid vertices remain so the rest of the editor stays in the
+      // happy "rect-only" path.
+      let points: [number, number][] | undefined;
+      if (Array.isArray(p.points)) {
+        const pts: [number, number][] = [];
+        for (const pt of p.points.slice(0, 64)) {
+          if (Array.isArray(pt) && pt.length >= 2) {
+            const px = safeOptNum(pt[0]);
+            const py = safeOptNum(pt[1]);
+            if (px !== undefined && py !== undefined) pts.push([px, py]);
+          }
+        }
+        if (pts.length >= 3) points = pts;
+      }
+      return {
+        id: safeStr(p.id, newId("p")),
+        typeId: safeStr(p.typeId ?? p.type, "_unknown"),
+        label: safeStr(p.label, ""),
+        status: safeStatus(p.status),
+        x: safeNum(p.x, 0), y: safeNum(p.y, 0),
+        w: safeNum(p.w, 40), h: safeNum(p.h, 25),
+        points,
+      };
+    }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => ({
       id: safeStr(s.id, newId("s")),
       x: safeNum(s.x, 0), y: safeNum(s.y, 0),
@@ -358,7 +385,17 @@ export default function MapMaker() {
     if (ds.mode === "move" && ds.id) {
       setDoc((d) => ({
         ...d,
-        plots: d.plots.map((p) => p.id === ds.id ? { ...p, x: x - ds.offsetX!, y: y - ds.offsetY! } : p),
+        plots: d.plots.map((p) => {
+          if (p.id !== ds.id) return p;
+          const nx = x - ds.offsetX!;
+          const ny = y - ds.offsetY!;
+          // Translate the polygon outline by the same delta so the rendered
+          // shape stays glued to the bounding box.
+          const dx = nx - p.x;
+          const dy = ny - p.y;
+          const points = p.points ? p.points.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
+          return { ...p, x: nx, y: ny, points };
+        }),
       }));
     }
 
@@ -374,7 +411,20 @@ export default function MapMaker() {
         ...d,
         plots: d.plots.map((p) => {
           if (p.id !== ds.id) return p;
-          return { ...p, w: Math.max(8, x - p.x), h: Math.max(8, y - p.y) };
+          const nw = Math.max(8, x - p.x);
+          const nh = Math.max(8, y - p.y);
+          // Scale the polygon outline relative to the top-left so the shape
+          // stays inside (and proportional to) the new bounding box.
+          let points = p.points;
+          if (points && p.w > 0 && p.h > 0) {
+            const sx = nw / p.w;
+            const sy = nh / p.h;
+            points = points.map(([px, py]) => [
+              p.x + (px - p.x) * sx,
+              p.y + (py - p.y) * sy,
+            ] as [number, number]);
+          }
+          return { ...p, w: nw, h: nh, points };
         }),
       }));
     }
@@ -1054,28 +1104,54 @@ export default function MapMaker() {
 
                   {/* 3D plot shadows */}
                   {view === "3d" && doc.plots.map((p) => (
-                    <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />
+                    p.points && p.points.length >= 3 ? (
+                      <polygon
+                        key={`shadow-${p.id}`}
+                        points={p.points.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
+                        fill="rgba(0,0,0,0.35)" pointerEvents="none"
+                      />
+                    ) : (
+                      <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />
+                    )
                   ))}
 
                   {/* Plots */}
                   {doc.plots.map((p) => {
                     const meta = getPlotType(p.typeId);
                     const isSel = selection?.kind === "plot" && selection.id === p.id;
+                    // Polygon plots (typically AI-imported, non-rectangular)
+                    // render their true outline. Plain plots render as the
+                    // classic axis-aligned rectangle.
+                    const hasPolygon = p.points && p.points.length >= 3;
                     return (
                       <g key={p.id}>
-                        <rect
-                          data-plot="true"
-                          data-plot-id={p.id}
-                          data-testid={`plot-${p.id}`}
-                          x={p.x} y={p.y}
-                          width={p.w} height={p.h}
-                          fill={meta.fill}
-                          fillOpacity={doc.image ? 0.85 : 1}
-                          stroke={isSel ? "#0ea5e9" : meta.stroke}
-                          strokeWidth={isSel ? 2.5 : 1}
-                          className={tool === "select" ? "cursor-move" : "cursor-pointer"}
-                          rx={2}
-                        />
+                        {hasPolygon ? (
+                          <polygon
+                            data-plot="true"
+                            data-plot-id={p.id}
+                            data-testid={`plot-${p.id}`}
+                            points={p.points!.map(([px, py]) => `${px},${py}`).join(" ")}
+                            fill={meta.fill}
+                            fillOpacity={doc.image ? 0.85 : 1}
+                            stroke={isSel ? "#0ea5e9" : meta.stroke}
+                            strokeWidth={isSel ? 2.5 : 1}
+                            className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                          />
+                        ) : (
+                          <rect
+                            data-plot="true"
+                            data-plot-id={p.id}
+                            data-testid={`plot-${p.id}`}
+                            x={p.x} y={p.y}
+                            width={p.w} height={p.h}
+                            fill={meta.fill}
+                            fillOpacity={doc.image ? 0.85 : 1}
+                            stroke={isSel ? "#0ea5e9" : meta.stroke}
+                            strokeWidth={isSel ? 2.5 : 1}
+                            className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                            rx={2}
+                          />
+                        )}
                         {p.w > 12 && p.h > 12 && (
                           <circle cx={p.x + p.w - 6} cy={p.y + 6} r={3} fill={STATUS_COLORS[p.status]} pointerEvents="none" />
                         )}
