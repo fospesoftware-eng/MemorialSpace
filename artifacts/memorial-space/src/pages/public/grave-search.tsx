@@ -103,7 +103,7 @@ export default function GraveSearch() {
                         </div>
                       </div>
                       {result.memorial && (
-                        <Link href={`/public/memorial/${result.memorial.id}`}>
+                        <Link href={`/memorial/${result.memorial.id}`}>
                           <Button variant="outline" size="sm" className="shrink-0" data-testid={`button-view-memorial-${idx}`}>
                             View Memorial <ArrowRight className="h-3.5 w-3.5 ml-1" />
                           </Button>

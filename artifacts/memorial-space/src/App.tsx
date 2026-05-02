@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,7 +7,14 @@ import NotFound from "@/pages/not-found";
 
 import { B2BLayout } from "@/components/layout/b2b-layout";
 import { PublicLayout } from "@/components/layout/public-layout";
+import { CustomerLayout } from "@/components/layout/customer-layout";
+import { AdminLayout } from "@/components/layout/admin-layout";
+import { SaasMarketingLayout } from "@/components/layout/saas-marketing-layout";
 
+// SaaS marketing
+import SaasHome from "@/pages/marketing/saas-home";
+
+// B2B (cemetery client)
 import Dashboard from "@/pages/b2b/dashboard";
 import Plots from "@/pages/b2b/plots";
 import MapPage from "@/pages/b2b/map";
@@ -22,10 +29,27 @@ import Organizations from "@/pages/settings/organizations";
 import Users from "@/pages/settings/users";
 import Settings from "@/pages/settings/general";
 
+// B2C public marketing
 import GraveSearch from "@/pages/public/grave-search";
 import PublicMemorial from "@/pages/public/memorial";
 import PublicObituaries from "@/pages/public/obituaries";
 import PublicShop from "@/pages/public/shop";
+
+// Customer (B2C) dashboard
+import CustomerDashboard from "@/pages/customer/dashboard";
+import CustomerOrders from "@/pages/customer/orders";
+import CustomerMemorials from "@/pages/customer/memorials";
+import CustomerTributes from "@/pages/customer/tributes";
+import CustomerSaved from "@/pages/customer/saved";
+import CustomerSettings from "@/pages/customer/settings";
+
+// SaaS admin
+import AdminDashboard from "@/pages/admin/dashboard";
+import AdminOrganizations from "@/pages/admin/organizations";
+import AdminUsers from "@/pages/admin/users";
+import AdminBilling from "@/pages/admin/billing";
+import AdminAnalytics from "@/pages/admin/analytics";
+import AdminSupport from "@/pages/admin/support";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +57,7 @@ function B2BRoutes() {
   return (
     <B2BLayout>
       <Switch>
+        <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/map" component={MapPage} />
         <Route path="/plots" component={Plots} />
@@ -54,29 +79,67 @@ function B2BRoutes() {
 
 function PublicRoutes() {
   return (
-    <WouterRouter base="/public">
-      <PublicLayout>
-        <Switch>
-          <Route path="/" component={GraveSearch} />
-          <Route path="/memorial/:id" component={PublicMemorial} />
-          <Route path="/obituaries" component={PublicObituaries} />
-          <Route path="/shop" component={PublicShop} />
-          <Route component={NotFound} />
-        </Switch>
-      </PublicLayout>
-    </WouterRouter>
+    <PublicLayout>
+      <Switch>
+        <Route path="/" component={GraveSearch} />
+        <Route path="/memorial/:id" component={PublicMemorial} />
+        <Route path="/obituaries" component={PublicObituaries} />
+        <Route path="/shop" component={PublicShop} />
+        <Route component={NotFound} />
+      </Switch>
+    </PublicLayout>
+  );
+}
+
+function CustomerRoutes() {
+  return (
+    <CustomerLayout>
+      <Switch>
+        <Route path="/" component={CustomerDashboard} />
+        <Route path="/orders" component={CustomerOrders} />
+        <Route path="/memorials" component={CustomerMemorials} />
+        <Route path="/tributes" component={CustomerTributes} />
+        <Route path="/saved" component={CustomerSaved} />
+        <Route path="/settings" component={CustomerSettings} />
+        <Route component={NotFound} />
+      </Switch>
+    </CustomerLayout>
+  );
+}
+
+function AdminRoutes() {
+  return (
+    <AdminLayout>
+      <Switch>
+        <Route path="/" component={AdminDashboard} />
+        <Route path="/organizations" component={AdminOrganizations} />
+        <Route path="/users" component={AdminUsers} />
+        <Route path="/billing" component={AdminBilling} />
+        <Route path="/analytics" component={AdminAnalytics} />
+        <Route path="/support" component={AdminSupport} />
+        <Route component={NotFound} />
+      </Switch>
+    </AdminLayout>
+  );
+}
+
+function SaasMarketingRoutes() {
+  return (
+    <SaasMarketingLayout>
+      <SaasHome />
+    </SaasMarketingLayout>
   );
 }
 
 function Router() {
   return (
     <Switch>
-      <Route path="/">
-        <Redirect to="/dashboard" />
-      </Route>
-      <Route path="/public" component={PublicRoutes} />
-      <Route path="/public/:rest*" component={PublicRoutes} />
-      <Route path="/:rest*" component={B2BRoutes} />
+      <Route path="/find" nest><PublicRoutes /></Route>
+      <Route path="/account" nest><CustomerRoutes /></Route>
+      <Route path="/admin" nest><AdminRoutes /></Route>
+      <Route path="/app" nest><B2BRoutes /></Route>
+      <Route path="/" component={SaasMarketingRoutes} />
+      <Route component={NotFound} />
     </Switch>
   );
 }
