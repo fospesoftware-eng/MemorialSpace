@@ -118,7 +118,7 @@ function SidebarContent() {
 
       <div className="px-4 py-4 border-t border-sidebar-border">
         <a
-          href="/"
+          href="/sign-in/cemetery"
           data-testid="b2b-sign-out"
           className="flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
         >

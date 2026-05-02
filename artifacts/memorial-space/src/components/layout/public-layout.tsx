@@ -49,14 +49,14 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="hidden md:flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <a href="/account">
+            <Button asChild variant="ghost" size="sm" data-testid="public-sign-in">
+              <a href="/sign-in/family">
                 <User className="h-4 w-4 mr-1.5" />
-                My Account
+                Sign In
               </a>
             </Button>
             <Button asChild variant="outline" size="sm" data-testid="public-sign-out">
-              <a href="/">
+              <a href="/sign-in/family">
                 <LogOut className="h-4 w-4 mr-1.5" />
                 Sign Out
               </a>

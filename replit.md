@@ -37,6 +37,11 @@ Full SaaS platform for cemetery management. Five distinct surfaces, each with it
 | `/account/*`| Customer (B2C) dashboard         | `customer-layout.tsx`         |
 | `/app/*`    | B2B cemetery operator dashboard  | `b2b-layout.tsx`              |
 | `/admin/*`  | SaaS super-admin console         | `admin-layout.tsx`            |
+| `/sign-in`, `/sign-in/{cemetery,family,admin}` | Auth pages (no surface layout) | `pages/auth/sign-in-form.tsx` |
+
+### Sign-in pages
+
+Three themed sign-in pages share `SignInForm` (theme: green/rose/gold), each redirecting to its dashboard via `window.location.href` (full reload to escape any nested wouter base). `/sign-in` is a hub that links to all three. Sign-out buttons in each surface point to the matching `/sign-in/<portal>`.
 
 ### Routing rules (important)
 

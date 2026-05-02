@@ -45,7 +45,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
 
           <div className="hidden md:flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" data-testid="link-signin">
-              <Link href="/app/dashboard">Client Sign In</Link>
+              <Link href="/sign-in">Client Sign In</Link>
             </Button>
             <Button asChild size="sm" className="bg-primary hover:bg-primary/90" data-testid="link-demo">
               <Link href="/#pricing">Request Demo</Link>
@@ -64,7 +64,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
                   <Link key={l.href} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
                 ))}
                 <div className="border-t border-border my-3" />
-                <Button asChild variant="outline"><Link href="/app/dashboard">Client Sign In</Link></Button>
+                <Button asChild variant="outline"><Link href="/sign-in">Client Sign In</Link></Button>
                 <Button asChild><Link href="/#pricing">Request Demo</Link></Button>
                 <div className="border-t border-border my-3" />
                 <Link href="/account" className="text-sm text-muted-foreground py-1">My Account</Link>

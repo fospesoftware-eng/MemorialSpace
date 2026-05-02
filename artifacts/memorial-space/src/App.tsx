@@ -15,6 +15,12 @@ import { SaasMarketingLayout } from "@/components/layout/saas-marketing-layout";
 import SaasHome from "@/pages/marketing/saas-home";
 import DemoCredentials from "@/pages/marketing/demo";
 
+// Auth (sign-in)
+import SignInHub from "@/pages/auth/sign-in-hub";
+import SignInCemetery from "@/pages/auth/sign-in-cemetery";
+import SignInFamily from "@/pages/auth/sign-in-family";
+import SignInAdmin from "@/pages/auth/sign-in-admin";
+
 // B2B (cemetery client)
 import Dashboard from "@/pages/b2b/dashboard";
 import Plots from "@/pages/b2b/plots";
@@ -131,6 +137,11 @@ function SaasMarketingRoutes({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
+      <Route path="/sign-in" component={SignInHub} />
+      <Route path="/sign-in/cemetery" component={SignInCemetery} />
+      <Route path="/sign-in/family" component={SignInFamily} />
+      <Route path="/sign-in/admin" component={SignInAdmin} />
+
       <Route path="/find" nest><PublicRoutes /></Route>
       <Route path="/account" nest><CustomerRoutes /></Route>
       <Route path="/admin" nest><AdminRoutes /></Route>

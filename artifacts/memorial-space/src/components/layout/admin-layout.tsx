@@ -64,7 +64,8 @@ function SidebarContent() {
           <p className="text-xs text-sidebar-foreground/70 mt-1">Operating since 2021</p>
         </div>
         <a
-          href="/"
+          href="/sign-in/admin"
+          data-testid="admin-sign-out"
           className="flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
         >
           <LogOut className="h-5 w-5" />
