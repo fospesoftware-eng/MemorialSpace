@@ -24,7 +24,7 @@ import {
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "draw" | "spot";
+type Tool = "select" | "draw" | "spot" | "pan";
 type View = "2d" | "3d";
 
 interface Plot {
@@ -144,8 +144,14 @@ export default function MapMaker() {
   const [tilt, setTilt] = useState(55);
   const [zoom, setZoom] = useState(1);
   const [showImage, setShowImage] = useState(true);
-  const [showLabels, setShowLabels] = useState(true);
+  // Labels are off by default — they crowd the canvas on dense imported maps
+  // (e.g. a Gresham-style grid with 300+ plots). Hover any plot to see its
+  // label; toggle the "Labels" button in the toolbar to pin them all on.
+  const [showLabels, setShowLabels] = useState(false);
   const [showSpots, setShowSpots] = useState(true);
+  // Tracks the plot the pointer is currently hovering over, so we can show
+  // its label on hover even when the global "Labels" toggle is off.
+  const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -161,7 +167,7 @@ export default function MapMaker() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
-  const dragState = useRef<{ mode: "create" | "move" | "resize" | "move-spot"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean } | null>(null);
+  const dragState = useRef<{ mode: "create" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
   const viewRef = useRef<View>("2d");
 
@@ -213,6 +219,15 @@ export default function MapMaker() {
       setDraftRect(null);
     }
   }, [view]);
+
+  // Clear stale hover state when the underlying plots change (e.g. after a
+  // delete or after loading a new map) so we don't keep referencing an id
+  // that no longer exists.
+  useEffect(() => {
+    if (hoveredPlotId && !doc.plots.some((p) => p.id === hoveredPlotId)) {
+      setHoveredPlotId(null);
+    }
+  }, [doc.plots, hoveredPlotId]);
 
   // Maintain valid active type ids if registry changes
   useEffect(() => {
@@ -296,6 +311,15 @@ export default function MapMaker() {
   }, []);
 
   // ----- Canvas pointer handlers -----
+  // Find the Radix ScrollArea viewport that wraps our SVG canvas. The hand
+  // tool scrolls THIS element to pan; we look it up lazily because it's
+  // mounted by ScrollArea and only exists at runtime.
+  const findScrollViewport = useCallback((): HTMLElement | null => {
+    return canvasWrapRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement | null;
+  }, []);
+
   const onCanvasPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (view === "3d") return;
     const target = e.target as SVGElement;
@@ -306,6 +330,23 @@ export default function MapMaker() {
       ? (target.dataset.spotId ?? (target.closest?.('[data-spot="true"]') as HTMLElement | null)?.dataset.spotId)
       : undefined;
     const { x, y } = toSvgPoint(e);
+
+    // Hand / pan tool: drag to scroll the canvas viewport. Always wins —
+    // even when the press lands on a plot — so the user can pan over busy
+    // imported maps without accidentally selecting things.
+    if (tool === "pan") {
+      const vp = findScrollViewport();
+      if (!vp) return;
+      dragState.current = {
+        mode: "pan",
+        panStartClientX: e.clientX,
+        panStartClientY: e.clientY,
+        panStartScrollLeft: vp.scrollLeft,
+        panStartScrollTop: vp.scrollTop,
+      };
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      return;
+    }
 
     if (tool === "draw" && !isPlotEl && !isResizeEl && !isSpotEl) {
       if (!activePlotTypeId) return;
@@ -368,8 +409,21 @@ export default function MapMaker() {
 
   const onCanvasPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (!dragState.current || viewRef.current === "3d") return;
-    const { x, y } = toSvgPoint(e);
     const ds = dragState.current;
+
+    // Hand / pan tool: scroll the viewport. Compute the delta in SCREEN
+    // pixels (not SVG units) — we're moving the scroll container, which
+    // is unaffected by the SVG viewBox transform.
+    if (ds.mode === "pan") {
+      const vp = findScrollViewport();
+      if (vp) {
+        vp.scrollLeft = ds.panStartScrollLeft! - (e.clientX - ds.panStartClientX!);
+        vp.scrollTop  = ds.panStartScrollTop!  - (e.clientY - ds.panStartClientY!);
+      }
+      return;
+    }
+
+    const { x, y } = toSvgPoint(e);
 
     if (ds.mode === "create" && draftRectRef.current) {
       const ax = ds.anchorX!, ay = ds.anchorY!;
@@ -490,6 +544,7 @@ export default function MapMaker() {
       if (k === "v") setTool("select");
       if (k === "r") setTool("draw");
       if (k === "s") setTool("spot");
+      if (k === "h") setTool("pan");
       if (k === "f") {
         e.preventDefault();
         void enterFullscreen();
@@ -696,7 +751,11 @@ export default function MapMaker() {
     return { totalPlots: doc.plots.length, totalSpots: doc.spots.length, byPlotType, available, reserved, occupied };
   }, [doc.plots, doc.spots]);
 
-  const cursorClass = tool === "draw" ? "cursor-crosshair" : tool === "spot" ? "cursor-cell" : "cursor-default";
+  const cursorClass =
+    tool === "draw" ? "cursor-crosshair" :
+    tool === "spot" ? "cursor-cell" :
+    tool === "pan"  ? "cursor-grab active:cursor-grabbing" :
+    "cursor-default";
 
   // Fit-to-screen: compute zoom that fits the canvas inside the viewport.
   const fitToScreen = useCallback(() => {
@@ -860,6 +919,7 @@ export default function MapMaker() {
             <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
             <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
+            <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
             <Separator className="my-1 w-8" />
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => fileInputRef.current?.click()} title="Upload background image">
               <Upload className="h-4 w-4" />
@@ -879,15 +939,17 @@ export default function MapMaker() {
           <ScrollArea className="flex-1">
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Tool</div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-2 gap-1">
                 <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select" />
                 <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw" />
                 <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot" />
+                <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan" />
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 {tool === "draw"  && "Drag on the canvas to place a plot."}
                 {tool === "spot"  && "Click on the canvas to drop a burial spot."}
                 {tool === "select"&& "Click an item to edit. Drag to move."}
+                {tool === "pan"   && "Drag the canvas to pan around the map."}
               </p>
             </div>
 
@@ -1119,10 +1181,16 @@ export default function MapMaker() {
                   {doc.plots.map((p) => {
                     const meta = getPlotType(p.typeId);
                     const isSel = selection?.kind === "plot" && selection.id === p.id;
+                    const isHov = hoveredPlotId === p.id;
+                    // Show this plot's label when the global toggle is on,
+                    // OR the user is hovering it, OR it's currently selected.
+                    const showThisLabel = (showLabels || isHov || isSel) && p.w > 24 && p.h > 14;
                     // Polygon plots (typically AI-imported, non-rectangular)
                     // render their true outline. Plain plots render as the
                     // classic axis-aligned rectangle.
                     const hasPolygon = p.points && p.points.length >= 3;
+                    const onPlotEnter = () => setHoveredPlotId(p.id);
+                    const onPlotLeave = () => setHoveredPlotId((cur) => (cur === p.id ? null : cur));
                     return (
                       <g key={p.id}>
                         {hasPolygon ? (
@@ -1136,6 +1204,8 @@ export default function MapMaker() {
                             stroke={isSel ? "#0ea5e9" : meta.stroke}
                             strokeWidth={isSel ? 2.5 : 1}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
                           />
                         ) : (
                           <rect
@@ -1150,12 +1220,14 @@ export default function MapMaker() {
                             strokeWidth={isSel ? 2.5 : 1}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
                             rx={2}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
                           />
                         )}
                         {p.w > 12 && p.h > 12 && (
                           <circle cx={p.x + p.w - 6} cy={p.y + 6} r={3} fill={STATUS_COLORS[p.status]} pointerEvents="none" />
                         )}
-                        {showLabels && p.w > 24 && p.h > 14 && (
+                        {showThisLabel && (
                           <text
                             x={p.x + p.w / 2}
                             y={p.y + p.h / 2 + 3}
@@ -1163,6 +1235,9 @@ export default function MapMaker() {
                             fontSize={Math.min(11, p.h * 0.45)}
                             fontWeight={600}
                             fill={isLightFill(meta.fill) ? "#1f2937" : "#ffffff"}
+                            stroke="#ffffff"
+                            strokeWidth={isHov && !showLabels ? 3 : 0}
+                            paintOrder="stroke"
                             pointerEvents="none"
                           >
                             {p.label || meta.code}
@@ -1245,7 +1320,7 @@ export default function MapMaker() {
 
           <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border border-border rounded px-2 py-1 pointer-events-none">
             <Hand className="h-3 w-3" />
-            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
+            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">H</kbd> Pan · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
           </div>
 
           {saveError && (

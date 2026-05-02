@@ -303,9 +303,21 @@ async function runGridDetection(args: {
 
   // Too few plots → this probably wasn't a grid plan. Fall through to the
   // colour-section pipeline instead of returning an empty result.
-  if (grid.plots.length < MIN_GRID_PLOTS_TO_TRUST) {
+  //
+  // We test the PRE-outer-only-collapse count (final + dropped-as-inner).
+  // A perfectly valid grid plan can legitimately collapse down to a handful
+  // of large section containers after the outer-only filter — what proves
+  // it was a real grid is that the BFS+filter stage found enough
+  // box-shaped components in the first place.
+  const filteredBeforeCollapse =
+    grid.plots.length + grid.diagnostics.droppedAsInnerCount;
+  if (filteredBeforeCollapse < MIN_GRID_PLOTS_TO_TRUST) {
     req.log.info(
-      { gridPlots: grid.plots.length, rawCandidates: grid.diagnostics.rawCandidateCount },
+      {
+        gridPlots: grid.plots.length,
+        droppedAsInner: grid.diagnostics.droppedAsInnerCount,
+        rawCandidates: grid.diagnostics.rawCandidateCount,
+      },
       "grid detection too weak; falling back to colour-section pipeline",
     );
     return false;
@@ -344,6 +356,7 @@ async function runGridDetection(args: {
       plots: plots.length,
       matched,
       raw: grid.diagnostics.rawCandidateCount,
+      droppedAsInner: grid.diagnostics.droppedAsInnerCount,
       detection: `${grid.diagnostics.detectionWidth}x${grid.diagnostics.detectionHeight}`,
     },
     "ai-map detection complete",

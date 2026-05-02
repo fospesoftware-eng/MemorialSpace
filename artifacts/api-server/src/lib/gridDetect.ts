@@ -119,6 +119,8 @@ export interface GridDetection {
     rawCandidateCount: number;
     filteredPlotCount: number;
     matchedLabelCount: number;
+    /** Plots dropped because they sit inside a larger plot (outer-only filter). */
+    droppedAsInnerCount: number;
   };
 }
 
@@ -272,6 +274,43 @@ export async function detectGridPlots(
     });
   }
 
+  // 4b. Outer-boxes-only filter. Some plans group small grave cells inside
+  //     a larger section/block rectangle — the operator only wants the
+  //     OUTER container, not every individual cell. Drop any plot whose
+  //     bbox is contained inside a strictly larger plot's bbox.
+  //
+  //     Implementation: sort by area desc and walk top-down. For each
+  //     candidate we test whether any *already-kept* plot encloses it
+  //     (with a small tolerance to absorb 1-2px border noise from BFS).
+  //     Quadratic in the worst case but n is typically <500 so this
+  //     runs in well under a millisecond.
+  const CONTAINMENT_TOL = 3 / Math.max(w, h); // ~3px in normalised coords
+  plots.sort((a, b) => b.w * b.h - a.w * a.h);
+  const outerOnly: GridPlot[] = [];
+  for (const p of plots) {
+    const px2 = p.x + p.w;
+    const py2 = p.y + p.h;
+    let containedBy = -1;
+    for (let i = 0; i < outerOnly.length; i++) {
+      const q = outerOnly[i];
+      const qx2 = q.x + q.w;
+      const qy2 = q.y + q.h;
+      if (
+        p.x >= q.x - CONTAINMENT_TOL &&
+        p.y >= q.y - CONTAINMENT_TOL &&
+        px2 <= qx2 + CONTAINMENT_TOL &&
+        py2 <= qy2 + CONTAINMENT_TOL &&
+        // strictly smaller (don't drop near-duplicates of the same box)
+        p.w * p.h < q.w * q.h * 0.95
+      ) { containedBy = i; break; }
+    }
+    if (containedBy === -1) outerOnly.push(p);
+  }
+  const droppedAsInner = plots.length - outerOnly.length;
+  // Replace the working set with outers only for the rest of the pipeline.
+  plots.length = 0;
+  for (const p of outerOnly) plots.push(p);
+
   // 5. Match PDF text words → plots by spatial containment.
   //    For each plot we collect words whose centres fall inside its bbox,
   //    sort top-to-bottom (then left-to-right), and join with " " (newlines
@@ -377,6 +416,7 @@ export async function detectGridPlots(
       rawCandidateCount,
       filteredPlotCount: plots.length,
       matchedLabelCount,
+      droppedAsInnerCount: droppedAsInner,
     },
   };
 }
