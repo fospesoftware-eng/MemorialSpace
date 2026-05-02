@@ -56,3 +56,16 @@ Three themed sign-in pages share `SignInForm` (theme: green/rose/gold), each red
 Premium dark green (deep forest greens + near-black). Gold accent `#d4a843` is reserved for the admin surface (Super Admin branding) and select marketing accents.
 
 Both light and dark color palettes are defined in `index.css` (`:root` and `.dark`). The `ThemeProvider` in `App.tsx` toggles a class on `<html>` and persists choice to `localStorage` (`memorial-space-theme`). A compact `<ThemeToggle variant="sidebar" />` component (Sun / Monitor / Moon) is mounted in all three dashboard sidebars (`b2b-layout`, `customer-layout`, `admin-layout`) above Sign Out. The sidebar itself uses dedicated `--sidebar-*` tokens that stay dark in both themes — only the main content area / cards / charts / inputs swap palettes.
+
+### Plot Map Maker (`/app/map-maker`)
+
+A standalone editor for cemetery operators. Single file: `pages/b2b/map-maker.tsx` (~600 lines, no external SVG libs). Lets operators:
+- Upload a base map image (FileReader → data URL) or load a bundled sample at `public/sample-cemetery-map.webp`
+- Draw plots by selecting a plot type (RC / CON / FC / MU / PATH / BUILDING) and dragging on an SVG canvas
+- Select / move / resize plots; edit label, type, status, x/y/w/h in a right-side properties panel
+- Toggle 2D / 3D view — 3D applies `transform: rotateX(<tilt>deg)` with a tilt slider; pointer interaction is disabled in 3D (view-only)
+- Save/load multiple named maps to localStorage under key prefix `memorialspace.map-maker:<slug>`
+- Export current map as JSON
+- Hotkeys: `V` select, `R` draw, `Delete`/`Backspace` delete selected, `Esc` deselect
+
+Pointer math uses `svg.getScreenCTM().inverse()` so coordinates are in image-space regardless of zoom. Drag state lives in a `useRef` to avoid re-render storms. Resize is via a corner handle on the selected plot. Linked from `b2b-layout` nav (Cemetery Operations → Map Maker).
