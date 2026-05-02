@@ -228,8 +228,20 @@ export default function MapMaker() {
       const raw = localStorage.getItem("memorialspace.map-maker:__pending__");
       if (!raw) return;
       const parsed = JSON.parse(raw) as { doc?: unknown };
-      if (parsed?.doc) {
-        setDoc(migrateDoc(parsed.doc));
+      const migrated = parsed?.doc ? migrateDoc(parsed.doc) : null;
+      if (migrated) {
+        // Defensive bounds: a poisoned payload could otherwise blow up the SVG
+        // viewBox with an enormous or negative dimension. Clamp into a sane range.
+        const safeW = Math.max(100, Math.min(20000, migrated.imgWidth));
+        const safeH = Math.max(100, Math.min(20000, migrated.imgHeight));
+        const safeDoc: MapDoc = {
+          ...migrated,
+          imgWidth: safeW,
+          imgHeight: safeH,
+          plots: migrated.plots.slice(0, 500),
+          spots: migrated.spots.slice(0, 500),
+        };
+        setDoc(safeDoc);
         setSelection(null);
         flashStatus("Loaded AI-generated map — refine and save when ready");
       }

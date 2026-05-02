@@ -4,6 +4,44 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router: IRouter = Router();
 
+// ---- Simple in-memory per-IP rate limit ----
+// /api/ai/detect-map triggers paid Anthropic vision calls, so we cap how often
+// any single IP can hit it. This is best-effort (per-process, resets on restart),
+// not a substitute for an auth + per-org quota system, but it stops trivial abuse.
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_MAX = 12;                  // 12 calls per IP per window
+const rateLimitBuckets = new Map<string, number[]>();
+function checkRateLimit(ip: string): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  const arr = (rateLimitBuckets.get(ip) ?? []).filter((t) => t > cutoff);
+  if (arr.length >= RATE_LIMIT_MAX) {
+    const retryAfterSec = Math.max(1, Math.ceil((arr[0] + RATE_LIMIT_WINDOW_MS - now) / 1000));
+    rateLimitBuckets.set(ip, arr);
+    return { ok: false, retryAfterSec };
+  }
+  arr.push(now);
+  rateLimitBuckets.set(ip, arr);
+  return { ok: true };
+}
+// Periodic cleanup so the Map doesn't grow unboundedly across distinct IPs.
+setInterval(() => {
+  const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
+  for (const [ip, arr] of rateLimitBuckets) {
+    const filtered = arr.filter((t) => t > cutoff);
+    if (filtered.length === 0) rateLimitBuckets.delete(ip);
+    else rateLimitBuckets.set(ip, filtered);
+  }
+}, RATE_LIMIT_WINDOW_MS).unref();
+
+const MAX_PLOTS = 60;
+const MAX_SPOTS = 30;
+
+const clamp01 = (n: unknown): number => {
+  const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
+  return Math.max(0, Math.min(1, v));
+};
+
 const PlotTypeSchema = z.object({
   id: z.string(),
   code: z.string(),
@@ -47,6 +85,17 @@ const DetectionResult = z.object({
 });
 
 router.post("/ai/detect-map", async (req, res) => {
+  const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown").toString();
+  const limit = checkRateLimit(ip);
+  if (!limit.ok) {
+    res.setHeader("Retry-After", String(limit.retryAfterSec));
+    res.status(429).json({
+      error: "rate_limited",
+      detail: `Too many AI map detections from this client. Try again in ~${limit.retryAfterSec}s.`,
+    });
+    return;
+  }
+
   const parsed = DetectMapBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_request", detail: parsed.error.flatten() });
@@ -134,8 +183,13 @@ Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 
       ],
     });
 
-    const block = message.content[0];
-    const text = block && block.type === "text" ? block.text.trim() : "";
+    // Concatenate every text block in the response — Claude can interleave
+    // tool/thinking blocks, so we shouldn't assume content[0] is text.
+    const text = message.content
+      .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
     if (!text) {
       res.status(502).json({ error: "empty_response", detail: "AI returned no text content." });
       return;
@@ -171,26 +225,48 @@ Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 
     const fallbackSpotId = spotTypes[0]?.id ?? "_unknown";
 
     const r = (raw ?? {}) as { plots?: unknown[]; spots?: unknown[]; notes?: unknown };
+
+    // Pre-clamp coordinates into [0,1] before Zod parse. The model occasionally
+    // emits 1.02 or -0.001 due to rounding; we'd rather snap-fit a near-valid
+    // detection than drop it for being a percent point outside the unit square.
+    const rawPlots = Array.isArray(r.plots) ? r.plots.slice(0, MAX_PLOTS) : [];
+    const rawSpots = Array.isArray(r.spots) ? r.spots.slice(0, MAX_SPOTS) : [];
+
     const sanitised = {
-      plots: Array.isArray(r.plots)
-        ? r.plots
-            .map((p) => DetectedPlot.safeParse(p))
-            .filter((p): p is { success: true; data: z.infer<typeof DetectedPlot> } => p.success)
-            .map((p) => ({
-              ...p.data,
-              typeId: validPlotIds.has(p.data.typeId) ? p.data.typeId : fallbackPlotId,
-            }))
-        : [],
-      spots: Array.isArray(r.spots)
-        ? r.spots
-            .map((s) => DetectedSpot.safeParse(s))
-            .filter((s): s is { success: true; data: z.infer<typeof DetectedSpot> } => s.success)
-            .map((s) => ({
-              ...s.data,
-              spotTypeId: validSpotIds.has(s.data.spotTypeId) ? s.data.spotTypeId : fallbackSpotId,
-            }))
-        : [],
-      notes: typeof r.notes === "string" ? r.notes : undefined,
+      plots: rawPlots
+        .map((p) => {
+          const o = (p ?? {}) as Record<string, unknown>;
+          const x = clamp01(o.x), y = clamp01(o.y);
+          // Width/height also clamped, then trimmed so the box stays inside the unit square.
+          const w = Math.max(0, Math.min(1 - x, clamp01(o.w)));
+          const h = Math.max(0, Math.min(1 - y, clamp01(o.h)));
+          return DetectedPlot.safeParse({
+            label: typeof o.label === "string" ? o.label : "",
+            typeId: typeof o.typeId === "string" ? o.typeId : "",
+            status: typeof o.status === "string" ? o.status : "available",
+            x, y, w, h,
+          });
+        })
+        .filter((p): p is { success: true; data: z.infer<typeof DetectedPlot> } => p.success)
+        .map((p) => ({
+          ...p.data,
+          typeId: validPlotIds.has(p.data.typeId) ? p.data.typeId : fallbackPlotId,
+        })),
+      spots: rawSpots
+        .map((s) => {
+          const o = (s ?? {}) as Record<string, unknown>;
+          return DetectedSpot.safeParse({
+            label: typeof o.label === "string" ? o.label : "",
+            spotTypeId: typeof o.spotTypeId === "string" ? o.spotTypeId : "",
+            x: clamp01(o.x), y: clamp01(o.y),
+          });
+        })
+        .filter((s): s is { success: true; data: z.infer<typeof DetectedSpot> } => s.success)
+        .map((s) => ({
+          ...s.data,
+          spotTypeId: validSpotIds.has(s.data.spotTypeId) ? s.data.spotTypeId : fallbackSpotId,
+        })),
+      notes: typeof r.notes === "string" ? r.notes.slice(0, 500) : undefined,
     };
 
     const result = DetectionResult.parse(sanitised);
