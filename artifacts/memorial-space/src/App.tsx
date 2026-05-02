@@ -28,6 +28,7 @@ import MapPage from "@/pages/b2b/map";
 import MapMaker from "@/pages/b2b/map-maker";
 import AiMapMaker from "@/pages/b2b/ai-map-maker";
 import Columbarium from "@/pages/b2b/columbarium";
+import Mausoleum from "@/pages/b2b/mausoleum";
 import Burials from "@/pages/b2b/burials";
 import Bookings from "@/pages/b2b/bookings";
 import WorkOrders from "@/pages/b2b/work-orders";
@@ -85,6 +86,8 @@ function B2BRoutes() {
         <Route path="/ai-map-maker" component={AiMapMaker} />
         <Route path="/columbarium" component={Columbarium} />
         <Route path="/columbarium/:id" component={Columbarium} />
+        <Route path="/mausoleum" component={Mausoleum} />
+        <Route path="/mausoleum/:id" component={Mausoleum} />
         <Route path="/plots" component={Plots} />
         <Route path="/burials" component={Burials} />
         <Route path="/bookings" component={Bookings} />
