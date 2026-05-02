@@ -57,15 +57,34 @@ Premium dark green (deep forest greens + near-black). Gold accent `#d4a843` is r
 
 Both light and dark color palettes are defined in `index.css` (`:root` and `.dark`). The `ThemeProvider` in `App.tsx` toggles a class on `<html>` and persists choice to `localStorage` (`memorial-space-theme`). A compact `<ThemeToggle variant="sidebar" />` component (Sun / Monitor / Moon) is mounted in all three dashboard sidebars (`b2b-layout`, `customer-layout`, `admin-layout`) above Sign Out. The sidebar itself uses dedicated `--sidebar-*` tokens that stay dark in both themes — only the main content area / cards / charts / inputs swap palettes.
 
+### Cemetery Configuration (`/app/cemetery-setup`)
+
+Settings page where operators CRUD the data that powers the Map Maker. Three sections:
+- **Plot Types** — sections of the cemetery (RC, CON, FC, MU, PATH, BLD by default). Each has code, name, description, fill color, stroke color.
+- **Burial Spot Types** — categories for individual burials (Civilian, Veteran — Army/Navy/Marines/Air Force, Child, Clergy, First Responder by default). Each has name, color, lucide icon (cross/star/flower/anchor/cog/circle/heart/award).
+- **Map Background Library** — reusable map images (capped at 6, downscaled to 1600px webp). Auto-populated when the operator uploads a background in Map Maker.
+
+All three lists are stored in localStorage keys `memorialspace.{plot-types,spot-types,bg-library}` via a shared `useStored<T>` hook in `lib/cemetery-config.ts`. The hook syncs across components via a `CustomEvent('stored:<key>')` broadcast and across tabs via the native `storage` event. **Important**: the hook returns `[value, setStored, error]` — `setStored` returns `prev` on persistence failure (e.g. `QuotaExceededError`) so the UI never claims a save succeeded that didn't.
+
 ### Plot Map Maker (`/app/map-maker`)
 
-A standalone editor for cemetery operators. Single file: `pages/b2b/map-maker.tsx` (~600 lines, no external SVG libs). Lets operators:
-- Upload a base map image (FileReader → data URL) or load a bundled sample at `public/sample-cemetery-map.webp`
-- Draw plots by selecting a plot type (RC / CON / FC / MU / PATH / BUILDING) and dragging on an SVG canvas
-- Select / move / resize plots; edit label, type, status, x/y/w/h in a right-side properties panel
-- Toggle 2D / 3D view — 3D applies `transform: rotateX(<tilt>deg)` with a tilt slider; pointer interaction is disabled in 3D (view-only)
-- Save/load multiple named maps to localStorage under key prefix `memorialspace.map-maker:<slug>`
-- Export current map as JSON
-- Hotkeys: `V` select, `R` draw, `Delete`/`Backspace` delete selected, `Esc` deselect
+A full editor for cemetery operators. Single file: `pages/b2b/map-maker.tsx`. Reads plot/spot types and the background library from the shared registry above. Three tools:
+- **Select** (V) — click to select, drag to move, corner handle to resize.
+- **Plot** (R) — pick a plot type, drag on canvas to place a rectangular plot.
+- **Spot** (S) — pick a burial spot type, click to drop a pin with a lucide icon. Each spot has a full dossier panel: name, DOB, DOD (auto age calc), spot type, headstone image upload (downscaled to 400px), GPS lat/lon, map x/y readout, notes.
 
-Pointer math uses `svg.getScreenCTM().inverse()` so coordinates are in image-space regardless of zoom. Drag state lives in a `useRef` to avoid re-render storms. Resize is via a corner handle on the selected plot. Linked from `b2b-layout` nav (Cemetery Operations → Map Maker).
+Other features:
+- Background image: upload (downscaled to 1600px webp + auto-added to library) or load bundled sample at `public/sample-cemetery-map.webp`. A "Recent Backgrounds" thumbnail grid in the left sidebar lets operators reapply any saved background.
+- 2D / 3D view toggle — 3D applies `transform: rotateX(<tilt>deg)` with a tilt slider; pointer interaction disabled in 3D.
+- Zoom 25%–300%.
+- Save/load multiple named maps to localStorage under key prefix `memorialspace.map-maker:<slug>`. Export current map as JSON.
+- Hotkeys: V/R/S, Delete/Backspace, Esc.
+
+Implementation notes:
+- Pointer math uses `svg.getScreenCTM().inverse()` so coordinates are in image-space regardless of zoom.
+- Drag state lives in a `useRef`; the cleanup `useEffect` depends on `[view]` only (NOT `tool`) so a tool switch in the same event as a pointerdown can't nuke the drag. The `switchToSelectOnUp` flag defers the auto-switch-to-Select after a Spot drop until pointerup.
+- Lucide icons are rendered as nested `<svg>` children of the canvas SVG via `x/y/width/height` props.
+- `migrateDoc()` defensively normalizes legacy saved maps (old `type` → new `typeId`, invalid `status` → `available`, non-numeric coords → 0/undefined).
+- Background library writes are non-blocking; `backgroundsErr` from `useBackgrounds()` surfaces a toast if persistence fails.
+
+Linked from `b2b-layout` nav: Cemetery Operations → Map Maker; Settings → Cemetery Setup.

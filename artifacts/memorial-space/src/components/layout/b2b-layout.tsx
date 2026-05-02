@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Menu, LogOut, Layers } from "lucide-react";
+import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Menu, LogOut, Layers, Sliders } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,6 +38,7 @@ const navigation = [
     items: [
       { name: "Organizations", href: "/organizations", icon: Building },
       { name: "Users", href: "/users", icon: Users },
+      { name: "Cemetery Setup", href: "/cemetery-setup", icon: Sliders },
       { name: "General Settings", href: "/settings", icon: Settings },
     ],
   },

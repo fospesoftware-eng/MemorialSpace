@@ -36,6 +36,7 @@ import Marketplace from "@/pages/b2b/marketplace";
 import Organizations from "@/pages/settings/organizations";
 import Users from "@/pages/settings/users";
 import Settings from "@/pages/settings/general";
+import CemeteryTypes from "@/pages/settings/cemetery-types";
 
 // B2C public marketing
 import GraveSearch from "@/pages/public/grave-search";
@@ -80,6 +81,7 @@ function B2BRoutes() {
         <Route path="/organizations" component={Organizations} />
         <Route path="/users" component={Users} />
         <Route path="/settings" component={Settings} />
+        <Route path="/cemetery-setup" component={CemeteryTypes} />
         <Route component={NotFound} />
       </Switch>
     </B2BLayout>
