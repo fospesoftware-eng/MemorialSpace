@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { detectMap, type CvDetection } from "../lib/cvDetect";
 
 const router: IRouter = Router();
 
@@ -34,8 +35,19 @@ setInterval(() => {
   }
 }, RATE_LIMIT_WINDOW_MS).unref();
 
-const MAX_PLOTS = 60;
+/**
+ * The new CV pipeline can produce hundreds of individual grave cells per
+ * detected section, which is exactly what operators want — every grave as
+ * its own clickable plot. Cap generously.
+ */
+const MAX_PLOTS = 2000;
 const MAX_SPOTS = 30;
+/**
+ * Minimum number of valid polygon vertices we keep when emitting a section
+ * outline. The pipeline already simplifies via Douglas-Peucker, this is just
+ * a sanity floor.
+ */
+const MIN_SECTION_POLYGON_VERTICES = 3;
 
 const clamp01 = (n: unknown): number => {
   const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
@@ -72,10 +84,10 @@ const DetectedPlot = z.object({
   w: z.number().min(0).max(1),
   h: z.number().min(0).max(1),
   // Optional polygon outline of the region. When present we render a polygon
-  // in the editor instead of a plain bounding box, so non-rectangular plots
+  // in the editor instead of a plain bounding box, so non-rectangular sections
   // (curved sections, angled blocks, irregular plots) keep their shape.
-  // 3-32 normalised vertices.
-  points: z.array(Point01).min(3).max(32).optional(),
+  // Up to 40 normalised vertices in perimeter order.
+  points: z.array(Point01).min(3).max(40).optional(),
 });
 
 const DetectedSpot = z.object({
@@ -90,6 +102,138 @@ const DetectionResult = z.object({
   spots: z.array(DetectedSpot).default([]),
   notes: z.string().optional(),
 });
+
+// -------- Claude classification step --------
+//
+// The CV pipeline knows the SHAPE of every section (and every grave inside it)
+// but not what each section colour MEANS. Claude is great at this small task:
+// it sees the original map, the legend, and the detected colours, and assigns
+// each detected colour to one of the operator's configured plot types.
+//
+// We send only:
+//   - the image (so Claude can read the legend / labels),
+//   - the list of detected colours, and
+//   - the operator's plot type ids.
+// We do NOT ask Claude for any geometry — that's what makes this approach
+// reliable instead of fragile.
+
+interface ColorClassification {
+  /** colorIndex (into the detection's palette) → plot typeId. */
+  colorTypeMap: Record<number, string>;
+  notes: string;
+}
+
+async function classifyPaletteColors(args: {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  palette: CvDetection["palette"];
+  plotTypes: { id: string; code: string; name: string }[];
+  imgWidth: number;
+  imgHeight: number;
+}): Promise<ColorClassification> {
+  const { base64, mediaType, palette, plotTypes, imgWidth, imgHeight } = args;
+
+  const colorList = palette
+    .map((c, i) => `  ${i}: rgb(${c.r}, ${c.g}, ${c.b}) — covers ${(c.coverage * 100).toFixed(1)}% of the map`)
+    .join("\n");
+  const plotTypeList = plotTypes
+    .map((t) => `  - id="${t.id}", code="${t.code}", name="${t.name}"`)
+    .join("\n");
+
+  const systemPrompt = `You are classifying detected colour regions on a cemetery map.
+
+A computer-vision pipeline has already extracted the distinct fill colours used on this map and what fraction of the map each one covers. Your job is to look at the map (especially its legend, if any, and any visible labels like "RC", "CON", "FC", "MU", "Lawn", "Path") and decide which of the operator's configured plot types each colour represents.
+
+Detected palette colours (index → RGB → coverage):
+${colorList}
+
+Available plot type ids (use ONLY these ids, exactly):
+${plotTypeList}
+
+Rules:
+- Map each detected colour index to exactly ONE plot type id, by matching legend swatches and on-map labels to colour. If a colour clearly does NOT correspond to a real burial section (e.g. an arrow / road accent / building accent), pick the closest applicable type or the type that best represents "other / non-burial".
+- Use ONLY the plot type ids listed above — do not invent ids.
+- Coverage % is just a hint about which colours are dominant.
+
+Reply with ONLY a single JSON object (no prose, no markdown), shape:
+
+{
+  "colorTypeMap": { "0": "<plot-type-id>", "1": "<plot-type-id>", ... },
+  "notes": "1-2 sentence summary of what you saw."
+}
+
+Image dimensions: ${imgWidth} x ${imgHeight} pixels.`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: "Classify the detected colours and return the JSON object exactly as specified." },
+        ],
+      },
+    ],
+  });
+
+  const text = message.content
+    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  const jsonText = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(jsonText);
+  } catch {
+    const firstBrace = jsonText.indexOf("{");
+    const lastBrace = jsonText.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      raw = JSON.parse(jsonText.slice(firstBrace, lastBrace + 1));
+    } else {
+      throw new Error("Claude classification returned non-JSON content.");
+    }
+  }
+
+  const r = (raw ?? {}) as { colorTypeMap?: Record<string, unknown>; notes?: unknown };
+  const validIds = new Set(plotTypes.map((t) => t.id));
+  const colorTypeMap: Record<number, string> = {};
+  if (r.colorTypeMap && typeof r.colorTypeMap === "object") {
+    for (const [k, v] of Object.entries(r.colorTypeMap)) {
+      const idx = Number(k);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= palette.length) continue;
+      if (typeof v !== "string" || !validIds.has(v)) continue;
+      colorTypeMap[idx] = v;
+    }
+  }
+  return {
+    colorTypeMap,
+    notes: typeof r.notes === "string" ? r.notes.slice(0, 500) : "",
+  };
+}
+
+/** Find the palette colour index that best matches a detected section's averaged colour. */
+function nearestPaletteIndex(
+  sectionColor: { r: number; g: number; b: number },
+  palette: CvDetection["palette"],
+): number {
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < palette.length; i++) {
+    const c = palette[i];
+    const dr = c.r - sectionColor.r, dg = c.g - sectionColor.g, db = c.b - sectionColor.b;
+    const d = dr * dr + dg * dg + db * db;
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  return bestIdx;
+}
 
 router.post("/ai/detect-map", async (req, res) => {
   const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown").toString();
@@ -108,7 +252,7 @@ router.post("/ai/detect-map", async (req, res) => {
     res.status(400).json({ error: "invalid_request", detail: parsed.error.flatten() });
     return;
   }
-  const { image, imgWidth, imgHeight, plotTypes, spotTypes = [] } = parsed.data;
+  const { image, imgWidth, imgHeight, plotTypes, spotTypes: _spotTypes = [] } = parsed.data;
 
   const match = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!match) {
@@ -123,208 +267,128 @@ router.post("/ai/detect-map", async (req, res) => {
     return;
   }
 
-  const plotTypeList = plotTypes
-    .map((t) => `  - id="${t.id}", code="${t.code}", name="${t.name}"`)
-    .join("\n");
-  const spotTypeList = spotTypes.length
-    ? spotTypes.map((t) => `  - id="${t.id}", name="${t.name}"`).join("\n")
-    : "  (none — return spots:[])";
+  const imageBuffer = Buffer.from(base64, "base64");
+  const fallbackPlotId = plotTypes[0]?.id ?? "_unknown";
 
-  const systemPrompt = `You are a cemetery cartography assistant. You analyse scanned or photographed cemetery maps and convert them into a structured digital representation that PRESERVES the actual shape of every region, not just rough rectangles.
-
-Your job: identify every clearly-distinguishable burial section, plot block, lawn, path/road, garden and building shown in the image. For EACH region return BOTH:
-  (a) "points": a polygon outline that traces the region's true outline as drawn on the map (4-12 vertices typically, up to 32 if needed for curves), AND
-  (b) "x","y","w","h": the axis-aligned bounding box of those points.
-
-Coordinate system: ALL numbers are NORMALISED 0..1 — x = pixel_x / imgWidth, y = pixel_y / imgHeight. (0,0) is the top-left, (1,1) is the bottom-right. Every coordinate must lie inside [0,1].
-
-CRITICAL — match the actual shape, not a rough rectangle:
-- If a section is rectangular and axis-aligned, polygon = its 4 corners (still include points).
-- If it is rotated/angled (very common on real cemetery plans), polygon = its 4 rotated corners — DO NOT snap it back to axis-aligned, the bounding box will be larger than the section.
-- If it is curved (e.g. along a road, around a chapel, or a "lawn" / "garden of remembrance"), use 6-12 points to approximate the curve.
-- If it is L-shaped, T-shaped or otherwise non-convex, return the full outline (5-12 points) — DO NOT split into multiple boxes and DO NOT collapse into a single rectangle.
-- Vertices must be in order around the perimeter (either clockwise or counter-clockwise), no self-intersections.
-- Make polygons TIGHT to the printed boundary; do not pad with whitespace. Different sections must not overlap each other.
-
-Classification:
-- Match each region to ONE of the available plot type ids below by reading visible labels, shading, color and legend hints. Paths/roads → the path/road id; buildings/chapels → the building id; lawns/gardens → the lawn or garden id if available, otherwise the closest match.
-- Status: most regions on a printed plan are "available" unless visually marked as occupied (shaded with names) or reserved.
-- Label: copy any visible section name/letter/number ("A", "Sec 12", "RC-3"). If none, leave as "".
-
-Available plot type ids (use ONLY these ids, exactly):
-${plotTypeList}
-
-Available burial spot type ids (use ONLY these ids):
-${spotTypeList}
-
-Burial spots: only return individual burial markers if the map clearly shows pin-style icons or distinct named graves. For overview/plan maps without per-grave detail, return spots:[].
-
-Reply with ONLY a single JSON object, no prose, no markdown, matching this TypeScript type:
-
-{
-  "plots": Array<{
-    "label": string,
-    "typeId": string,        // must be one of the plot type ids above
-    "status": "available" | "reserved" | "occupied",
-    "points": [[number, number], ...],  // 3-32 vertices, each [x,y] in 0..1, in perimeter order
-    "x": number, "y": number, "w": number, "h": number   // bounding box of "points", all in 0..1
-  }>,
-  "spots": Array<{
-    "label": string,
-    "spotTypeId": string,    // must be one of the spot type ids above
-    "x": number, "y": number   // 0..1
-  }>,
-  "notes": string            // 1-2 sentence summary of what you saw
-}
-
-Image dimensions for context: ${imgWidth} x ${imgHeight} pixels. Return at most 60 plots and 30 spots — focus on the largest / most clearly defined regions and prefer fewer, accurate polygons over many sloppy ones.`;
-
+  // ---- Step 1: server-side computer-vision detection ----
+  let detection: CvDetection;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 },
-            },
-            {
-              type: "text",
-              text: "Analyse this cemetery map and return the JSON object exactly as specified. Do not include any text outside the JSON.",
-            },
-          ],
-        },
-      ],
+    detection = await detectMap(imageBuffer);
+  } catch (err) {
+    req.log.error({ err: err instanceof Error ? err.message : String(err) }, "cv detection failed");
+    res.status(500).json({
+      error: "cv_failed",
+      detail: "Could not analyse the map image. Try a clearer image (PNG or high-quality JPG/WebP).",
     });
+    return;
+  }
 
-    // Concatenate every text block in the response — Claude can interleave
-    // tool/thinking blocks, so we shouldn't assume content[0] is text.
-    const text = message.content
-      .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-    if (!text) {
-      res.status(502).json({ error: "empty_response", detail: "AI returned no text content." });
-      return;
-    }
+  if (detection.sections.length === 0 || detection.palette.length === 0) {
+    // CV found nothing recognisable. Tell the client clearly so they can
+    // fall back to manual editing instead of pretending we found something.
+    req.log.warn({ palette: detection.palette.length }, "cv detection returned no sections");
+    res.json({
+      plots: [],
+      spots: [],
+      notes:
+        "We couldn't auto-detect any coloured sections on this map. " +
+        "Try a sharper image where each section type has a distinct flat fill colour, " +
+        "or draw plots manually in the editor.",
+    });
+    return;
+  }
 
-    // Strip ```json ... ``` fences if present
-    const jsonText = text
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
+  // ---- Step 2: ask Claude what each detected colour represents ----
+  let classification: ColorClassification;
+  try {
+    classification = await classifyPaletteColors({
+      base64, mediaType,
+      palette: detection.palette,
+      plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
+      imgWidth, imgHeight,
+    });
+  } catch (err) {
+    req.log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "claude classification failed; defaulting all sections to first plot type",
+    );
+    classification = { colorTypeMap: {}, notes: "" };
+  }
 
-    let raw: unknown;
-    try {
-      raw = JSON.parse(jsonText);
-    } catch {
-      const firstBrace = jsonText.indexOf("{");
-      const lastBrace = jsonText.lastIndexOf("}");
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        try { raw = JSON.parse(jsonText.slice(firstBrace, lastBrace + 1)); }
-        catch {
-          res.status(502).json({ error: "invalid_ai_json", detail: "AI did not return valid JSON.", raw: text.slice(0, 500) });
-          return;
+  // ---- Step 3: turn detected sections into plot records ----
+  const plots: z.infer<typeof DetectedPlot>[] = [];
+
+  // Emit BOTH the section outline AND every grave cell inside it. The user
+  // explicitly wants both: sections as a whole AND each individual grave as
+  // its own clickable plot. Sections come FIRST so they render below the
+  // cells in the editor's z-order (section polygon as boundary, cells as
+  // the actual interactive plots stacked on top).
+  let sectionsEmitted = 0;
+  let cellsEmitted = 0;
+
+  for (const section of detection.sections) {
+    if (plots.length >= MAX_PLOTS) break;
+
+    const colorIdx = nearestPaletteIndex(section.color, detection.palette);
+    const typeId = classification.colorTypeMap[colorIdx] ?? fallbackPlotId;
+
+    // (a) Section outline polygon — draws the section boundary.
+    const points = section.points
+      .slice(0, 40)
+      .map(([px, py]) => [clamp01(px), clamp01(py)] as [number, number]);
+    if (points.length >= MIN_SECTION_POLYGON_VERTICES) {
+      const xs = points.map((p) => p[0]);
+      const ys = points.map((p) => p[1]);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const w = Math.max(0, Math.min(1 - x, Math.max(...xs) - x));
+      const h = Math.max(0, Math.min(1 - y, Math.max(...ys) - y));
+      if (w > 0 && h > 0) {
+        const parsed = DetectedPlot.safeParse({
+          label: "", typeId, status: "available", x, y, w, h, points,
+        });
+        if (parsed.success) {
+          plots.push(parsed.data);
+          sectionsEmitted++;
         }
-      } else {
-        res.status(502).json({ error: "invalid_ai_json", detail: "AI did not return valid JSON.", raw: text.slice(0, 500) });
-        return;
       }
     }
 
-    const validPlotIds = new Set(plotTypes.map((t) => t.id));
-    const validSpotIds = new Set(spotTypes.map((t) => t.id));
-    const fallbackPlotId = plotTypes[0]?.id ?? "_unknown";
-    const fallbackSpotId = spotTypes[0]?.id ?? "_unknown";
-
-    const r = (raw ?? {}) as { plots?: unknown[]; spots?: unknown[]; notes?: unknown };
-
-    // Pre-clamp coordinates into [0,1] before Zod parse. The model occasionally
-    // emits 1.02 or -0.001 due to rounding; we'd rather snap-fit a near-valid
-    // detection than drop it for being a percent point outside the unit square.
-    const rawPlots = Array.isArray(r.plots) ? r.plots.slice(0, MAX_PLOTS) : [];
-    const rawSpots = Array.isArray(r.spots) ? r.spots.slice(0, MAX_SPOTS) : [];
-
-    const sanitised = {
-      plots: rawPlots
-        .map((p) => {
-          const o = (p ?? {}) as Record<string, unknown>;
-
-          // Sanitise the polygon outline if present: clamp every vertex to [0,1],
-          // drop degenerate ones, cap to 32 points.
-          let points: [number, number][] | undefined;
-          if (Array.isArray(o.points)) {
-            const cleaned: [number, number][] = [];
-            for (const pt of o.points.slice(0, 32)) {
-              if (Array.isArray(pt) && pt.length >= 2) {
-                cleaned.push([clamp01(pt[0]), clamp01(pt[1])]);
-              }
-            }
-            if (cleaned.length >= 3) points = cleaned;
-          }
-
-          // If we have points, derive the bbox from them — that's far more
-          // reliable than trusting a separately-emitted x/y/w/h that often
-          // disagrees with the polygon. Otherwise fall back to model bbox.
-          let x: number, y: number, w: number, h: number;
-          if (points && points.length >= 3) {
-            const xs = points.map((q) => q[0]);
-            const ys = points.map((q) => q[1]);
-            x = Math.min(...xs);
-            y = Math.min(...ys);
-            w = Math.max(0, Math.min(1 - x, Math.max(...xs) - x));
-            h = Math.max(0, Math.min(1 - y, Math.max(...ys) - y));
-          } else {
-            x = clamp01(o.x);
-            y = clamp01(o.y);
-            w = Math.max(0, Math.min(1 - x, clamp01(o.w)));
-            h = Math.max(0, Math.min(1 - y, clamp01(o.h)));
-          }
-          return DetectedPlot.safeParse({
-            label: typeof o.label === "string" ? o.label : "",
-            typeId: typeof o.typeId === "string" ? o.typeId : "",
-            status: typeof o.status === "string" ? o.status : "available",
-            x, y, w, h, points,
-          });
-        })
-        .filter((p): p is { success: true; data: z.infer<typeof DetectedPlot> } => p.success)
-        .map((p) => ({
-          ...p.data,
-          typeId: validPlotIds.has(p.data.typeId) ? p.data.typeId : fallbackPlotId,
-        })),
-      spots: rawSpots
-        .map((s) => {
-          const o = (s ?? {}) as Record<string, unknown>;
-          return DetectedSpot.safeParse({
-            label: typeof o.label === "string" ? o.label : "",
-            spotTypeId: typeof o.spotTypeId === "string" ? o.spotTypeId : "",
-            x: clamp01(o.x), y: clamp01(o.y),
-          });
-        })
-        .filter((s): s is { success: true; data: z.infer<typeof DetectedSpot> } => s.success)
-        .map((s) => ({
-          ...s.data,
-          spotTypeId: validSpotIds.has(s.data.spotTypeId) ? s.data.spotTypeId : fallbackSpotId,
-        })),
-      notes: typeof r.notes === "string" ? r.notes.slice(0, 500) : undefined,
-    };
-
-    const result = DetectionResult.parse(sanitised);
-    req.log.info({ plots: result.plots.length, spots: result.spots.length }, "ai-map detection complete");
-    res.json(result);
-  } catch (err) {
-    req.log.error({ err: err instanceof Error ? err.message : String(err) }, "ai-map detection failed");
-    const status = err instanceof Error && /rate.?limit/i.test(err.message) ? 429 : 502;
-    res.status(status).json({
-      error: "ai_call_failed",
-      detail: err instanceof Error ? err.message : "Unknown error calling AI service.",
-    });
+    // (b) Individual grave cells inside this section — each is its own plot.
+    for (const cell of section.cells) {
+      if (plots.length >= MAX_PLOTS) break;
+      const x = clamp01(cell.x);
+      const y = clamp01(cell.y);
+      const w = Math.max(0, Math.min(1 - x, clamp01(cell.w)));
+      const h = Math.max(0, Math.min(1 - y, clamp01(cell.h)));
+      if (w <= 0 || h <= 0) continue;
+      const parsed = DetectedPlot.safeParse({
+        label: "", typeId, status: "available", x, y, w, h,
+      });
+      if (parsed.success) {
+        plots.push(parsed.data);
+        cellsEmitted++;
+      }
+    }
   }
+
+  const summaryParts = [
+    `Detected ${sectionsEmitted} section outline${sectionsEmitted === 1 ? "" : "s"}` +
+      ` and ${cellsEmitted} individual grave plot${cellsEmitted === 1 ? "" : "s"}` +
+      ` (${plots.length} total).`,
+    classification.notes ? classification.notes : null,
+  ].filter(Boolean);
+
+  const result = DetectionResult.parse({
+    plots,
+    spots: [],
+    notes: summaryParts.join(". "),
+  });
+  req.log.info(
+    { plots: result.plots.length, sections: detection.sections.length, palette: detection.palette.length },
+    "ai-map detection complete",
+  );
+  res.json(result);
 });
 
 export default router;

@@ -105,16 +105,47 @@ Linked from `b2b-layout` nav: Cemetery Operations → Map Maker; Settings → Ce
 
 ### AI Map Maker (`/app/ai-map-maker`)
 
-Sub-feature under Map Maker that converts existing JPG/PNG/WebP/PDF cemetery maps into a clickable digital map using Claude's vision API. Single file: `pages/b2b/ai-map-maker.tsx`. Renders inside the regular `B2BLayout` (it's a pre-processor, not a fullscreen editor).
+Sub-feature under Map Maker that converts existing JPG/PNG/WebP/PDF cemetery maps into a clickable digital map. Each detected section AND each individual grave inside it becomes its own clickable plot. Single file: `pages/b2b/ai-map-maker.tsx`. Renders inside the regular `B2BLayout` (it's a pre-processor, not a fullscreen editor).
 
 Pipeline:
-1. **Upload** — drag-drop or file picker accepts `image/*` and `application/pdf`. PDFs are rendered via `pdfjs-dist` (worker URL imported with `?url` so Vite emits a hashed asset). Multi-page PDFs get a Prev/Next page picker. The selected page (or image) is downscaled to 1600px webp via `downscaleImage` from `cemetery-config.ts`.
-2. **Analyse with AI** — POSTs `{image: dataUrl, imgWidth, imgHeight, plotTypes, spotTypes}` to `/api/ai/detect-map`. The endpoint sends the image + the operator's current cemetery type list to `claude-sonnet-4-6` and asks for, per plot, **a polygon outline (`points: [[x,y]…]`, 3-32 normalised vertices in perimeter order) PLUS the bounding box** classified against those exact `typeId`s. The prompt is explicit that rotated, curved, L-shaped or otherwise non-rectangular regions must keep their true shape. Results are sanitised with Zod, unknown type ids fall back to the first available, polygon vertices are clamped to `[0,1]`, and the server **derives the bbox from the polygon** when present (more reliable than trusting a separately-emitted bbox). Plots without polygons fall back to the rect bbox.
-3. **Review & open** — detected polygons are overlaid on the preview as filled `<polygon>`s (or `<rect>`s when no polygon was returned) with section labels; spots render as colored dots. Operator names the map and clicks **Open in Map Maker**.
-4. **Hand-off** — the page writes the assembled `MapDoc` to `localStorage["memorialspace.map-maker:<slug>"]` (so it appears in Saved Maps) AND to `localStorage["memorialspace.map-maker:__pending__"]`, then `setLocation("/map-maker")`. The Map Maker has a mount-time `useEffect` that reads `__pending__`, loads it via `migrateDoc()`, flashes a status toast, and removes the pending key so a refresh doesn't re-load it.
+1. **Upload** — drag-drop or file picker accepts `image/*` and `application/pdf`. PDFs are rendered via `pdfjs-dist` (worker URL imported with `?url`). Multi-page PDFs get a Prev/Next page picker. The selected page (or image) is downscaled to 1600px webp via `downscaleImage` from `cemetery-config.ts`.
+2. **Analyse** — POSTs `{image, imgWidth, imgHeight, plotTypes, spotTypes}` to `/api/ai/detect-map`. The server now uses a **two-stage CV + AI pipeline** (see below) instead of relying on AI vision alone for geometry.
+3. **Review & open** — detected polygons render as filled `<polygon>`s on the preview, individual cells as `<rect>`s, classified by section type. Operator names the map and clicks **Open in Map Maker**.
+4. **Hand-off** — writes the assembled `MapDoc` to `localStorage["memorialspace.map-maker:<slug>"]` AND `localStorage["memorialspace.map-maker:__pending__"]`, then `setLocation("/map-maker")`. The Map Maker reads `__pending__` on mount, loads via `migrateDoc()`, and clears the pending key.
 
-API route: `artifacts/api-server/src/routes/aiMap.ts` (mounted under `/api`). Body limit was bumped to 12 MB in `app.ts` to accommodate base64 images. Validation is strict (Zod) on both the inbound request and the AI's outbound JSON; ` ```json ` fences are stripped if Claude wraps the response.
+#### Detection pipeline (`artifacts/api-server/src/lib/cvDetect.ts` + `routes/aiMap.ts`)
 
-AI integration: `lib/integrations-anthropic-ai/` is a minimal lib that just re-exports a configured `anthropic` client (no DB tables, no batch utils — this is a one-shot vision call). Provisioned via `setupReplitAIIntegrations` (env vars `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`).
+The route's job is "give me the geometry, then ask AI for the labels", not "ask AI to draw the geometry". This is dramatically more accurate and also much cheaper.
+
+**Stage 1 — Computer vision (`lib/cvDetect.ts`, ~600 lines, sharp + simplify-js):**
+- Decode image → flatten alpha on white → downscale to `TARGET_LONG_EDGE = 1200px` (sweet spot: preserves grave cells while letting dilation bridge thin grid lines).
+- **Palette extraction**: 4-stride sample, RGB-bucket quantize (Q=24), merge buckets within `COLOR_MERGE_DISTANCE = 32` RGB, drop trace colours (<0.5% coverage) and very-light tints (luminance > 200, which are usually anti-aliased section edges).
+- **Per-color section detection**: build a tolerant colour mask (`SECTION_COLOR_TOLERANCE = 38` RGB), dilate by `SECTION_DILATE_RADIUS = 3` to bridge thin white grid lines inside a section, find connected components via 4-conn BFS with `Int32Array` queue, drop components below `MIN_SECTION_AREA_FRACTION = 0.0025` of the image. Each component → Moore-neighbour boundary trace → Douglas-Peucker simplify (tolerance 4px) → up to `MAX_POLYGON_VERTICES = 40` vertices.
+- **Per-section grave-cell detection**: build a *cell* mask using the same colour tolerance BUT with `GRID_LINE_LUMINANCE = 198` exclusion so the white grid lines stop being part of the section. Within each section's bbox, run 4-conn BFS again — each colored cell is now its own component because grid-line pixels separate them. Filter cells by `MIN_CELL_AREA_PX = 50` (downscaled px), `MIN_CELL_FILL_RATIO = 0.35` (rejects sparse noise), `MAX_CELL_FRACTION_OF_SECTION = 0.18` (rejects "the cell is the whole section, didn't separate"), and `MAX_CELLS_PER_SECTION = 400`.
+- Emits `{ palette: RGB+coverage[], sections: [{ color, points, cells, bbox }] }`. Visual debug harness at `artifacts/api-server/scripts/test-cv.mjs` writes `*.cv-overlay.png` and `*.cv-composed.png` for any input image.
+
+**Stage 2 — Claude classification (`routes/aiMap.ts`):**
+- The CV pipeline knows SHAPES but not what each color MEANS. Claude is great at the small task of looking at the legend / on-map labels ("RC", "CON", "MU"…) and mapping each detected colour index to one of the operator's `plotTypes`. Sends the image + a list of `{index, RGB, coverage%}` + the configured plot type ids; expects a tiny `{ colorTypeMap: { "0": "<typeId>", … }, notes }` response. If Claude fails, all sections fall back to the first plot type (still useful — operator can re-classify in the editor).
+
+**Stage 3 — Plot emission:**
+- For each detected section, emit BOTH (a) a section-outline polygon plot (with `points`) AND (b) one rectangular plot per individual grave cell. Sections come first so they render below cells in the editor's z-order. `MAX_PLOTS = 2000`.
+- Result on the WS-Moore-St.-Woolos reference map: 15 section outlines + 191 individual graves = 206 plots, in ~10s end-to-end (CV: ~500ms, Claude classify: ~9s).
+
+#### Constraints / caveats
+
+- Best results require a **flat-colour cemetery plan** (each section type has a distinct fill colour). Photographs of paper plans, hand-drawn maps, or maps with heavy textures will under-detect.
+- Detection runs on the downscaled 1200px copy; cell counts in very dense sections may be lower than the visual count. Operators can subdivide manually in Map Maker.
+- Per-IP rate limit: 12 detections per 5 minutes (`RATE_LIMIT_MAX = 12`).
+- Body limit 12 MB (`app.ts`), enough for ~9 MB of base64 image data.
+
+#### Dependencies (in `@workspace/api-server`)
+
+- `sharp@0.34.5` (runtime — image decode/downscale). `pnpm approve-builds` was *not* run for sharp's build scripts; the prebuilt binary loads fine without it.
+- `simplify-js@1.2.4` (runtime — Douglas-Peucker). Local `src/lib/simplify-js.d.ts` shim provides the missing types.
+- `tsx` (devDependency — for the visual test harness).
+
+#### Anthropic integration
+
+`lib/integrations-anthropic-ai/` re-exports a configured `anthropic` client (no DB tables — these are one-shot vision calls). Provisioned via `setupReplitAIIntegrations` (env vars `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`). Model: `claude-sonnet-4-6`.
 
 Linked from `b2b-layout` nav: Cemetery Operations → AI Map Maker (Wand2 icon, sits directly under Map Maker).
