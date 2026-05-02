@@ -26,6 +26,7 @@ import Dashboard from "@/pages/b2b/dashboard";
 import Plots from "@/pages/b2b/plots";
 import MapPage from "@/pages/b2b/map";
 import MapMaker from "@/pages/b2b/map-maker";
+import AiMapMaker from "@/pages/b2b/ai-map-maker";
 import Burials from "@/pages/b2b/burials";
 import Bookings from "@/pages/b2b/bookings";
 import WorkOrders from "@/pages/b2b/work-orders";
@@ -74,6 +75,7 @@ function B2BRoutes() {
         <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/map" component={MapPage} />
+        <Route path="/ai-map-maker" component={AiMapMaker} />
         <Route path="/plots" component={Plots} />
         <Route path="/burials" component={Burials} />
         <Route path="/bookings" component={Bookings} />

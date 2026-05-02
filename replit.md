@@ -101,3 +101,19 @@ Implementation notes:
 - Z-index layering: root `z-40`, empty-state `z-10`, drag overlay `z-20`, status toast `z-50`. Radix portals (toasts/dialogs) sit higher and remain reachable.
 
 Linked from `b2b-layout` nav: Cemetery Operations → Map Maker; Settings → Cemetery Setup. The Back button in the top toolbar is the user's escape hatch back to the rest of the B2B app.
+
+### AI Map Maker (`/app/ai-map-maker`)
+
+Sub-feature under Map Maker that converts existing JPG/PNG/WebP/PDF cemetery maps into a clickable digital map using Claude's vision API. Single file: `pages/b2b/ai-map-maker.tsx`. Renders inside the regular `B2BLayout` (it's a pre-processor, not a fullscreen editor).
+
+Pipeline:
+1. **Upload** — drag-drop or file picker accepts `image/*` and `application/pdf`. PDFs are rendered via `pdfjs-dist` (worker URL imported with `?url` so Vite emits a hashed asset). Multi-page PDFs get a Prev/Next page picker. The selected page (or image) is downscaled to 1600px webp via `downscaleImage` from `cemetery-config.ts`.
+2. **Analyse with AI** — POSTs `{image: dataUrl, imgWidth, imgHeight, plotTypes, spotTypes}` to `/api/ai/detect-map`. The endpoint sends the image + the operator's current cemetery type list to `claude-sonnet-4-6` and asks for normalised (0..1) bounding boxes classified against those exact `typeId`s. Results are sanitised with Zod, unknown type ids fall back to the first available, and out-of-range coords are clamped.
+3. **Review & open** — detected boxes are overlaid on the preview as filled SVG rects with section labels; spots render as colored dots. Operator names the map and clicks **Open in Map Maker**.
+4. **Hand-off** — the page writes the assembled `MapDoc` to `localStorage["memorialspace.map-maker:<slug>"]` (so it appears in Saved Maps) AND to `localStorage["memorialspace.map-maker:__pending__"]`, then `setLocation("/map-maker")`. The Map Maker has a mount-time `useEffect` that reads `__pending__`, loads it via `migrateDoc()`, flashes a status toast, and removes the pending key so a refresh doesn't re-load it.
+
+API route: `artifacts/api-server/src/routes/aiMap.ts` (mounted under `/api`). Body limit was bumped to 12 MB in `app.ts` to accommodate base64 images. Validation is strict (Zod) on both the inbound request and the AI's outbound JSON; ` ```json ` fences are stripped if Claude wraps the response.
+
+AI integration: `lib/integrations-anthropic-ai/` is a minimal lib that just re-exports a configured `anthropic` client (no DB tables, no batch utils — this is a one-shot vision call). Provisioned via `setupReplitAIIntegrations` (env vars `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`).
+
+Linked from `b2b-layout` nav: Cemetery Operations → AI Map Maker (Wand2 icon, sits directly under Map Maker).

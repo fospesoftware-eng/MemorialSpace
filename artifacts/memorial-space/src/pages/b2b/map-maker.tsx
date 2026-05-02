@@ -219,6 +219,29 @@ export default function MapMaker() {
 
   useEffect(() => { refreshSaved(); }, [refreshSaved]);
 
+  // ----- AI Map Maker handoff -----
+  // The /ai-map-maker page writes a "pending" MapDoc into localStorage just before
+  // navigating here. Pick it up on mount, load it as the current doc, then clear
+  // the pending key so a refresh doesn't re-load it indefinitely.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("memorialspace.map-maker:__pending__");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { doc?: unknown };
+      if (parsed?.doc) {
+        setDoc(migrateDoc(parsed.doc));
+        setSelection(null);
+        flashStatus("Loaded AI-generated map — refine and save when ready");
+      }
+    } catch {
+      // ignore — corrupt pending payload shouldn't break the editor
+    } finally {
+      try { localStorage.removeItem("memorialspace.map-maker:__pending__"); } catch {}
+      refreshSaved();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ----- Pointer math -----
   const toSvgPoint = useCallback((e: ReactPointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
