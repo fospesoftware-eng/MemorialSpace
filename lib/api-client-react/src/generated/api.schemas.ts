@@ -74,18 +74,33 @@ export interface CreateOrganizationBody {
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const UserRole = {
+  owner: "owner",
   admin: "admin",
+  manager: "manager",
   staff: "staff",
   viewer: "viewer",
 } as const;
 
+export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
+
+export const UserStatus = {
+  active: "active",
+  invited: "invited",
+  suspended: "suspended",
+} as const;
+
 export interface User {
   id: number;
-  organizationId?: number;
+  organizationId: number;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
+  jobTitle?: string;
+  phone?: string;
   avatarUrl?: string;
+  lastActiveAt?: string;
+  invitedAt?: string;
   createdAt: string;
 }
 
@@ -93,16 +108,30 @@ export type CreateUserBodyRole =
   (typeof CreateUserBodyRole)[keyof typeof CreateUserBodyRole];
 
 export const CreateUserBodyRole = {
+  owner: "owner",
   admin: "admin",
+  manager: "manager",
   staff: "staff",
   viewer: "viewer",
 } as const;
 
+export type CreateUserBodyStatus =
+  (typeof CreateUserBodyStatus)[keyof typeof CreateUserBodyStatus];
+
+export const CreateUserBodyStatus = {
+  active: "active",
+  invited: "invited",
+  suspended: "suspended",
+} as const;
+
 export interface CreateUserBody {
-  organizationId?: number;
+  organizationId: number;
   name: string;
   email: string;
   role: CreateUserBodyRole;
+  status?: CreateUserBodyStatus;
+  jobTitle?: string;
+  phone?: string;
   avatarUrl?: string;
 }
 

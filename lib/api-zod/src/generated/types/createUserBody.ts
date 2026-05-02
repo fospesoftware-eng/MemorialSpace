@@ -6,11 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateUserBodyRole } from "./createUserBodyRole";
+import type { CreateUserBodyStatus } from "./createUserBodyStatus";
 
 export interface CreateUserBody {
-  organizationId?: number;
+  organizationId: number;
   name: string;
   email: string;
   role: CreateUserBodyRole;
+  status?: CreateUserBodyStatus;
+  jobTitle?: string;
+  phone?: string;
   avatarUrl?: string;
 }

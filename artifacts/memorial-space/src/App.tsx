@@ -45,7 +45,8 @@ import AccountingInvoicesList from "@/pages/b2b/accounting/invoices-list";
 import AccountingInvoiceEdit from "@/pages/b2b/accounting/invoice-edit";
 import AccountingInvoiceDetail from "@/pages/b2b/accounting/invoice-detail";
 import Organizations from "@/pages/settings/organizations";
-import Users from "@/pages/settings/users";
+import TeamPage from "@/pages/team";
+import TeamRolesPage from "@/pages/team/roles";
 import Settings from "@/pages/settings/general";
 import CemeteryTypes from "@/pages/settings/cemetery-types";
 
@@ -113,7 +114,9 @@ function B2BRoutes() {
           {(params) => <AccountingInvoiceDetail invoiceId={Number(params.id)} />}
         </Route>
         <Route path="/organizations" component={Organizations} />
-        <Route path="/users" component={Users} />
+        <Route path="/team" component={TeamPage} />
+        <Route path="/team/roles" component={TeamRolesPage} />
+        <Route path="/users" component={TeamPage} />
         <Route path="/settings" component={Settings} />
         <Route path="/cemetery-setup" component={CemeteryTypes} />
         <Route component={NotFound} />

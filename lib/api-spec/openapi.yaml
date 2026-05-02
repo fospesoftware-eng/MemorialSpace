@@ -1747,17 +1747,32 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, staff, viewer]
+          enum: [owner, admin, manager, staff, viewer]
+        status:
+          type: string
+          enum: [active, invited, suspended]
+        jobTitle:
+          type: string
+        phone:
+          type: string
         avatarUrl:
           type: string
+        lastActiveAt:
+          type: string
+          format: date-time
+        invitedAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
       required:
         - id
+        - organizationId
         - name
         - email
         - role
+        - status
         - createdAt
 
     CreateUserBody:
@@ -1771,10 +1786,18 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, staff, viewer]
+          enum: [owner, admin, manager, staff, viewer]
+        status:
+          type: string
+          enum: [active, invited, suspended]
+        jobTitle:
+          type: string
+        phone:
+          type: string
         avatarUrl:
           type: string
       required:
+        - organizationId
         - name
         - email
         - role

@@ -170,11 +170,16 @@ export const ListUsersQueryParams = zod.object({
 
 export const ListUsersResponseItem = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 export const ListUsersResponse = zod.array(ListUsersResponseItem);
@@ -183,10 +188,13 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem);
  * @summary Create a new user
  */
 export const CreateUserBody = zod.object({
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]).optional(),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
 });
 
@@ -199,11 +207,16 @@ export const GetUserParams = zod.object({
 
 export const GetUserResponse = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -215,20 +228,28 @@ export const UpdateUserParams = zod.object({
 });
 
 export const UpdateUserBody = zod.object({
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]).optional(),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
 });
 
 export const UpdateUserResponse = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 
