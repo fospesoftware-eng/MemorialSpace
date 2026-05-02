@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
@@ -6,6 +6,32 @@ import { useCart } from "./cart-store";
 import { useSubmitOrder, type PublicSite } from "./api";
 
 type Props = { slug: string; site: PublicSite };
+
+// Mirrors the marketplace's order-context storage. We read it here to
+// prefill the customer-notes textarea so the operator immediately knows
+// which plot/loved-one this order is for.
+const ORDER_CONTEXT_KEY = (slug: string) => `cemetery-order-context:${slug}`;
+
+function readOrderContext(slug: string): { for?: string; plotRef?: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(ORDER_CONTEXT_KEY(slug));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function buildContextPrefill(ctx: { for?: string; plotRef?: string } | null): string {
+  if (!ctx) return "";
+  const parts: string[] = [];
+  if (ctx.for) parts.push(`For ${ctx.for}`);
+  if (ctx.plotRef) parts.push(`Plot ${ctx.plotRef}`);
+  return parts.length ? `[${parts.join(" — ")}] ` : "";
+}
 
 export function CemeterySiteCart({ slug, site }: Props) {
   const themeKey: ThemeKey = isThemeKey(site.theme) ? site.theme : "classic-marble";
@@ -21,6 +47,22 @@ export function CemeterySiteCart({ slug, site }: Props) {
     customerPhone: "",
     customerNotes: "",
   });
+
+  // Prefill notes from the order context exactly once. Guarded by both
+  // a ref-style flag and an emptiness check on the existing notes so
+  // we never overwrite something the visitor already typed.
+  const [hasPrefilled, setHasPrefilled] = useState(false);
+  useEffect(() => {
+    if (hasPrefilled) return;
+    const ctx = readOrderContext(slug);
+    const prefill = buildContextPrefill(ctx);
+    if (prefill) {
+      setForm((f) =>
+        f.customerNotes.trim().length === 0 ? { ...f, customerNotes: prefill } : f,
+      );
+    }
+    setHasPrefilled(true);
+  }, [slug, hasPrefilled]);
   const [error, setError] = useState<string | null>(null);
 
   const inputStyle: React.CSSProperties = {

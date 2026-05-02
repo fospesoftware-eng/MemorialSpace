@@ -8,6 +8,8 @@ import {
   organizationsTable,
   burialsTable,
   plotsTable,
+  qrCodesTable,
+  memorialsTable,
   upsertCemeterySiteSchema,
   insertCemeteryCategorySchema,
   insertCemeteryProductSchema,
@@ -606,6 +608,211 @@ router.get("/c/:slug/find-grave", async (req, res) => {
       photoUrl: r.photoUrl,
       plotLabel: r.plotNumber ?? `Plot #${r.plotId}`,
     })),
+  });
+});
+
+// Public cemetery map. Returns every plot in the org with a sanitized
+// burial summary when occupied (same PII rules as find-grave: name +
+// year-only birth/death + plot label, no full DOB/DOD, no notes, no
+// religion). When a burial has a QR memorial set up, we surface its
+// `memorialCode` so the public map can deep-link visitors to the
+// memorial page without exposing internal burial/memorial ids.
+router.get("/c/:slug/map", async (req, res) => {
+  const ctx = await resolvePublicSite(req, res);
+  if (!ctx) return;
+  const orgId = ctx.org.id;
+
+  const [plots, burials, qrs] = await Promise.all([
+    db
+      .select({
+        id: plotsTable.id,
+        plotNumber: plotsTable.plotNumber,
+        section: plotsTable.section,
+        row: plotsTable.row,
+        status: plotsTable.status,
+        type: plotsTable.type,
+      })
+      .from(plotsTable)
+      .where(eq(plotsTable.organizationId, orgId))
+      .orderBy(plotsTable.section, plotsTable.row, plotsTable.plotNumber),
+    db
+      .select({
+        id: burialsTable.id,
+        plotId: burialsTable.plotId,
+        deceasedName: burialsTable.deceasedName,
+        dob: burialsTable.deceasedDob,
+        dod: burialsTable.deceasedDod,
+        photoUrl: burialsTable.photoUrl,
+      })
+      .from(burialsTable)
+      .where(eq(burialsTable.organizationId, orgId)),
+    db
+      .select({
+        code: qrCodesTable.code,
+        burialId: qrCodesTable.burialId,
+      })
+      .from(qrCodesTable)
+      .where(eq(qrCodesTable.organizationId, orgId)),
+  ]);
+
+  const yearOnly = (s: string | Date | null | undefined) => {
+    if (!s) return null;
+    const str = typeof s === "string" ? s : s.toISOString();
+    return str.slice(0, 4);
+  };
+
+  const burialByPlot = new Map<number, (typeof burials)[number]>();
+  for (const b of burials) burialByPlot.set(b.plotId, b);
+
+  const codeByBurial = new Map<number, string>();
+  for (const q of qrs) {
+    if (q.burialId != null) codeByBurial.set(q.burialId, q.code);
+  }
+
+  const sections = Array.from(
+    new Set(plots.map((p) => p.section).filter((s): s is string => Boolean(s))),
+  );
+
+  res.json({
+    sections,
+    plots: plots.map((p) => {
+      const burial = burialByPlot.get(p.id);
+      return {
+        id: p.id,
+        plotNumber: p.plotNumber,
+        section: p.section,
+        row: p.row,
+        status: p.status,
+        type: p.type,
+        burial: burial
+          ? {
+              id: burial.id,
+              name: burial.deceasedName,
+              bornYear: yearOnly(burial.dob),
+              diedYear: yearOnly(burial.dod),
+              photoUrl: burial.photoUrl,
+              memorialCode: codeByBurial.get(burial.id) ?? null,
+            }
+          : null,
+      };
+    }),
+  });
+});
+
+// Public memorial detail (the QR-code landing page). Resolves a QR code
+// scoped to this org's slug, joins to the burial + optional memorial
+// content row, and returns a sanitized payload. We honor `memorial.isPublic`
+// — operators can hide a memorial without deleting the QR. We update the
+// scan/view counters in the background; failures don't break the page.
+router.get("/c/:slug/memorial/:code", async (req, res) => {
+  const ctx = await resolvePublicSite(req, res);
+  if (!ctx) return;
+  const code = String(req.params.code ?? "").toUpperCase();
+  if (!/^[A-F0-9]{8,64}$/.test(code)) {
+    return res.status(400).json({ error: "Invalid memorial code" });
+  }
+  const [qr] = await db
+    .select()
+    .from(qrCodesTable)
+    .where(
+      and(
+        eq(qrCodesTable.code, code),
+        eq(qrCodesTable.organizationId, ctx.org.id),
+      ),
+    );
+  if (!qr || qr.burialId == null) {
+    return res.status(404).json({ error: "Memorial not found" });
+  }
+
+  const [burial] = await db
+    .select()
+    .from(burialsTable)
+    .where(
+      and(
+        eq(burialsTable.id, qr.burialId),
+        eq(burialsTable.organizationId, ctx.org.id),
+      ),
+    );
+  if (!burial) return res.status(404).json({ error: "Memorial not found" });
+
+  const [memorial] = qr.memorialId
+    ? await db
+        .select()
+        .from(memorialsTable)
+        .where(
+          and(
+            eq(memorialsTable.id, qr.memorialId),
+            eq(memorialsTable.organizationId, ctx.org.id),
+          ),
+        )
+    : [undefined];
+
+  // If the operator explicitly hid the rich memorial, we return 404 to the
+  // public — even though the QR + burial exist. Operators can re-publish
+  // by toggling the memorial back to public.
+  if (memorial && memorial.isPublic === false) {
+    return res.status(404).json({ error: "Memorial not found" });
+  }
+
+  const [plot] = burial.plotId
+    ? await db
+        .select({
+          plotNumber: plotsTable.plotNumber,
+          section: plotsTable.section,
+          row: plotsTable.row,
+        })
+        .from(plotsTable)
+        .where(eq(plotsTable.id, burial.plotId))
+    : [undefined];
+
+  // Best-effort counter bumps. We use atomic SQL increments so concurrent
+  // scans from multiple phones can't lose updates to a read-modify-write
+  // race, and we don't await — a stalled write should never block a
+  // memorial page from loading for grieving visitors.
+  void db
+    .update(qrCodesTable)
+    .set({ scanCount: sql`COALESCE(${qrCodesTable.scanCount}, 0) + 1` })
+    .where(eq(qrCodesTable.id, qr.id))
+    .catch(() => undefined);
+  if (memorial) {
+    void db
+      .update(memorialsTable)
+      .set({ viewCount: sql`COALESCE(${memorialsTable.viewCount}, 0) + 1` })
+      .where(eq(memorialsTable.id, memorial.id))
+      .catch(() => undefined);
+  }
+
+  // memorials.photos is stored as a JSON-string array. Parse defensively
+  // so a bad row never 500s the page; merge with the burial's single
+  // photoUrl so we always have a hero image when one exists.
+  let photos: string[] = [];
+  if (memorial?.photos) {
+    try {
+      const parsed = JSON.parse(memorial.photos);
+      if (Array.isArray(parsed)) {
+        photos = parsed.filter((p): p is string => typeof p === "string");
+      }
+    } catch {
+      // ignore — leave photos empty
+    }
+  }
+  if (burial.photoUrl && !photos.includes(burial.photoUrl)) {
+    photos = [burial.photoUrl, ...photos];
+  }
+
+  res.json({
+    code: qr.code,
+    title: memorial?.title ?? burial.deceasedName,
+    deceasedName: burial.deceasedName,
+    bornDate: burial.deceasedDob,
+    diedDate: burial.deceasedDod,
+    burialDate: burial.burialDate,
+    religion: burial.religion,
+    biography: memorial?.biography ?? null,
+    photos,
+    plotLabel: plot?.plotNumber ?? null,
+    plotSection: plot?.section ?? null,
+    plotRow: plot?.row ?? null,
   });
 });
 

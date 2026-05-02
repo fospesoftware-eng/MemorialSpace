@@ -7,11 +7,14 @@ import { CemeterySiteMarketplace } from "./marketplace";
 import { CemeterySiteProduct } from "./product";
 import { CemeterySiteCart } from "./cart";
 import { CemeterySiteSuccess } from "./success";
+import { CemeterySiteMap } from "./map";
+import { CemeterySiteMemorial } from "./memorial";
 
 export function CemeterySiteRoutes({ slug }: { slug: string }) {
   const { data: site, isLoading, isError, error } = usePublicSite(slug);
   const [, productParams] = useRoute<{ productSlug: string }>("/marketplace/:productSlug");
   const [, orderParams] = useRoute<{ orderNumber: string }>("/order/:orderNumber");
+  const [, memorialParams] = useRoute<{ code: string }>("/memorial/:code");
 
   if (isLoading) {
     return (
@@ -62,6 +65,16 @@ export function CemeterySiteRoutes({ slug }: { slug: string }) {
         <Route path="/">{() => <CemeterySiteHome slug={slug} site={site} />}</Route>
         <Route path="/find-grave">
           {() => <CemeterySiteFindGrave slug={slug} site={site} />}
+        </Route>
+        <Route path="/map">{() => <CemeterySiteMap slug={slug} site={site} />}</Route>
+        <Route path="/memorial/:code">
+          {(p) => (
+            <CemeterySiteMemorial
+              slug={slug}
+              site={site}
+              code={p.code ?? memorialParams?.code ?? ""}
+            />
+          )}
         </Route>
         <Route path="/marketplace">
           {() => <CemeterySiteMarketplace slug={slug} site={site} />}

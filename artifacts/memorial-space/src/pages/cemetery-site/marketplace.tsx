@@ -1,10 +1,44 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ShoppingBag, Tag } from "lucide-react";
+import { ShoppingBag, Tag, MapPin, Heart, X } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicProducts, type PublicSite } from "./api";
 
 type Props = { slug: string; site: PublicSite };
+
+// Order context propagated from the cemetery map / memorial pages via
+// query string. We persist it to sessionStorage so it survives drilling
+// into a product detail page and back, and the cart picks it up to
+// prefill the customer notes ("[For Jane Doe — Plot A-12-007] …").
+const ORDER_CONTEXT_KEY = (slug: string) => `cemetery-order-context:${slug}`;
+
+type OrderContext = { for?: string; plotRef?: string };
+
+function readOrderContext(slug: string): OrderContext | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(ORDER_CONTEXT_KEY(slug));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as OrderContext;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeOrderContext(slug: string, ctx: OrderContext | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (ctx === null) {
+      window.sessionStorage.removeItem(ORDER_CONTEXT_KEY(slug));
+    } else {
+      window.sessionStorage.setItem(ORDER_CONTEXT_KEY(slug), JSON.stringify(ctx));
+    }
+  } catch {
+    /* ignore — storage disabled, context simply doesn't persist */
+  }
+}
 
 export function CemeterySiteMarketplace({ slug, site }: Props) {
   const themeKey: ThemeKey = isThemeKey(site.theme) ? site.theme : "classic-marble";
@@ -14,6 +48,38 @@ export function CemeterySiteMarketplace({ slug, site }: Props) {
   const { data, isLoading } = usePublicProducts(slug, category);
   const products = data?.products ?? [];
   const categories = data?.categories ?? [];
+
+  // On first mount: pull `?for=` and `?plotRef=` off the URL into
+  // sessionStorage. We strip them from the URL afterwards so a back/refresh
+  // doesn't repaint the banner stale-y when the user has cleared it.
+  const [orderCtx, setOrderCtx] = useState<OrderContext | null>(() =>
+    readOrderContext(slug),
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const forName = params.get("for");
+    const plotRef = params.get("plotRef");
+    if (forName || plotRef) {
+      const ctx = {
+        for: forName ?? undefined,
+        plotRef: plotRef ?? undefined,
+      };
+      writeOrderContext(slug, ctx);
+      setOrderCtx(ctx);
+      params.delete("for");
+      params.delete("plotRef");
+      const next = params.toString();
+      const url = window.location.pathname + (next ? `?${next}` : "");
+      window.history.replaceState({}, "", url);
+    }
+  }, [slug]);
+
+  const clearOrderCtx = () => {
+    writeOrderContext(slug, null);
+    setOrderCtx(null);
+  };
 
   return (
     <div className="container mx-auto max-w-6xl px-4 sm:px-6 py-12 md:py-16">
@@ -31,6 +97,57 @@ export function CemeterySiteMarketplace({ slug, site }: Props) {
           Browse our offerings. Submit an order request and we'll be in touch.
         </p>
       </div>
+
+      {orderCtx && (orderCtx.for || orderCtx.plotRef) ? (
+        <div
+          data-testid="order-context-banner"
+          style={{
+            background: "hsl(var(--site-card))",
+            border: "1px solid hsl(var(--site-primary))",
+            borderRadius: "var(--site-radius)",
+          }}
+          className="max-w-2xl mx-auto mb-8 p-4 flex items-start gap-3"
+        >
+          <Heart
+            className="h-5 w-5 mt-0.5 shrink-0"
+            style={{ color: "hsl(var(--site-primary))" }}
+          />
+          <div className="flex-1 min-w-0">
+            <div
+              style={{ color: "hsl(var(--site-primary))" }}
+              className="text-xs uppercase tracking-wider font-semibold mb-1"
+            >
+              Ordering for a loved one
+            </div>
+            <div className="text-sm" style={{ color: "hsl(var(--site-fg))" }}>
+              {orderCtx.for ? <strong>{orderCtx.for}</strong> : null}
+              {orderCtx.for && orderCtx.plotRef ? " · " : null}
+              {orderCtx.plotRef ? (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Plot {orderCtx.plotRef}
+                </span>
+              ) : null}
+            </div>
+            <p
+              className="text-xs mt-1"
+              style={{ color: "hsl(var(--site-muted-fg))" }}
+            >
+              We'll add this to your order notes so the cemetery team knows
+              who and where this is for.
+            </p>
+          </div>
+          <button
+            onClick={clearOrderCtx}
+            aria-label="Clear order context"
+            className="p-1 rounded hover:bg-black/5 shrink-0"
+            style={{ color: "hsl(var(--site-muted-fg))" }}
+            data-testid="clear-order-context"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
 
       {categories.length > 0 ? (
         <div

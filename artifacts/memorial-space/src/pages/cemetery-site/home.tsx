@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Search, ShoppingBag, ArrowRight } from "lucide-react";
+import { Search, ShoppingBag, ArrowRight, Map as MapIcon, ScanLine } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicProducts, type PublicSite } from "./api";
 
@@ -147,6 +147,105 @@ export function CemeterySiteHome({ slug, site }: Props) {
           </div>
         </section>
       ) : null}
+
+      {/* Interactive map + QR memorial discovery cards. These two surfaces
+          are how visitors navigate from a name or a phone-scan into the
+          orderable parts of the site (flowers, headstone care, QR plaque). */}
+      <section className="container mx-auto max-w-6xl px-4 sm:px-6 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Link
+            href={`/c/${slug}/map`}
+            data-testid="discover-map"
+            style={{
+              background: "hsl(var(--site-card))",
+              border: "1px solid hsl(var(--site-border))",
+              borderRadius: "var(--site-radius)",
+            }}
+            className="group p-7 md:p-8 hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-start gap-5"
+          >
+            <div
+              style={{
+                background: "hsl(var(--site-primary))",
+                color: "hsl(var(--site-primary-fg))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="h-12 w-12 shrink-0 flex items-center justify-center"
+            >
+              <MapIcon className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div
+                style={{ color: "hsl(var(--site-primary))" }}
+                className="text-[10px] uppercase tracking-widest font-semibold mb-2"
+              >
+                Visit the grounds
+              </div>
+              <h3 style={headingFont} className="text-xl md:text-2xl font-semibold mb-2">
+                Interactive cemetery map
+              </h3>
+              <p
+                style={{ color: "hsl(var(--site-muted-fg))" }}
+                className="text-sm md:text-base leading-relaxed mb-3"
+              >
+                Browse our sections, see plot availability, and order flowers,
+                maintenance, or memorial services for any plot.
+              </p>
+              <span
+                style={{ color: "hsl(var(--site-primary))" }}
+                className="inline-flex items-center gap-1 text-sm font-semibold group-hover:gap-2 transition-all"
+              >
+                Open the map <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          </Link>
+          <div
+            style={{
+              background: "hsl(var(--site-card))",
+              border: "1px solid hsl(var(--site-border))",
+              borderRadius: "var(--site-radius)",
+            }}
+            className="p-7 md:p-8 flex items-start gap-5"
+            data-testid="discover-qr"
+          >
+            <div
+              style={{
+                background: "hsl(var(--site-muted))",
+                color: "hsl(var(--site-primary))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="h-12 w-12 shrink-0 flex items-center justify-center"
+            >
+              <ScanLine className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div
+                style={{ color: "hsl(var(--site-primary))" }}
+                className="text-[10px] uppercase tracking-widest font-semibold mb-2"
+              >
+                Memorial QR codes
+              </div>
+              <h3 style={headingFont} className="text-xl md:text-2xl font-semibold mb-2">
+                A scannable tribute at every grave
+              </h3>
+              <p
+                style={{ color: "hsl(var(--site-muted-fg))" }}
+                className="text-sm md:text-base leading-relaxed mb-3"
+              >
+                Each headstone can carry a weatherproof QR plaque. A scan opens
+                the loved one's photos, life story, and lifespan — anytime, in
+                any language. Order a plaque from our marketplace.
+              </p>
+              <Link
+                href={`/c/${slug}/marketplace`}
+                style={{ color: "hsl(var(--site-primary))" }}
+                className="inline-flex items-center gap-1 text-sm font-semibold hover:gap-2 transition-all"
+              >
+                Order a QR plaque <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {site.aboutText ? (
         <section

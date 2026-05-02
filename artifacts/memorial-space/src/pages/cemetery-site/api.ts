@@ -59,6 +59,43 @@ export type GraveResult = {
   plotLabel: string;
 };
 
+export type PublicMapPlot = {
+  id: number;
+  plotNumber: string;
+  section: string | null;
+  row: string | null;
+  status: string;
+  type: string | null;
+  burial: {
+    id: number;
+    name: string;
+    bornYear: string | null;
+    diedYear: string | null;
+    photoUrl: string | null;
+    memorialCode: string | null;
+  } | null;
+};
+
+export type PublicMapData = {
+  plots: PublicMapPlot[];
+  sections: string[];
+};
+
+export type PublicMemorial = {
+  code: string;
+  title: string;
+  deceasedName: string;
+  bornDate: string | null;
+  diedDate: string | null;
+  burialDate: string | null;
+  religion: string | null;
+  biography: string | null;
+  photos: string[];
+  plotLabel: string | null;
+  plotSection: string | null;
+  plotRow: string | null;
+};
+
 export type OrderItemSnapshot = {
   productId: number;
   name: string;
@@ -126,6 +163,29 @@ export function usePublicGraveSearch(slug: string, q: string) {
       );
     },
     enabled: q.trim().length >= 2,
+  });
+}
+
+export function usePublicMap(slug: string) {
+  const qs = previewQS();
+  return useQuery({
+    queryKey: ["public-map", slug, qs],
+    queryFn: () =>
+      get<PublicMapData>(
+        `${BASE}/api/c/${encodeURIComponent(slug)}/map${qs}`,
+      ),
+  });
+}
+
+export function usePublicMemorial(slug: string, code: string) {
+  const qs = previewQS();
+  return useQuery({
+    queryKey: ["public-memorial", slug, code, qs],
+    queryFn: () =>
+      get<PublicMemorial>(
+        `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}${qs}`,
+      ),
+    enabled: !!code,
   });
 }
 

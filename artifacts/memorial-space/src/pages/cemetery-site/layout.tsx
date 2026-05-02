@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, ShoppingBag, Home, MapPin, Mail, Phone, Clock, Eye } from "lucide-react";
+import { Search, ShoppingBag, Home, MapPin, Mail, Phone, Clock, Eye, Map as MapIcon } from "lucide-react";
 import { THEMES, isThemeKey, applyPrimaryOverride, buildGoogleFontsHref, type ThemeKey } from "./themes";
 import { useCart } from "./cart-store";
 import type { PublicSite } from "./api";
@@ -50,6 +50,7 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
   const navItems = [
     { href: `/c/${slug}`, label: "Home", icon: Home },
     { href: `/c/${slug}/find-grave`, label: "Find a Grave", icon: Search },
+    { href: `/c/${slug}/map`, label: "Cemetery Map", icon: MapIcon },
     { href: `/c/${slug}/marketplace`, label: "Marketplace", icon: ShoppingBag },
   ];
 
