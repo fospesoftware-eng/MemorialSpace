@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { detectMap, type CvDetection } from "../lib/cvDetect";
+import { detectGridPlots, type PdfTextItem } from "../lib/gridDetect";
 
 const router: IRouter = Router();
 
@@ -65,12 +66,35 @@ const SpotTypeSchema = z.object({
   name: z.string(),
 });
 
+/**
+ * Optional PDF text positions, when the source file is a vector PDF and the
+ * client extracted text via pdfjs.getTextContent(). Coordinates are
+ * normalised to [0..1] in the *rendered image* coordinate system (NOT raw
+ * PDF user space). When present, the server runs the "grid" detection
+ * pipeline (`gridDetect.ts`) instead of the colour-section pipeline, and
+ * uses these text positions to label each detected plot with the names /
+ * dates printed inside it.
+ */
+const PdfTextItemSchema = z.object({
+  text: z.string().max(200),
+  x: z.number().min(-0.05).max(1.05),
+  y: z.number().min(-0.05).max(1.05),
+  w: z.number().min(0).max(1.1),
+  h: z.number().min(0).max(1.1),
+});
+
 const DetectMapBody = z.object({
   image: z.string().min(50, "image must be a non-empty data URL"),
   imgWidth: z.number().int().positive(),
   imgHeight: z.number().int().positive(),
   plotTypes: z.array(PlotTypeSchema).min(1).max(50),
   spotTypes: z.array(SpotTypeSchema).max(50).optional(),
+  /**
+   * If present (typically only for vector PDFs), routes detection through
+   * the grid-style pipeline. We cap at 5000 items to keep payloads bounded
+   * — large cemetery PDFs land around 1000-2000 items.
+   */
+  pdfText: z.array(PdfTextItemSchema).max(5000).optional(),
 });
 
 const Point01 = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]);
@@ -235,6 +259,99 @@ function nearestPaletteIndex(
   return bestIdx;
 }
 
+/**
+ * Minimum number of plots the grid pipeline must find to be considered
+ * "real". Below this we treat grid as a false-positive (e.g. the user
+ * uploaded a colour-section PDF that *also* has some incidental text) and
+ * fall back to the colour-section pipeline instead of returning an empty
+ * result. Cemetery grid plans typically yield hundreds of plots; a vector
+ * PDF that finds <10 boxes is almost certainly not a grid plan.
+ */
+const MIN_GRID_PLOTS_TO_TRUST = 10;
+
+/**
+ * Run the grid-style detection pipeline (vector PDF plans). No Claude call
+ * needed: PDF text gives us labels directly, and we default every plot to
+ * the first plot type (operators can re-classify in the editor).
+ *
+ * Returns `true` when the response was sent (grid succeeded or a hard
+ * error occurred). Returns `false` when grid was too weak to trust and
+ * the caller should fall through to the colour-section pipeline.
+ */
+async function runGridDetection(args: {
+  imageBuffer: Buffer;
+  pdfText: PdfTextItem[];
+  fallbackPlotId: string;
+  req: Parameters<Parameters<typeof router.post>[1]>[0];
+  res: Parameters<Parameters<typeof router.post>[1]>[1];
+}): Promise<boolean> {
+  const { imageBuffer, pdfText, fallbackPlotId, req, res } = args;
+
+  let grid;
+  try {
+    grid = await detectGridPlots(imageBuffer, pdfText);
+  } catch (err) {
+    // A hard CV failure (e.g. corrupt image buffer) is worth surfacing —
+    // colour-section would fail on the same buffer. End the request here.
+    req.log.error({ err: err instanceof Error ? err.message : String(err) }, "grid detection failed");
+    res.status(500).json({
+      error: "cv_failed",
+      detail: "Could not analyse the PDF map. Try a sharper render of the same page, or draw plots manually in the editor.",
+    });
+    return true;
+  }
+
+  // Too few plots → this probably wasn't a grid plan. Fall through to the
+  // colour-section pipeline instead of returning an empty result.
+  if (grid.plots.length < MIN_GRID_PLOTS_TO_TRUST) {
+    req.log.info(
+      { gridPlots: grid.plots.length, rawCandidates: grid.diagnostics.rawCandidateCount },
+      "grid detection too weak; falling back to colour-section pipeline",
+    );
+    return false;
+  }
+
+  const plots: z.infer<typeof DetectedPlot>[] = [];
+  for (const p of grid.plots) {
+    if (plots.length >= MAX_PLOTS) break;
+    const x = clamp01(p.x);
+    const y = clamp01(p.y);
+    const w = Math.max(0, Math.min(1 - x, clamp01(p.w)));
+    const h = Math.max(0, Math.min(1 - y, clamp01(p.h)));
+    if (w <= 0 || h <= 0) continue;
+    const parsed = DetectedPlot.safeParse({
+      label: p.label.slice(0, 200),
+      typeId: fallbackPlotId,
+      status: "available",
+      x, y, w, h,
+    });
+    if (parsed.success) plots.push(parsed.data);
+  }
+
+  const matched = plots.filter((p) => p.label).length;
+  const result = DetectionResult.parse({
+    plots,
+    spots: [],
+    notes:
+      `Grid plan: detected ${plots.length} plot${plots.length === 1 ? "" : "s"}` +
+      ` (${matched} labelled from PDF text).` +
+      ` All plots default to your first plot type — re-classify in the editor as needed.`,
+  });
+
+  req.log.info(
+    {
+      mode: "grid",
+      plots: plots.length,
+      matched,
+      raw: grid.diagnostics.rawCandidateCount,
+      detection: `${grid.diagnostics.detectionWidth}x${grid.diagnostics.detectionHeight}`,
+    },
+    "ai-map detection complete",
+  );
+  res.json(result);
+  return true;
+}
+
 router.post("/ai/detect-map", async (req, res) => {
   const ip = (req.ip ?? req.socket.remoteAddress ?? "unknown").toString();
   const limit = checkRateLimit(ip);
@@ -252,7 +369,7 @@ router.post("/ai/detect-map", async (req, res) => {
     res.status(400).json({ error: "invalid_request", detail: parsed.error.flatten() });
     return;
   }
-  const { image, imgWidth, imgHeight, plotTypes, spotTypes: _spotTypes = [] } = parsed.data;
+  const { image, imgWidth, imgHeight, plotTypes, spotTypes: _spotTypes = [], pdfText } = parsed.data;
 
   const match = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!match) {
@@ -270,7 +387,26 @@ router.post("/ai/detect-map", async (req, res) => {
   const imageBuffer = Buffer.from(base64, "base64");
   const fallbackPlotId = plotTypes[0]?.id ?? "_unknown";
 
-  // ---- Step 1: server-side computer-vision detection ----
+  // ---- Mode selection ----
+  // If the client extracted PDF text positions, the source is most likely a
+  // vector grid plan (each plot is a thin-bordered rectangle with name +
+  // dates printed inside). Try the grid pipeline first — it's faster,
+  // cheaper (no Claude call), and produces pixel-perfect labelled plots.
+  // If grid comes back too weak (<10 plots), fall through to the
+  // colour-section pipeline below — colour-section PDFs occasionally have
+  // some embedded text too, and we don't want to falsely commit to grid
+  // mode and return nothing.
+  if (pdfText && pdfText.length > 0) {
+    const handled = await runGridDetection({
+      imageBuffer,
+      pdfText: pdfText as PdfTextItem[],
+      fallbackPlotId,
+      req, res,
+    });
+    if (handled) return;
+  }
+
+  // ---- Step 1: server-side computer-vision detection (color-section mode) ----
   let detection: CvDetection;
   try {
     detection = await detectMap(imageBuffer);

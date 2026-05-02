@@ -18,7 +18,26 @@ import {
 
 // ---------- PDF rendering (lazy) ----------
 
-interface PdfRenderResult { dataUrl: string; width: number; height: number; pageCount: number }
+/**
+ * Optional PDF text item extracted from a vector PDF, normalised to [0..1]
+ * in the *rendered image* coordinate system. Used by the AI Map Maker
+ * "grid plan" mode so each detected plot rectangle can be labelled with the
+ * names / dates printed inside it — no OCR, perfect accuracy.
+ */
+interface PdfTextItem { text: string; x: number; y: number; w: number; h: number }
+
+interface PdfRenderResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+  pageCount: number;
+  /**
+   * Word-level text positions extracted from the same page, in normalised
+   * image coordinates. Empty when the PDF page has no extractable vector
+   * text (e.g. scanned-image-only PDFs).
+   */
+  textItems: PdfTextItem[];
+}
 
 async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<PdfRenderResult> {
   const pdfjs = await import("pdfjs-dist");
@@ -31,12 +50,16 @@ async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<P
   const safePage = Math.min(Math.max(1, pageNumber), pdf.numPages);
   const page = await pdf.getPage(safePage);
 
-  // Pick a render scale that lands near 1600px on the longer edge,
-  // matching what the rest of the editor uses.
+  // Render PDFs at ~2400px long edge so the server's grid pipeline can
+  // separate the small plot rectangles in dense vector plans (a 60×30 pdf
+  // plot drops to ~10×5px at 1600px and stops being separable). Raster
+  // image uploads keep their existing 1600px target — they're processed
+  // by the colour-section pipeline which is happy at lower res. The 2400
+  // JPEG lands around 700-900 KB, well under the 12 MB body limit.
   const baseViewport = page.getViewport({ scale: 1 });
   const longEdge = Math.max(baseViewport.width, baseViewport.height);
-  const targetLongEdge = 1600;
-  const scale = Math.max(0.5, Math.min(3, targetLongEdge / longEdge));
+  const targetLongEdge = 2400;
+  const scale = Math.max(0.5, Math.min(4, targetLongEdge / longEdge));
   const viewport = page.getViewport({ scale });
 
   const canvas = document.createElement("canvas");
@@ -50,11 +73,50 @@ async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<P
 
   await page.render({ canvasContext: ctx, viewport }).promise;
 
+  // Extract vector text + positions from the same page. PDF user space has
+  // Y going UP from the bottom; pdfjs gives us the text baseline origin in
+  // PDF space (tx[4], tx[5]) and a `width` in the same space. We normalise
+  // to [0..1] using the base (scale=1) viewport — the rendering scale
+  // cancels, so the same numbers map 1:1 onto the rendered image.
+  const textItems: PdfTextItem[] = [];
+  try {
+    const content = await page.getTextContent();
+    const pdfW = baseViewport.width;
+    const pdfH = baseViewport.height;
+    for (const it of content.items) {
+      // Skip TextMarkedContent items (no .str, no .transform).
+      if (!("str" in it) || !("transform" in it)) continue;
+      const text = it.str;
+      if (!text || !text.trim()) continue;
+      const tx = it.transform;
+      // tx = [a, b, c, d, e, f] — a/d are the font size when there's no
+      // rotation/skew, which is the case for the cemetery PDFs we ingest.
+      const fontSize = Math.abs(tx[3] || tx[0]) || 12;
+      const xPdf = tx[4];
+      const yBaseline = tx[5];
+      // Image-space top-of-glyph: flip y, subtract one font size to go from
+      // baseline up to the top of the cap-height.
+      const yTop = pdfH - yBaseline - fontSize;
+      if (!Number.isFinite(xPdf) || !Number.isFinite(yTop)) continue;
+      textItems.push({
+        text,
+        x: xPdf / pdfW,
+        y: yTop / pdfH,
+        w: it.width / pdfW,
+        h: fontSize / pdfH,
+      });
+    }
+  } catch {
+    // Some PDFs (scanned images) have no extractable text — that's fine,
+    // the server will fall back to colour-section detection.
+  }
+
   return {
     dataUrl: canvas.toDataURL("image/jpeg", 0.9),
     width: canvas.width,
     height: canvas.height,
     pageCount: pdf.numPages,
+    textItems,
   };
 }
 
@@ -110,6 +172,13 @@ export default function AiMapMaker() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfPage, setPdfPage] = useState(1);
+  /**
+   * Cached vector-text positions for the currently-rendered PDF page (empty
+   * for non-PDF sources or scanned-image PDFs). Sent alongside the image to
+   * the server so the grid-detection pipeline can label each plot rectangle
+   * with the names / dates printed inside it.
+   */
+  const [pdfTextItems, setPdfTextItems] = useState<PdfTextItem[]>([]);
   const [isRendering, setIsRendering] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
@@ -131,6 +200,7 @@ export default function AiMapMaker() {
     setPdfFile(null);
     setPdfPageCount(0);
     setPdfPage(1);
+    setPdfTextItems([]);
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "AI imported map";
     setMapName(baseName);
@@ -149,10 +219,12 @@ export default function AiMapMaker() {
         const pdf = await renderPdfPageToDataUrl(file, 1);
         setPdfPageCount(pdf.pageCount);
         setPdfPage(1);
-        // Downscale to keep the AI payload reasonable (~<5 MB base64).
-        const scaled = await downscaleImage(pdf.dataUrl, 1600);
+        setPdfTextItems(pdf.textItems);
+        // Keep the PDF render at full ~2400px — the server's grid pipeline
+        // needs the resolution to separate adjacent plots. (For raster
+        // images we still downscale to 1600px below.)
         setSource({
-          dataUrl: scaled.data, width: scaled.width, height: scaled.height,
+          dataUrl: pdf.dataUrl, width: pdf.width, height: pdf.height,
           baseName, origin: pdf.pageCount > 1 ? `PDF page 1 / ${pdf.pageCount}` : "PDF",
         });
       } else {
@@ -211,12 +283,12 @@ export default function AiMapMaker() {
     setResult(null);
     try {
       const pdf = await renderPdfPageToDataUrl(pdfFile, pageNum);
-      const scaled = await downscaleImage(pdf.dataUrl, 1600);
       setSource((s) => s
-        ? { ...s, dataUrl: scaled.data, width: scaled.width, height: scaled.height,
+        ? { ...s, dataUrl: pdf.dataUrl, width: pdf.width, height: pdf.height,
             origin: pdf.pageCount > 1 ? `PDF page ${pageNum} / ${pdf.pageCount}` : "PDF" }
         : s);
       setPdfPage(pageNum);
+      setPdfTextItems(pdf.textItems);
     } catch (err) {
       setError(`Couldn't render that PDF page: ${err instanceof Error ? err.message : "unknown error"}`);
     } finally {
@@ -242,6 +314,10 @@ export default function AiMapMaker() {
           imgHeight: source.height,
           plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
           spotTypes: spotTypes.map((t) => ({ id: t.id, name: t.name })),
+          // When the source is a vector PDF, ship the extracted text
+          // positions so the server can run grid-mode detection and produce
+          // pixel-perfect labelled plots (no Claude vision call needed).
+          ...(pdfTextItems.length > 0 ? { pdfText: pdfTextItems } : {}),
         }),
       });
       if (!res.ok) {
@@ -256,7 +332,7 @@ export default function AiMapMaker() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [source, plotTypes, spotTypes]);
+  }, [source, plotTypes, spotTypes, pdfTextItems]);
 
   // ---- Hand off to the regular Map Maker ----
   const openInMapMaker = useCallback(() => {
@@ -419,7 +495,7 @@ export default function AiMapMaker() {
                 <span className="text-sm text-muted-foreground">{source.width} × {source.height}px</span>
                 <span className="text-sm font-medium">{source.baseName}</span>
                 <div className="flex-1" />
-                <Button variant="ghost" size="sm" onClick={() => { setSource(null); setPdfFile(null); setResult(null); setError(null); }} data-testid="btn-remove-source">
+                <Button variant="ghost" size="sm" onClick={() => { setSource(null); setPdfFile(null); setPdfTextItems([]); setResult(null); setError(null); }} data-testid="btn-remove-source">
                   <X className="h-4 w-4 mr-1.5" /> Remove
                 </Button>
               </div>
