@@ -3,6 +3,7 @@ import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, F
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -116,7 +117,11 @@ function SidebarContent() {
         </nav>
       </div>
 
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+        <div className="flex items-center justify-between px-3">
+          <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50 font-semibold">Appearance</span>
+          <ThemeToggle variant="sidebar" />
+        </div>
         <a
           href="/sign-in/cemetery"
           data-testid="b2b-sign-out"

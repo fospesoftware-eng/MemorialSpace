@@ -3,6 +3,7 @@ import { LayoutDashboard, Heart, ShoppingBag, MessageSquare, Bookmark, Settings,
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -64,7 +65,11 @@ function SidebarContent() {
         ))}
       </nav>
 
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+        <div className="flex items-center justify-between px-3">
+          <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50 font-semibold">Appearance</span>
+          <ThemeToggle variant="sidebar" />
+        </div>
         <a
           href="/sign-in/family"
           data-testid="customer-sign-out"

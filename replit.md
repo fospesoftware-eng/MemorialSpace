@@ -54,3 +54,5 @@ Three themed sign-in pages share `SignInForm` (theme: green/rose/gold), each red
 ### Theming
 
 Premium dark green (deep forest greens + near-black). Gold accent `#d4a843` is reserved for the admin surface (Super Admin branding) and select marketing accents.
+
+Both light and dark color palettes are defined in `index.css` (`:root` and `.dark`). The `ThemeProvider` in `App.tsx` toggles a class on `<html>` and persists choice to `localStorage` (`memorial-space-theme`). A compact `<ThemeToggle variant="sidebar" />` component (Sun / Monitor / Moon) is mounted in all three dashboard sidebars (`b2b-layout`, `customer-layout`, `admin-layout`) above Sign Out. The sidebar itself uses dedicated `--sidebar-*` tokens that stay dark in both themes — only the main content area / cards / charts / inputs swap palettes.

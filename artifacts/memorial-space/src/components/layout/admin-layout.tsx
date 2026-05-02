@@ -3,6 +3,7 @@ import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Shi
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -58,10 +59,14 @@ function SidebarContent() {
         ))}
       </nav>
 
-      <div className="px-4 py-4 border-t border-sidebar-border">
-        <div className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/5 p-3 mb-3">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+        <div className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/5 p-3">
           <p className="text-xs text-[#d4a843] font-semibold uppercase tracking-wider">Production</p>
           <p className="text-xs text-sidebar-foreground/70 mt-1">Operating since 2021</p>
+        </div>
+        <div className="flex items-center justify-between px-3">
+          <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50 font-semibold">Appearance</span>
+          <ThemeToggle variant="sidebar" />
         </div>
         <a
           href="/sign-in/admin"
