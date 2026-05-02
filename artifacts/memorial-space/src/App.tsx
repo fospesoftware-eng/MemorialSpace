@@ -13,6 +13,7 @@ import { SaasMarketingLayout } from "@/components/layout/saas-marketing-layout";
 
 // SaaS marketing
 import SaasHome from "@/pages/marketing/saas-home";
+import DemoCredentials from "@/pages/marketing/demo";
 
 // B2B (cemetery client)
 import Dashboard from "@/pages/b2b/dashboard";
@@ -123,12 +124,8 @@ function AdminRoutes() {
   );
 }
 
-function SaasMarketingRoutes() {
-  return (
-    <SaasMarketingLayout>
-      <SaasHome />
-    </SaasMarketingLayout>
-  );
+function SaasMarketingRoutes({ children }: { children: React.ReactNode }) {
+  return <SaasMarketingLayout>{children}</SaasMarketingLayout>;
 }
 
 function Router() {
@@ -138,7 +135,12 @@ function Router() {
       <Route path="/account" nest><CustomerRoutes /></Route>
       <Route path="/admin" nest><AdminRoutes /></Route>
       <Route path="/app" nest><B2BRoutes /></Route>
-      <Route path="/" component={SaasMarketingRoutes} />
+      <Route path="/demo">
+        <SaasMarketingRoutes><DemoCredentials /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/">
+        <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

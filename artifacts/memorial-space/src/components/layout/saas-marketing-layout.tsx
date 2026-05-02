@@ -11,6 +11,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
     { href: "/#pricing", label: "Pricing" },
     { href: "/#testimonials", label: "Customers" },
     { href: "/find", label: "Find a Loved One" },
+    { href: "/demo", label: "Demo Access" },
   ];
 
   return (
@@ -94,6 +95,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
                 <li><Link href="/#features" className="hover:text-foreground">Features</Link></li>
                 <li><Link href="/#pricing" className="hover:text-foreground">Pricing</Link></li>
                 <li><Link href="/find" className="hover:text-foreground">Family Portal</Link></li>
+                <li><Link href="/demo" className="hover:text-foreground">Demo Access</Link></li>
               </ul>
             </div>
             <div>
