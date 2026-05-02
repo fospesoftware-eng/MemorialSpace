@@ -20,6 +20,7 @@ import taxRatesRouter from "./taxRates";
 import invoicesRouter from "./invoices";
 import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
+import cemeterySitesRouter from "./cemeterySites";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(taxRatesRouter);
 router.use(invoicesRouter);
 router.use(paymentsRouter);
 router.use(accountingRouter);
+router.use(cemeterySitesRouter);
 
 export default router;

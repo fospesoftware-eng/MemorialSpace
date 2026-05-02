@@ -36,6 +36,8 @@ import Memorials from "@/pages/b2b/memorials";
 import Obituaries from "@/pages/b2b/obituaries";
 import QrCodes from "@/pages/b2b/qr-codes";
 import Marketplace from "@/pages/b2b/marketplace";
+import SiteBuilder from "@/pages/b2b/site-builder";
+import { CemeterySiteRoutes } from "@/pages/cemetery-site";
 import AccountingOverview from "@/pages/b2b/accounting/overview";
 import AccountingCustomers from "@/pages/b2b/accounting/customers";
 import AccountingTaxRates from "@/pages/b2b/accounting/tax-rates";
@@ -96,6 +98,7 @@ function B2BRoutes() {
         <Route path="/obituaries" component={Obituaries} />
         <Route path="/qr-codes" component={QrCodes} />
         <Route path="/marketplace" component={Marketplace} />
+        <Route path="/site-builder" component={SiteBuilder} />
         <Route path="/accounting" component={AccountingOverview} />
         <Route path="/accounting/customers" component={AccountingCustomers} />
         <Route path="/accounting/tax-rates" component={AccountingTaxRates} />
@@ -178,6 +181,9 @@ function Router() {
       <Route path="/sign-in/admin" component={SignInAdmin} />
 
       <Route path="/find" nest><PublicRoutes /></Route>
+      <Route path="/c/:slug" nest>
+        {(params) => <CemeterySiteRoutes slug={String(params.slug)} />}
+      </Route>
       <Route path="/account" nest><CustomerRoutes /></Route>
       <Route path="/admin" nest><AdminRoutes /></Route>
       <Route path="/app" nest><B2BRoutes /></Route>
