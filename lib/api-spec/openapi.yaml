@@ -34,6 +34,16 @@ tags:
     description: Dashboard analytics and summaries
   - name: public
     description: Public-facing APIs (grave search, map data)
+  - name: customers
+    description: Accounting customer (payer) records
+  - name: tax-rates
+    description: Configurable tax rates per organization
+  - name: invoices
+    description: Invoices, line items, and lifecycle actions
+  - name: payments
+    description: Payments recorded against invoices
+  - name: accounting
+    description: Accounts-receivable summary and reports
 
 paths:
   /healthz:
@@ -1147,6 +1157,445 @@ paths:
               schema:
                 $ref: "#/components/schemas/PlotStatusBreakdown"
 
+  # ─── CUSTOMERS ───────────────────────────────────────────────────────────────
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerBody"
+      responses:
+        "201":
+          description: Created customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerBody"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TAX RATES ───────────────────────────────────────────────────────────────
+
+  /tax-rates:
+    get:
+      operationId: listTaxRates
+      tags: [tax-rates]
+      summary: List tax rates for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: includeArchived
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of tax rates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxRate"
+    post:
+      operationId: createTaxRate
+      tags: [tax-rates]
+      summary: Create a tax rate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaxRateBody"
+      responses:
+        "201":
+          description: Created tax rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRate"
+
+  /tax-rates/{id}:
+    put:
+      operationId: updateTaxRate
+      tags: [tax-rates]
+      summary: Update a tax rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaxRateBody"
+      responses:
+        "200":
+          description: Updated tax rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRate"
+    delete:
+      operationId: deleteTaxRate
+      tags: [tax-rates]
+      summary: Delete (or archive) a tax rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── INVOICES ────────────────────────────────────────────────────────────────
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List invoices for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, issued, partially_paid, paid, voided]
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of invoices (includes customer summary)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceListItem"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create a draft invoice with line items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get invoice with line items, payments, and customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDetail"
+    put:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update a draft invoice (header + line items)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete a draft invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /invoices/{id}/issue:
+    post:
+      operationId: issueInvoice
+      tags: [invoices]
+      summary: Issue (finalize) a draft invoice — assigns invoice number
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Issued invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+
+  /invoices/{id}/void:
+    post:
+      operationId: voidInvoice
+      tags: [invoices]
+      summary: Void an invoice (terminal)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Voided invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceWithItems"
+
+  # ─── PAYMENTS ────────────────────────────────────────────────────────────────
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: invoiceId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Record a payment against an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentBody"
+      responses:
+        "201":
+          description: Created payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}:
+    delete:
+      operationId: deletePayment
+      tags: [payments]
+      summary: Delete a payment (recomputes parent invoice)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── ACCOUNTING SUMMARY ──────────────────────────────────────────────────────
+
+  /accounting/summary:
+    get:
+      operationId: getAccountingSummary
+      tags: [accounting]
+      summary: AR summary + aging buckets for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Accounting summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountingSummary"
+
   # ─── PUBLIC APIs ─────────────────────────────────────────────────────────────
 
   /public/search:
@@ -2050,3 +2499,398 @@ components:
         - burial
         - plot
         - organization
+
+    # ─── ACCOUNTING SCHEMAS ──────────────────────────────────────────────────
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        addressLine1:
+          type: ["string", "null"]
+        addressLine2:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        postalCode:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - name
+        - createdAt
+        - updatedAt
+
+    CreateCustomerBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        addressLine1:
+          type: ["string", "null"]
+        addressLine2:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        postalCode:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - organizationId
+        - name
+
+    TaxRate:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        name:
+          type: string
+        ratePercent:
+          type: number
+        isDefault:
+          type: boolean
+        isArchived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - name
+        - ratePercent
+        - isDefault
+        - isArchived
+        - createdAt
+        - updatedAt
+
+    CreateTaxRateBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        name:
+          type: string
+        ratePercent:
+          type: number
+        isDefault:
+          type: boolean
+        isArchived:
+          type: boolean
+      required:
+        - organizationId
+        - name
+        - ratePercent
+
+    InvoiceItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        taxRateId:
+          type: ["integer", "null"]
+        lineSubtotal:
+          type: number
+        lineTax:
+          type: number
+        lineTotal:
+          type: number
+        position:
+          type: integer
+      required:
+        - id
+        - invoiceId
+        - description
+        - quantity
+        - unitPrice
+        - lineSubtotal
+        - lineTax
+        - lineTotal
+        - position
+
+    InvoiceItemInput:
+      type: object
+      properties:
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        taxRateId:
+          type: ["integer", "null"]
+      required:
+        - description
+        - quantity
+        - unitPrice
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        customerId:
+          type: integer
+        bookingId:
+          type: ["integer", "null"]
+        invoiceNumber:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, issued, partially_paid, paid, voided]
+        issueDate:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        total:
+          type: number
+        amountPaid:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - customerId
+        - status
+        - subtotal
+        - taxTotal
+        - total
+        - amountPaid
+        - createdAt
+        - updatedAt
+
+    InvoiceListItem:
+      allOf:
+        - $ref: "#/components/schemas/Invoice"
+        - type: object
+          properties:
+            customerName:
+              type: string
+            balanceDue:
+              type: number
+          required:
+            - customerName
+            - balanceDue
+
+    InvoiceWithItems:
+      allOf:
+        - $ref: "#/components/schemas/Invoice"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/InvoiceItem"
+          required:
+            - items
+
+    InvoiceDetail:
+      allOf:
+        - $ref: "#/components/schemas/Invoice"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/InvoiceItem"
+            payments:
+              type: array
+              items:
+                $ref: "#/components/schemas/Payment"
+            customer:
+              $ref: "#/components/schemas/Customer"
+            balanceDue:
+              type: number
+          required:
+            - items
+            - payments
+            - customer
+            - balanceDue
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        customerId:
+          type: integer
+        bookingId:
+          type: ["integer", "null"]
+        issueDate:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItemInput"
+      required:
+        - organizationId
+        - customerId
+        - items
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        invoiceId:
+          type: integer
+        amount:
+          type: number
+        paymentDate:
+          type: string
+        method:
+          type: string
+          enum: [cash, check, card, bank_transfer, other]
+        reference:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - invoiceId
+        - amount
+        - paymentDate
+        - method
+        - createdAt
+
+    CreatePaymentBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        invoiceId:
+          type: integer
+        amount:
+          type: number
+        paymentDate:
+          type: string
+        method:
+          type: string
+          enum: [cash, check, card, bank_transfer, other]
+        reference:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - organizationId
+        - invoiceId
+        - amount
+        - paymentDate
+        - method
+
+    AccountingAgingBucket:
+      type: object
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+        amount:
+          type: number
+      required:
+        - label
+        - count
+        - amount
+
+    AccountingSummary:
+      type: object
+      properties:
+        totalOutstanding:
+          type: number
+        totalOverdue:
+          type: number
+        paidThisMonth:
+          type: number
+        invoicedThisMonth:
+          type: number
+        draftCount:
+          type: integer
+        issuedCount:
+          type: integer
+        overdueCount:
+          type: integer
+        paidCount:
+          type: integer
+        aging:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountingAgingBucket"
+      required:
+        - totalOutstanding
+        - totalOverdue
+        - paidThisMonth
+        - invoicedThisMonth
+        - draftCount
+        - issuedCount
+        - overdueCount
+        - paidCount
+        - aging

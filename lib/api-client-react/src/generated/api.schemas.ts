@@ -574,6 +574,224 @@ export interface GraveSearchResult {
   memorial?: Memorial;
 }
 
+export interface Customer {
+  id: number;
+  organizationId: number;
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  addressLine1?: string | null;
+  /** @nullable */
+  addressLine2?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCustomerBody {
+  organizationId: number;
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  addressLine1?: string | null;
+  /** @nullable */
+  addressLine2?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface TaxRate {
+  id: number;
+  organizationId: number;
+  name: string;
+  ratePercent: number;
+  isDefault: boolean;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaxRateBody {
+  organizationId: number;
+  name: string;
+  ratePercent: number;
+  isDefault?: boolean;
+  isArchived?: boolean;
+}
+
+export interface InvoiceItem {
+  id: number;
+  invoiceId: number;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  /** @nullable */
+  taxRateId?: number | null;
+  lineSubtotal: number;
+  lineTax: number;
+  lineTotal: number;
+  position: number;
+}
+
+export interface InvoiceItemInput {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  /** @nullable */
+  taxRateId?: number | null;
+}
+
+export type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
+
+export const InvoiceStatus = {
+  draft: "draft",
+  issued: "issued",
+  partially_paid: "partially_paid",
+  paid: "paid",
+  voided: "voided",
+} as const;
+
+export interface Invoice {
+  id: number;
+  organizationId: number;
+  customerId: number;
+  /** @nullable */
+  bookingId?: number | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  status: InvoiceStatus;
+  /** @nullable */
+  issueDate?: string | null;
+  /** @nullable */
+  dueDate?: string | null;
+  subtotal: number;
+  taxTotal: number;
+  total: number;
+  amountPaid: number;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type InvoiceListItem = Invoice & {
+  customerName: string;
+  balanceDue: number;
+};
+
+export type InvoiceWithItems = Invoice & {
+  items: InvoiceItem[];
+};
+
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+
+export const PaymentMethod = {
+  cash: "cash",
+  check: "check",
+  card: "card",
+  bank_transfer: "bank_transfer",
+  other: "other",
+} as const;
+
+export interface Payment {
+  id: number;
+  organizationId: number;
+  invoiceId: number;
+  amount: number;
+  paymentDate: string;
+  method: PaymentMethod;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export type InvoiceDetail = Invoice & {
+  items: InvoiceItem[];
+  payments: Payment[];
+  customer: Customer;
+  balanceDue: number;
+};
+
+export interface CreateInvoiceBody {
+  organizationId: number;
+  customerId: number;
+  /** @nullable */
+  bookingId?: number | null;
+  /** @nullable */
+  issueDate?: string | null;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  items: InvoiceItemInput[];
+}
+
+export type CreatePaymentBodyMethod =
+  (typeof CreatePaymentBodyMethod)[keyof typeof CreatePaymentBodyMethod];
+
+export const CreatePaymentBodyMethod = {
+  cash: "cash",
+  check: "check",
+  card: "card",
+  bank_transfer: "bank_transfer",
+  other: "other",
+} as const;
+
+export interface CreatePaymentBody {
+  organizationId: number;
+  invoiceId: number;
+  amount: number;
+  paymentDate: string;
+  method: CreatePaymentBodyMethod;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface AccountingAgingBucket {
+  label: string;
+  count: number;
+  amount: number;
+}
+
+export interface AccountingSummary {
+  totalOutstanding: number;
+  totalOverdue: number;
+  paidThisMonth: number;
+  invoicedThisMonth: number;
+  draftCount: number;
+  issuedCount: number;
+  overdueCount: number;
+  paidCount: number;
+  aging: AccountingAgingBucket[];
+}
+
 export type ListUsersParams = {
   organizationId?: number;
 };
@@ -659,6 +877,74 @@ export const ListProductsCategory = {
 
 export type ListOrdersParams = {
   customerId?: number;
+};
+
+export type ListCustomersParams = {
+  organizationId?: number;
+  search?: string;
+};
+
+export type GetCustomerParams = {
+  organizationId: number;
+};
+
+export type DeleteCustomerParams = {
+  organizationId: number;
+};
+
+export type ListTaxRatesParams = {
+  organizationId?: number;
+  includeArchived?: boolean;
+};
+
+export type DeleteTaxRateParams = {
+  organizationId: number;
+};
+
+export type ListInvoicesParams = {
+  organizationId?: number;
+  status?: ListInvoicesStatus;
+  customerId?: number;
+};
+
+export type ListInvoicesStatus =
+  (typeof ListInvoicesStatus)[keyof typeof ListInvoicesStatus];
+
+export const ListInvoicesStatus = {
+  draft: "draft",
+  issued: "issued",
+  partially_paid: "partially_paid",
+  paid: "paid",
+  voided: "voided",
+} as const;
+
+export type GetInvoiceParams = {
+  organizationId: number;
+};
+
+export type DeleteInvoiceParams = {
+  organizationId: number;
+};
+
+export type IssueInvoiceParams = {
+  organizationId: number;
+};
+
+export type VoidInvoiceParams = {
+  organizationId: number;
+};
+
+export type ListPaymentsParams = {
+  organizationId?: number;
+  invoiceId?: number;
+};
+
+export type DeletePaymentParams = {
+  organizationId: number;
+};
+
+export type GetAccountingSummaryParams = {
+  organizationId: number;
 };
 
 export type PublicGraveSearchParams = {

@@ -9,3 +9,8 @@ export * from "./qrCodes";
 export * from "./obituaries";
 export * from "./marketplace";
 export * from "./columbaria";
+export * from "./customers";
+export * from "./taxRates";
+export * from "./invoices";
+export * from "./invoiceItems";
+export * from "./payments";

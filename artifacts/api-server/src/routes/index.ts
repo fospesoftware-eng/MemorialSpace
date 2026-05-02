@@ -14,6 +14,11 @@ import dashboardRouter from "./dashboard";
 import publicApiRouter from "./publicApi";
 import aiMapRouter from "./aiMap";
 import columbariaRouter from "./columbaria";
+import customersRouter from "./customers";
+import taxRatesRouter from "./taxRates";
+import invoicesRouter from "./invoices";
+import paymentsRouter from "./payments";
+import accountingRouter from "./accounting";
 
 const router: IRouter = Router();
 
@@ -32,5 +37,10 @@ router.use(dashboardRouter);
 router.use(publicApiRouter);
 router.use(aiMapRouter);
 router.use(columbariaRouter);
+router.use(customersRouter);
+router.use(taxRatesRouter);
+router.use(invoicesRouter);
+router.use(paymentsRouter);
+router.use(accountingRouter);
 
 export default router;

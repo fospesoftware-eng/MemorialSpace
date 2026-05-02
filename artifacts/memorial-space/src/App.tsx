@@ -35,6 +35,12 @@ import Memorials from "@/pages/b2b/memorials";
 import Obituaries from "@/pages/b2b/obituaries";
 import QrCodes from "@/pages/b2b/qr-codes";
 import Marketplace from "@/pages/b2b/marketplace";
+import AccountingOverview from "@/pages/b2b/accounting/overview";
+import AccountingCustomers from "@/pages/b2b/accounting/customers";
+import AccountingTaxRates from "@/pages/b2b/accounting/tax-rates";
+import AccountingInvoicesList from "@/pages/b2b/accounting/invoices-list";
+import AccountingInvoiceEdit from "@/pages/b2b/accounting/invoice-edit";
+import AccountingInvoiceDetail from "@/pages/b2b/accounting/invoice-detail";
 import Organizations from "@/pages/settings/organizations";
 import Users from "@/pages/settings/users";
 import Settings from "@/pages/settings/general";
@@ -87,6 +93,19 @@ function B2BRoutes() {
         <Route path="/obituaries" component={Obituaries} />
         <Route path="/qr-codes" component={QrCodes} />
         <Route path="/marketplace" component={Marketplace} />
+        <Route path="/accounting" component={AccountingOverview} />
+        <Route path="/accounting/customers" component={AccountingCustomers} />
+        <Route path="/accounting/tax-rates" component={AccountingTaxRates} />
+        <Route path="/accounting/invoices" component={AccountingInvoicesList} />
+        <Route path="/accounting/invoices/new">
+          <AccountingInvoiceEdit />
+        </Route>
+        <Route path="/accounting/invoices/:id/edit">
+          {(params) => <AccountingInvoiceEdit invoiceId={Number(params.id)} />}
+        </Route>
+        <Route path="/accounting/invoices/:id">
+          {(params) => <AccountingInvoiceDetail invoiceId={Number(params.id)} />}
+        </Route>
         <Route path="/organizations" component={Organizations} />
         <Route path="/users" component={Users} />
         <Route path="/settings" component={Settings} />

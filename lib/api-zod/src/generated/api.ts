@@ -1244,6 +1244,567 @@ export const GetPlotStatusBreakdownResponse = zod.object({
 });
 
 /**
+ * @summary List customers for an organization
+ */
+export const ListCustomersQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const ListCustomersResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
+
+/**
+ * @summary Create a customer
+ */
+export const CreateCustomerBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get customer by ID
+ */
+export const GetCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCustomerQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetCustomerResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a customer
+ */
+export const UpdateCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateCustomerBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateCustomerResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a customer
+ */
+export const DeleteCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteCustomerQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List tax rates for an organization
+ */
+export const ListTaxRatesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  includeArchived: zod.coerce.boolean().optional(),
+});
+
+export const ListTaxRatesResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean(),
+  isArchived: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListTaxRatesResponse = zod.array(ListTaxRatesResponseItem);
+
+/**
+ * @summary Create a tax rate
+ */
+export const CreateTaxRateBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean().optional(),
+  isArchived: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a tax rate
+ */
+export const UpdateTaxRateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateTaxRateBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean().optional(),
+  isArchived: zod.boolean().optional(),
+});
+
+export const UpdateTaxRateResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean(),
+  isArchived: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete (or archive) a tax rate
+ */
+export const DeleteTaxRateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteTaxRateQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List invoices for an organization
+ */
+export const ListInvoicesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  status: zod
+    .enum(["draft", "issued", "partially_paid", "paid", "voided"])
+    .optional(),
+  customerId: zod.coerce.number().optional(),
+});
+
+export const ListInvoicesResponseItem = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerName: zod.string(),
+      balanceDue: zod.number(),
+    }),
+  );
+export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem);
+
+/**
+ * @summary Create a draft invoice with line items
+ */
+export const CreateInvoiceBody = zod.object({
+  organizationId: zod.number(),
+  customerId: zod.number(),
+  bookingId: zod.number().nullish(),
+  issueDate: zod.string().nullish(),
+  dueDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      description: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      taxRateId: zod.number().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get invoice with line items, payments, and customer
+ */
+export const GetInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+      payments: zod.array(
+        zod.object({
+          id: zod.number(),
+          organizationId: zod.number(),
+          invoiceId: zod.number(),
+          amount: zod.number(),
+          paymentDate: zod.string(),
+          method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+          reference: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+      customer: zod.object({
+        id: zod.number(),
+        organizationId: zod.number(),
+        name: zod.string(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        addressLine1: zod.string().nullish(),
+        addressLine2: zod.string().nullish(),
+        city: zod.string().nullish(),
+        state: zod.string().nullish(),
+        postalCode: zod.string().nullish(),
+        country: zod.string().nullish(),
+        notes: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+      balanceDue: zod.number(),
+    }),
+  );
+
+/**
+ * @summary Update a draft invoice (header + line items)
+ */
+export const UpdateInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateInvoiceBody = zod.object({
+  organizationId: zod.number(),
+  customerId: zod.number(),
+  bookingId: zod.number().nullish(),
+  issueDate: zod.string().nullish(),
+  dueDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      description: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      taxRateId: zod.number().nullish(),
+    }),
+  ),
+});
+
+export const UpdateInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Delete a draft invoice
+ */
+export const DeleteInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary Issue (finalize) a draft invoice — assigns invoice number
+ */
+export const IssueInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const IssueInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const IssueInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Void an invoice (terminal)
+ */
+export const VoidInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const VoidInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const VoidInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary List payments
+ */
+export const ListPaymentsQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  invoiceId: zod.coerce.number().optional(),
+});
+
+export const ListPaymentsResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  invoiceId: zod.number(),
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem);
+
+/**
+ * @summary Record a payment against an invoice
+ */
+export const CreatePaymentBody = zod.object({
+  organizationId: zod.number(),
+  invoiceId: zod.number(),
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete a payment (recomputes parent invoice)
+ */
+export const DeletePaymentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeletePaymentQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary AR summary + aging buckets for an organization
+ */
+export const GetAccountingSummaryQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetAccountingSummaryResponse = zod.object({
+  totalOutstanding: zod.number(),
+  totalOverdue: zod.number(),
+  paidThisMonth: zod.number(),
+  invoicedThisMonth: zod.number(),
+  draftCount: zod.number(),
+  issuedCount: zod.number(),
+  overdueCount: zod.number(),
+  paidCount: zod.number(),
+  aging: zod.array(
+    zod.object({
+      label: zod.string(),
+      count: zod.number(),
+      amount: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Public grave search by name
  */
 export const PublicGraveSearchQueryParams = zod.object({

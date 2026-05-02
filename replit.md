@@ -56,6 +56,33 @@ The standalone Columbarium module (`/app/columbarium`) is a list-and-detail expe
 ### Cemetery Map (read-only view):
 The B2B `/map` page renders a grid of plots from `GET /api/plots/map/:orgId` and opens a Sheet on click. Beyond the plot facts (status badge, type, owner, price, notes), the Sheet **lazy-loads burial records** for the clicked plot via `useListBurials({ organizationId, plotId })` (gated on `enabled: selectedPlotId != null`, with an explicit `queryKey` from `getListBurialsQueryKey` to satisfy the generated UseQueryOptions type). Each burial card shows the deceased's photo (or an `ImageOff` placeholder), full name, DOB–DOD with computed age, religion badge, interment date, and notes — plus the plot/record IDs for traceability. Empty plots render a dashed "No burial records linked" state, loading shows two skeleton cards.
 
+### Accounting Module:
+A complete invoicing and accounts-receivable module under `/app/accounting/*`, scoped per organization, contract-first via OpenAPI + Orval codegen.
+- **Schema:** Five new Drizzle tables in `lib/db/src/schema/`:
+  - `customers` (org-scoped billing contacts: name, email, phone, address, notes)
+  - `taxRates` (org-scoped, `ratePercent: real`, `isDefault`, `isArchived` for soft-delete)
+  - `invoices` (`status: draft|issued|partially_paid|paid|voided`, `invoiceNumber: INV-YYYY-NNNN` allocated on issue, `subtotal/taxTotal/total/amountPaid: real`, `issueDate/dueDate/paidDate`, `notes`)
+  - `invoiceItems` (FK invoice cascade, `description`, `quantity`, `unitPrice`, optional `taxRateId` snapshotting `taxRatePercent` so historical lines stay correct if rates change later)
+  - `payments` (FK invoice cascade, `amount`, `paymentDate`, `method: cash|check|card|bank_transfer|other`, `reference`, `notes`)
+- **Money:** all amounts stored as `real` USD; quantities as `integer`. Server-authoritative totals — clients never trust their own math.
+- **API:** REST under `/api/{customers,tax-rates,invoices,payments,accounting}`. **Every endpoint is org-scoped**: list/by-id GETs and DELETEs require `?organizationId=` (returns 400 if missing), and every row lookup AND-filters on `organizationId` so a row in another org returns 404 rather than leaking. Create/update bodies require `organizationId` in the payload.
+  - Customers/tax-rates: list (with `?includeArchived` for tax rates), create, get, update, delete (tax-rate delete = archive). Customer delete cascades to that customer's invoices via `onDelete: 'cascade'` on `invoices.customer_id`.
+  - Invoices: list (with `?status=` filter), get-with-items+payments, create-draft, update-draft (only when `status=draft`), `POST /:id/issue` (allocates next `INV-YYYY-NNNN` and stamps `issueDate`), `POST /:id/void` (blocked on `draft`, `paid`, and already-`voided`). Cross-org tax-rate references are rejected with 400 (`TaxRateValidationError`) on both create and update by validating every referenced `taxRateId` belongs to the invoice's org via `inArray`.
+  - Payments: list `?invoiceId=`, create, delete. Each create/delete recomputes the parent invoice's `amountPaid` and transitions the status (`issued ↔ partially_paid ↔ paid`) and `paidDate` automatically.
+  - Accounting: `GET /accounting/summary` returns `{totalOutstanding, totalOverdue, paidThisMonth, invoicedThisMonth, draft/issued/paid/overdueCount, aging: [Current/1-30/31-60/61-90/90+]}` computed from open invoices vs `dueDate`.
+- **Server helpers:** `artifacts/api-server/src/lib/accounting.ts` centralizes `computeInvoiceTotals()` (sums lines + per-line tax to 2 decimals; throws `TaxRateValidationError` on cross-org tax rates), `generateInvoiceNumber()` (MAX-suffix scan of current-year `INV-YYYY-%`, padded 4-digit), `recomputeInvoicePayments()` (sum payments → derive status + paidDate), and `loadInvoiceWithItems()` (one query for nested response). All routes use `BodyType<>` from Orval-generated `@workspace/api-zod` schemas for input validation.
+- **Concurrency model for invoice issuing:** `POST /invoices/:id/issue` runs in a `db.transaction` and uses a status-guarded `UPDATE ... WHERE id=? AND organization_id=? AND status='draft' RETURNING *`. If the UPDATE matches 0 rows, a concurrent caller already issued the same invoice → return **409**. A unique index `invoices_org_invoice_number_unique` on `(organization_id, invoice_number)` plus a retry-on-23505 loop (max 8 attempts, recomputes the next number each time) handles the rarer race of two different drafts in the same org+year computing the same MAX+1.
+- **Frontend pages** (`artifacts/memorial-space/src/pages/b2b/accounting/`):
+  - `overview.tsx` — KPI cards (outstanding/overdue/paid this month/invoiced this month), AR aging buckets, recent-invoices table.
+  - `customers.tsx` — searchable table + Dialog form for create/edit; AlertDialog confirm on delete.
+  - `tax-rates.tsx` — table with active/archived states, Dialog form, default-rate switch; archive instead of delete.
+  - `invoices-list.tsx` — table with status filter and search.
+  - `invoice-edit.tsx` — full-page editor with line-item table (description/qty/unit price/tax rate select), live preview totals (server recomputes on save). Reused for new draft and edit-draft (gated by `?status=draft`).
+  - `invoice-detail.tsx` — printable invoice body (CSS `print:` utilities hide chrome) with status badge, customer block, item table, totals, balance due. Action bar: Print, Edit/Delete (drafts), Issue (drafts), Record Payment (issued/partially_paid), Void (issued+). Inline payment history with delete.
+- **Shared utilities:** `accounting/_shared.ts` exports `ORG_ID`, `formatMoney()`, `invoiceStatusBadgeClass()`, `invoiceStatusLabel()`.
+- **Sidebar:** New "Accounting" group in `b2b-layout.tsx` with Overview, Invoices, Customers, Tax Rates entries (icons: BarChart3, Receipt, UserSquare2, Percent).
+- **Smoke-tested end-to-end:** customer + tax-rate creation → 2-line invoice (sub $4,300, tax $58, total $4,358) → issue (`INV-2026-0001`) → partial payment $2,000 (status `partially_paid`) → final payment $2,358 (status `paid`, `paidDate` stamped) → AR summary reflects $4,358 paid this month.
+
 ### AI Map Maker:
 A sub-feature within the Map Maker that converts raster or vector cemetery maps into digital, clickable maps.
 - **Pipeline:**
