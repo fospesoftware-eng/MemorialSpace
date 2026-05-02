@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { Search, Award, BookOpen, ShoppingBag } from "lucide-react";
+import { Search, Award, BookOpen, ShoppingBag, LogOut, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -10,10 +11,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-6 md:gap-10">
-            <Link href="/" className="flex items-center space-x-2">
+            <a href="/" className="flex items-center space-x-2">
               <Award className="h-6 w-6 text-primary" />
               <span className="inline-block font-bold">MemorialSpace</span>
-            </Link>
+            </a>
             <nav className="hidden md:flex gap-6">
               <Link
                 href="/"
@@ -46,6 +47,20 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 Marketplace
               </Link>
             </nav>
+          </div>
+          <div className="hidden md:flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <a href="/account">
+                <User className="h-4 w-4 mr-1.5" />
+                My Account
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm" data-testid="public-sign-out">
+              <a href="/">
+                <LogOut className="h-4 w-4 mr-1.5" />
+                Sign Out
+              </a>
+            </Button>
           </div>
         </div>
       </header>

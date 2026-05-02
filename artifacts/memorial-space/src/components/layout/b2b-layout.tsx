@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Menu } from "lucide-react";
+import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Menu, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -46,11 +47,24 @@ function SidebarContent() {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-        <div className="flex items-center gap-2 text-primary">
+        <a href="/" className="flex items-center gap-2 text-primary">
           <Award className="h-6 w-6" />
           <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">MemorialSpace</span>
+        </a>
+      </div>
+
+      <div className="px-4 py-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-10 w-10 border border-primary/30">
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">RM</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-sidebar-foreground truncate">Riverside Memorial</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate">ops@riversidememorial.com</p>
+          </div>
         </div>
       </div>
+
       <div className="flex flex-1 flex-col overflow-y-auto py-4">
         <nav className="flex-1 space-y-6 px-4">
           <div>
@@ -100,6 +114,17 @@ function SidebarContent() {
             </div>
           ))}
         </nav>
+      </div>
+
+      <div className="px-4 py-4 border-t border-sidebar-border">
+        <a
+          href="/"
+          data-testid="b2b-sign-out"
+          className="flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          Sign Out
+        </a>
       </div>
     </div>
   );
