@@ -415,7 +415,9 @@ export default function MapMaker() {
   }, [selection, enterFullscreen]);
 
   // ----- Background image management -----
-  const setBackgroundFromDataUrl = async (dataUrl: string, sourceName: string) => {
+  // Returns true on success, false on failure. Caller should only show
+  // success feedback (e.g. "Loaded background…") when the result is true.
+  const setBackgroundFromDataUrl = async (dataUrl: string, sourceName: string): Promise<boolean> => {
     try {
       // Use a downscaled version for both rendering AND library storage to keep quota in check.
       const scaled = await downscaleImage(dataUrl, 1600);
@@ -432,9 +434,11 @@ export default function MapMaker() {
         };
         return [entry, ...filtered].slice(0, BACKGROUND_LIBRARY_LIMIT);
       });
+      return true;
     } catch {
       setSaveError("Couldn't process that image. Try a smaller file or a different format.");
       setTimeout(() => setSaveError(null), 6000);
+      return false;
     }
   };
 
@@ -442,14 +446,16 @@ export default function MapMaker() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    let dataUrl: string;
     try {
-      const dataUrl = await fileToDataUrl(file);
-      await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
-      flashStatus(`Loaded background: ${file.name}`);
+      dataUrl = await fileToDataUrl(file);
     } catch {
       setSaveError("Couldn't read that file.");
       setTimeout(() => setSaveError(null), 4000);
+      return;
     }
+    const ok = await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
+    if (ok) flashStatus(`Loaded background: ${file.name}`);
   };
 
   // Drag & drop image onto canvas
@@ -473,28 +479,52 @@ export default function MapMaker() {
       setTimeout(() => setSaveError(null), 4000);
       return;
     }
+    let dataUrl: string;
     try {
-      const dataUrl = await fileToDataUrl(file);
-      await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
-      flashStatus(`Loaded background: ${file.name}`);
+      dataUrl = await fileToDataUrl(file);
     } catch {
       setSaveError("Couldn't read the dropped file.");
       setTimeout(() => setSaveError(null), 4000);
+      return;
     }
+    const ok = await setBackgroundFromDataUrl(dataUrl, file.name.replace(/\.[^.]+$/, ""));
+    if (ok) flashStatus(`Loaded background: ${file.name}`);
   };
+
+  // Belt-and-braces: if a drag ends outside the canvas (e.g. the user lets go
+  // over the OS desktop), the canvas's `dragleave` may not fire. Listen on
+  // window so the visual drop overlay can't get stuck.
+  useEffect(() => {
+    const clear = () => setIsDragOver(false);
+    window.addEventListener("drop", clear);
+    window.addEventListener("dragend", clear);
+    return () => {
+      window.removeEventListener("drop", clear);
+      window.removeEventListener("dragend", clear);
+    };
+  }, []);
 
   const loadSample = async () => {
     try {
       const res = await fetch(SAMPLE_MAP_URL);
+      if (!res.ok) {
+        setSaveError(`Couldn't load the sample map (HTTP ${res.status}). Try uploading your own image instead.`);
+        setTimeout(() => setSaveError(null), 6000);
+        return;
+      }
       const blob = await res.blob();
       const dataUrl = await fileToDataUrl(new File([blob], "sample-cemetery.webp", { type: blob.type || "image/webp" }));
-      await setBackgroundFromDataUrl(dataUrl, "St. Woolos Cemetery (sample)");
+      const ok = await setBackgroundFromDataUrl(dataUrl, "St. Woolos Cemetery (sample)");
+      if (!ok) return;
       // Seed sample plots/spots if blank
       setDoc((d) => d.plots.length === 0 && d.spots.length === 0
         ? { ...d, name: "St. Woolos Cemetery — Sample", plots: SAMPLE_PLOTS(), spots: SAMPLE_SPOTS(), updatedAt: Date.now() }
         : d);
+      flashStatus("Loaded sample cemetery map");
     } catch (err) {
       console.error("Failed to load sample", err);
+      setSaveError("Couldn't load the sample map. Check your connection or upload your own image.");
+      setTimeout(() => setSaveError(null), 6000);
     }
   };
 

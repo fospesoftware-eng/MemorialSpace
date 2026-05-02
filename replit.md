@@ -68,17 +68,29 @@ All three lists are stored in localStorage keys `memorialspace.{plot-types,spot-
 
 ### Plot Map Maker (`/app/map-maker`)
 
-A full editor for cemetery operators. Single file: `pages/b2b/map-maker.tsx`. Reads plot/spot types and the background library from the shared registry above. Three tools:
+A truly fullscreen editor for cemetery operators. Single file: `pages/b2b/map-maker.tsx`. Reads plot/spot types and the background library from the shared registry above. Three tools:
 - **Select** (V) — click to select, drag to move, corner handle to resize.
 - **Plot** (R) — pick a plot type, drag on canvas to place a rectangular plot.
 - **Spot** (S) — pick a burial spot type, click to drop a pin with a lucide icon. Each spot has a full dossier panel: name, DOB, DOD (auto age calc), spot type, headstone image upload (downscaled to 400px), GPS lat/lon, map x/y readout, notes.
 
+Layout / chrome:
+- **Renders OUTSIDE the B2B layout.** `App.tsx` short-circuits the `B2BRoutes()` switch when `useLocation() === "/map-maker"` and renders `<MapMaker />` standalone. This bypasses the `lg:pl-72 max-w-7xl mx-auto` constraints from `B2BLayout` so the editor can fill the entire viewport.
+- Outer container is `fixed inset-0 z-40 flex flex-col bg-background` with a `rootRef` used by the browser Fullscreen API (`requestFullscreen` / `exitFullscreen`).
+- Top toolbar: Back button → /dashboard, left-panel toggle, map name, 2D/3D, zoom (with **Fit to screen**), visibility toggles, Export, Save, browser **Fullscreen** toggle (F hotkey), right-panel toggle.
+- Both side panels are collapsible. Collapsed = 48px icon-only mini-rail (Select/Plot/Spot tools, Upload, Sample, Settings on the left; Save/Export on the right). `ToolButton` accepts an `iconOnly` prop for the mini variant.
+
+Background images:
+- Upload via the file picker, drag-and-drop directly on the canvas (with a visible drop overlay), pick from the "Recent Backgrounds" thumbnail grid, or load the bundled sample at `public/sample-cemetery-map.webp`.
+- Uploads are downscaled to 1600px webp and auto-added to the library.
+- `setBackgroundFromDataUrl` returns `Promise<boolean>` so callers (`onUploadImage`, `onCanvasDrop`, `loadSample`) only show the "Loaded background" status toast on actual success — no false positives if `downscaleImage` fails.
+- `loadSample` checks `res.ok` and surfaces a user-visible error toast on HTTP/network failure (no silent `console.error`-only failure).
+
 Other features:
-- Background image: upload (downscaled to 1600px webp + auto-added to library) or load bundled sample at `public/sample-cemetery-map.webp`. A "Recent Backgrounds" thumbnail grid in the left sidebar lets operators reapply any saved background.
 - 2D / 3D view toggle — 3D applies `transform: rotateX(<tilt>deg)` with a tilt slider; pointer interaction disabled in 3D.
-- Zoom 25%–300%.
+- Zoom 10%–300%; **Fit to screen** computes a zoom that frames the current image inside `canvasWrapRef.current`'s client size minus 64px padding.
 - Save/load multiple named maps to localStorage under key prefix `memorialspace.map-maker:<slug>`. Export current map as JSON.
-- Hotkeys: V/R/S, Delete/Backspace, Esc.
+- Hotkeys: V/R/S (tools), Delete/Backspace (delete selection), Esc (deselect / exit fullscreen), **F** (toggle browser fullscreen).
+- Window-level `drop`/`dragend` listeners clear the drag overlay so it can't get stuck if a drag ends outside the canvas.
 
 Implementation notes:
 - Pointer math uses `svg.getScreenCTM().inverse()` so coordinates are in image-space regardless of zoom.
@@ -86,5 +98,6 @@ Implementation notes:
 - Lucide icons are rendered as nested `<svg>` children of the canvas SVG via `x/y/width/height` props.
 - `migrateDoc()` defensively normalizes legacy saved maps (old `type` → new `typeId`, invalid `status` → `available`, non-numeric coords → 0/undefined).
 - Background library writes are non-blocking; `backgroundsErr` from `useBackgrounds()` surfaces a toast if persistence fails.
+- Z-index layering: root `z-40`, empty-state `z-10`, drag overlay `z-20`, status toast `z-50`. Radix portals (toasts/dialogs) sit higher and remain reachable.
 
-Linked from `b2b-layout` nav: Cemetery Operations → Map Maker; Settings → Cemetery Setup.
+Linked from `b2b-layout` nav: Cemetery Operations → Map Maker; Settings → Cemetery Setup. The Back button in the top toolbar is the user's escape hatch back to the rest of the B2B app.
