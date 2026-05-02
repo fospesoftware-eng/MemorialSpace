@@ -5,7 +5,7 @@ import {
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
-  Spline,
+  Spline, Circle as CircleIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,12 +20,19 @@ import {
   usePlotTypes, useSpotTypes, useBackgrounds,
   SPOT_ICONS, FALLBACK_PLOT_TYPE, FALLBACK_SPOT_TYPE,
   STATUS_COLORS, BACKGROUND_LIBRARY_LIMIT, MAX_HEADSTONE_IMAGES,
-  type PlotType, type SpotType, type PlotStatus, type BurialSpot, type BackgroundEntry,
+  type PlotType, type PlotShape, type SpotType, type PlotStatus, type BurialSpot, type BackgroundEntry,
   newId, fileToDataUrl, downscaleImage, calcAge,
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "draw" | "path" | "spot" | "pan";
+type Tool = "select" | "draw" | "circle" | "path" | "spot" | "pan";
+
+/** Map a plot type's `defaultShape` to the canvas tool that draws it. */
+function shapeToTool(shape: PlotShape | undefined): Extract<Tool, "draw" | "circle" | "path"> {
+  if (shape === "circle") return "circle";
+  if (shape === "path") return "path";
+  return "draw";
+}
 type View = "2d" | "3d";
 
 /** Default stroke thickness for new path/road plots, in SVG units. */
@@ -61,6 +68,14 @@ interface Plot {
   pathPoints?: [number, number][];
   /** Stroke width (SVG units) for polyline plots. Defaults to DEFAULT_PATH_WIDTH. */
   pathWidth?: number;
+  /**
+   * Optional circle geometry. When present the plot renders as an SVG
+   * `<circle>`. Mutually exclusive with `points` and `pathPoints` (a plot
+   * is at most one of: path, circle, polygon, or plain rectangle). The
+   * bounding box (x/y/w/h) is kept in sync with the circle so the existing
+   * select / move handles still work.
+   */
+  circle?: { cx: number; cy: number; r: number };
 }
 
 interface MapDoc {
@@ -146,6 +161,21 @@ function migrateDoc(raw: unknown): MapDoc {
       const pathWidth = pathPoints
         ? Math.max(2, Math.min(60, safeOptNum((p as LegacyPlot & { pathWidth?: unknown }).pathWidth) ?? DEFAULT_PATH_WIDTH))
         : undefined;
+      // Circle geometry (optional). Coerce + validate cx/cy/r; clamp r so
+      // a poisoned doc can't load with a giant circle that swamps the map.
+      // Drop the field entirely if any required component is missing or
+      // non-positive — the editor stays on the rect/polygon/polyline path.
+      let circle: { cx: number; cy: number; r: number } | undefined;
+      const rawCircle = (p as LegacyPlot & { circle?: unknown }).circle;
+      if (rawCircle && typeof rawCircle === "object") {
+        const rc = rawCircle as { cx?: unknown; cy?: unknown; r?: unknown };
+        const cx = safeOptNum(rc.cx);
+        const cy = safeOptNum(rc.cy);
+        const r  = safeOptNum(rc.r);
+        if (cx !== undefined && cy !== undefined && r !== undefined && r > 0) {
+          circle = { cx, cy, r: Math.max(1, Math.min(2000, r)) };
+        }
+      }
       return {
         id: safeStr(p.id, newId("p")),
         typeId: safeStr(p.typeId ?? p.type, "_unknown"),
@@ -156,6 +186,7 @@ function migrateDoc(raw: unknown): MapDoc {
         points,
         pathPoints,
         pathWidth,
+        circle,
       };
     }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
@@ -227,7 +258,7 @@ export default function MapMaker() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
-  const dragState = useRef<{ mode: "create" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
+  const dragState = useRef<{ mode: "create" | "create-circle" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
   // ----- Path tool draft state -----
   // The Path tool builds up a polyline through discrete clicks (NOT a drag),
@@ -432,6 +463,25 @@ export default function MapMaker() {
       return;
     }
 
+    // Circle tool: drag from the press point (center) outward; the distance
+    // to the cursor defines the radius. Bounding box is kept as a square
+    // around the circle so the existing select/move handles still work.
+    // Same draft refs as the rect tool — only one draft can be active at a time.
+    if (tool === "circle" && !isPlotEl && !isResizeEl && !isSpotEl) {
+      if (!activePlotTypeId) return;
+      const id = newId("p");
+      const draft: Plot = {
+        id, typeId: activePlotTypeId, label: "", status: "available",
+        x, y, w: 0, h: 0,
+        circle: { cx: x, cy: y, r: 0 },
+      };
+      draftRectRef.current = draft;
+      setDraftRect(draft);
+      dragState.current = { mode: "create-circle", id, anchorX: x, anchorY: y };
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      return;
+    }
+
     // Path tool: each click adds a vertex to the in-progress polyline.
     // Double-click / Enter / Esc finishes; Backspace pops the last vertex.
     // We deliberately ignore plot/spot underlays so a road can pass over a
@@ -540,6 +590,18 @@ export default function MapMaker() {
       setDraftRect(next);
     }
 
+    if (ds.mode === "create-circle" && draftRectRef.current) {
+      const ax = ds.anchorX!, ay = ds.anchorY!;
+      const r = Math.hypot(x - ax, y - ay);
+      const next: Plot = {
+        ...draftRectRef.current,
+        x: ax - r, y: ay - r, w: r * 2, h: r * 2,
+        circle: { cx: ax, cy: ay, r },
+      };
+      draftRectRef.current = next;
+      setDraftRect(next);
+    }
+
     if (ds.mode === "move" && ds.id) {
       setDoc((d) => ({
         ...d,
@@ -547,13 +609,14 @@ export default function MapMaker() {
           if (p.id !== ds.id) return p;
           const nx = x - ds.offsetX!;
           const ny = y - ds.offsetY!;
-          // Translate the polygon outline AND the polyline path by the same
-          // delta so any rendered shape stays glued to the bounding box.
+          // Translate the polygon outline, polyline path, AND circle center
+          // by the same delta so any rendered shape stays glued to the box.
           const dx = nx - p.x;
           const dy = ny - p.y;
           const points = p.points ? p.points.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
           const pathPoints = p.pathPoints ? p.pathPoints.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
-          return { ...p, x: nx, y: ny, points, pathPoints };
+          const circle = p.circle ? { cx: p.circle.cx + dx, cy: p.circle.cy + dy, r: p.circle.r } : undefined;
+          return { ...p, x: nx, y: ny, points, pathPoints, circle };
         }),
       }));
     }
@@ -614,6 +677,23 @@ export default function MapMaker() {
           ...draftRectRef.current,
           x: Math.min(ax, x), y: Math.min(ay, y),
           w: finalW, h: finalH,
+        };
+        setDoc((d) => ({ ...d, plots: [...d.plots, finalPlot], updatedAt: Date.now() }));
+        setSelection({ kind: "plot", id: finalPlot.id });
+        setTool("select");
+      }
+    }
+    if (ds.mode === "create-circle" && viewRef.current === "2d") {
+      const { x, y } = toSvgPoint(e);
+      const ax = ds.anchorX!, ay = ds.anchorY!;
+      const r = Math.hypot(x - ax, y - ay);
+      // Same minimum size threshold as the rect tool — guards against
+      // accidental zero-radius circles from a stray click.
+      if (draftRectRef.current && r > 4) {
+        const finalPlot: Plot = {
+          ...draftRectRef.current,
+          x: ax - r, y: ay - r, w: r * 2, h: r * 2,
+          circle: { cx: ax, cy: ay, r },
         };
         setDoc((d) => ({ ...d, plots: [...d.plots, finalPlot], updatedAt: Date.now() }));
         setSelection({ kind: "plot", id: finalPlot.id });
@@ -752,6 +832,7 @@ export default function MapMaker() {
       const k = e.key.toLowerCase();
       if (k === "v") setTool("select");
       if (k === "r") setTool("draw");
+      if (k === "c") setTool("circle");
       if (k === "p") setTool("path");
       if (k === "s") setTool("spot");
       if (k === "h") setTool("pan");
@@ -1030,10 +1111,11 @@ export default function MapMaker() {
   }, [doc.plots, doc.spots]);
 
   const cursorClass =
-    tool === "draw" ? "cursor-crosshair" :
-    tool === "path" ? "cursor-crosshair" :
-    tool === "spot" ? "cursor-cell" :
-    tool === "pan"  ? "cursor-grab active:cursor-grabbing" :
+    tool === "draw"   ? "cursor-crosshair" :
+    tool === "circle" ? "cursor-crosshair" :
+    tool === "path"   ? "cursor-crosshair" :
+    tool === "spot"   ? "cursor-cell" :
+    tool === "pan"    ? "cursor-grab active:cursor-grabbing" :
     "cursor-default";
 
   // Fit-to-screen: compute zoom that fits the canvas inside the viewport.
@@ -1197,6 +1279,7 @@ export default function MapMaker() {
           <aside className="w-12 shrink-0 border-r border-border bg-card flex flex-col items-center py-2 gap-1">
             <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
             <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
+            <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle" testId="tool-circle-mini" iconOnly />
             <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path-mini" iconOnly />
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
             <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
@@ -1222,12 +1305,14 @@ export default function MapMaker() {
               <div className="grid grid-cols-2 gap-1">
                 <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select" />
                 <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw" />
+                <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle" testId="tool-circle" />
                 <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path" />
                 <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot" />
                 <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan" />
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 {tool === "draw"  && "Drag on the canvas to place a plot."}
+                {tool === "circle"&& "Drag from the center outward to define the radius."}
                 {tool === "path"  && "Click to place points along a path or road. Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
                 {tool === "spot"  && "Click on the canvas to drop a burial spot."}
                 {tool === "select"&& "Click an item to edit. Drag to move."}
@@ -1250,7 +1335,7 @@ export default function MapMaker() {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => { setActivePlotTypeId(t.id); setTool("draw"); }}
+                        onClick={() => { setActivePlotTypeId(t.id); setTool(shapeToTool(t.defaultShape)); }}
                         data-testid={`palette-plot-${t.code}`}
                         className={cn(
                           "w-full flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
@@ -1463,6 +1548,15 @@ export default function MapMaker() {
                         />
                       );
                     }
+                    if (p.circle) {
+                      return (
+                        <circle
+                          key={`shadow-${p.id}`}
+                          cx={p.circle.cx + 4} cy={p.circle.cy + 4} r={p.circle.r}
+                          fill="rgba(0,0,0,0.35)" pointerEvents="none"
+                        />
+                      );
+                    }
                     if (p.points && p.points.length >= 3) {
                       return (
                         <polygon
@@ -1483,14 +1577,16 @@ export default function MapMaker() {
                     // Show this plot's label when the global toggle is on,
                     // OR the user is hovering it, OR it's currently selected.
                     const showThisLabel = (showLabels || isHov || isSel) && p.w > 24 && p.h > 14;
-                    // Three render shapes, in priority order:
+                    // Four render shapes, in priority order:
                     //   1. Polyline (path/road) — `pathPoints` defines an open
                     //      stroked line; we render two stacked polylines so a
                     //      thin road still has a generously thick hit area.
-                    //   2. Polygon (typically AI-imported, non-rectangular).
-                    //   3. Plain axis-aligned rectangle.
+                    //   2. Circle — `circle` defines cx/cy/r.
+                    //   3. Polygon (typically AI-imported, non-rectangular).
+                    //   4. Plain axis-aligned rectangle.
                     const hasPath = p.pathPoints && p.pathPoints.length >= 2;
-                    const hasPolygon = !hasPath && p.points && p.points.length >= 3;
+                    const hasCircle = !hasPath && !!p.circle;
+                    const hasPolygon = !hasPath && !hasCircle && p.points && p.points.length >= 3;
                     const onPlotEnter = () => setHoveredPlotId(p.id);
                     const onPlotLeave = () => setHoveredPlotId((cur) => (cur === p.id ? null : cur));
                     return (
@@ -1539,6 +1635,20 @@ export default function MapMaker() {
                               />
                             )}
                           </>
+                        ) : hasCircle ? (
+                          <circle
+                            data-plot="true"
+                            data-plot-id={p.id}
+                            data-testid={`plot-${p.id}`}
+                            cx={p.circle!.cx} cy={p.circle!.cy} r={p.circle!.r}
+                            fill={meta.fill}
+                            fillOpacity={doc.image ? 0.85 : 1}
+                            stroke={isSel ? "#0ea5e9" : meta.stroke}
+                            strokeWidth={isSel ? 2.5 : 1}
+                            className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
+                          />
                         ) : hasPolygon ? (
                           <polygon
                             data-plot="true"
@@ -1606,8 +1716,9 @@ export default function MapMaker() {
                           );
                         })()}
                         {/* Resize handle — only meaningful for rect/polygon plots.
-                            Path plots edit their thickness via the inspector slider. */}
-                        {isSel && !hasPath && (
+                            Path plots edit thickness via the inspector slider,
+                            circles edit radius via the inspector slider. */}
+                        {isSel && !hasPath && !hasCircle && (
                           <rect
                             data-resize="true"
                             x={p.x + p.w - 5} y={p.y + p.h - 5}
@@ -1674,8 +1785,20 @@ export default function MapMaker() {
                     );
                   })}
 
-                  {/* Draft rectangle */}
-                  {draftRect && (
+                  {/* Draft rectangle / circle preview. The same draft ref is
+                      reused by both tools — branch on whether a circle is
+                      present so the preview matches the in-progress shape. */}
+                  {draftRect && (draftRect.circle ? (
+                    <circle
+                      cx={draftRect.circle.cx} cy={draftRect.circle.cy} r={draftRect.circle.r}
+                      fill={getPlotType(draftRect.typeId).fill}
+                      fillOpacity={0.5}
+                      stroke={getPlotType(draftRect.typeId).stroke}
+                      strokeDasharray="4 3"
+                      strokeWidth={1.5}
+                      pointerEvents="none"
+                    />
+                  ) : (
                     <rect
                       x={draftRect.x} y={draftRect.y}
                       width={draftRect.w} height={draftRect.h}
@@ -1686,7 +1809,7 @@ export default function MapMaker() {
                       strokeWidth={1.5}
                       pointerEvents="none"
                     />
-                  )}
+                  ))}
 
                   {/* Draft path preview — committed segments solid, the
                       "rubber band" segment from the last vertex to the cursor
@@ -1917,10 +2040,9 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
           </SelectContent>
         </Select>
       </div>
-      {/* Path plots edit their thickness via a slider; rect/polygon plots
-          keep the legacy bbox numeric inputs. The sliders below auto-recompute
-          the bounding box (with half-stroke padding) so move/select stay
-          accurate after a width change. */}
+      {/* Path plots edit their thickness via a slider, circles edit radius
+          via a slider, rect/polygon plots keep the legacy bbox numeric inputs.
+          Sliders auto-recompute the bounding box so move/select stay accurate. */}
       {plot.pathPoints && plot.pathPoints.length >= 2 ? (
         <div>
           <Label className="text-xs flex items-center justify-between">
@@ -1948,6 +2070,58 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
             data-testid="input-path-width"
           />
           <p className="text-[10px] text-muted-foreground mt-1">{plot.pathPoints.length} vertices · drag the path on the canvas to reposition it</p>
+        </div>
+      ) : plot.circle ? (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs flex items-center justify-between">
+              <span>Radius</span>
+              <span className="tabular-nums text-muted-foreground">{Math.round(plot.circle.r)} px</span>
+            </Label>
+            <Input
+              type="range"
+              min={4} max={2000} step={1}
+              value={Math.round(plot.circle.r)}
+              onChange={(e) => {
+                const r = Math.max(4, Math.min(2000, +e.target.value));
+                const c = plot.circle!;
+                onChange({
+                  circle: { cx: c.cx, cy: c.cy, r },
+                  x: c.cx - r, y: c.cy - r, w: r * 2, h: r * 2,
+                });
+              }}
+              className="h-8 cursor-ew-resize"
+              data-testid="input-circle-radius"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Center X</Label>
+              <Input
+                type="number"
+                value={Math.round(plot.circle.cx)}
+                onChange={(e) => {
+                  const cx = +e.target.value;
+                  const c = plot.circle!;
+                  onChange({ circle: { cx, cy: c.cy, r: c.r }, x: cx - c.r, y: c.cy - c.r, w: c.r * 2, h: c.r * 2 });
+                }}
+                className="h-8"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Center Y</Label>
+              <Input
+                type="number"
+                value={Math.round(plot.circle.cy)}
+                onChange={(e) => {
+                  const cy = +e.target.value;
+                  const c = plot.circle!;
+                  onChange({ circle: { cx: c.cx, cy, r: c.r }, x: c.cx - c.r, y: cy - c.r, w: c.r * 2, h: c.r * 2 });
+                }}
+                className="h-8"
+              />
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">

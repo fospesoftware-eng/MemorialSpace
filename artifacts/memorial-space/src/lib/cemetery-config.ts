@@ -2,6 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Cross, Star, Heart, Shield, Flower2, Flag, Award, Circle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+/**
+ * The geometry a plot type is drawn with by default. Users pick a shape
+ * per plot type in Cemetery Setup; clicking that type in the Map Maker's
+ * palette auto-switches the canvas tool to match.
+ *
+ *   - "rect"   — drag-to-create axis-aligned rectangle (the original behaviour)
+ *   - "circle" — drag-from-center to define radius
+ *   - "path"   — click-to-place flexible polyline (roads, paths, bridges)
+ *
+ * The user can still pick any tool manually from the toolbar; the default
+ * is purely a convenience for the most common shape per type.
+ */
+export type PlotShape = "rect" | "circle" | "path";
+
 export interface PlotType {
   id: string;
   code: string;
@@ -9,6 +23,12 @@ export interface PlotType {
   fill: string;
   stroke: string;
   description?: string;
+  /**
+   * Default drawing shape used when the user picks this type from the
+   * palette. Optional so older saved configs (which predate this field)
+   * keep working — the Map Maker treats `undefined` as "rect".
+   */
+  defaultShape?: PlotShape;
 }
 
 export type SpotIconKey = "cross" | "star" | "heart" | "shield" | "flower" | "flag" | "award" | "circle";
@@ -66,24 +86,24 @@ export interface BurialSpot {
 export const MAX_HEADSTONE_IMAGES = 8;
 
 export const DEFAULT_PLOT_TYPES: PlotType[] = [
-  // ---- Burial sections ----
-  { id: "RC",         code: "RC",   name: "Roman Catholic",  fill: "#a8d5d2", stroke: "#5a9290", description: "Catholic section" },
-  { id: "CON",        code: "CON",  name: "Consecrated",     fill: "#6ba5a3", stroke: "#3d7572", description: "Consecrated ground" },
-  { id: "FC",         code: "FC",   name: "Free Church",     fill: "#3d6b6a", stroke: "#244442", description: "Non-denominational" },
-  { id: "MU",         code: "MU",   name: "Muslim",          fill: "#8b9bbf", stroke: "#5a6a8c", description: "Muslim section" },
+  // ---- Burial sections ---- (rectangular by default)
+  { id: "RC",         code: "RC",   name: "Roman Catholic",  fill: "#a8d5d2", stroke: "#5a9290", description: "Catholic section",                              defaultShape: "rect" },
+  { id: "CON",        code: "CON",  name: "Consecrated",     fill: "#6ba5a3", stroke: "#3d7572", description: "Consecrated ground",                            defaultShape: "rect" },
+  { id: "FC",         code: "FC",   name: "Free Church",     fill: "#3d6b6a", stroke: "#244442", description: "Non-denominational",                            defaultShape: "rect" },
+  { id: "MU",         code: "MU",   name: "Muslim",          fill: "#8b9bbf", stroke: "#5a6a8c", description: "Muslim section",                                defaultShape: "rect" },
   // ---- Infrastructure / map features ----
-  // Drawn with the same Plot tool: a long thin rectangle for roads/bridges,
-  // a wide rectangle (or polygon outline from the AI importer) for lakes,
-  // gardens, columbaria, etc.
-  { id: "PATH",       code: "PATH", name: "Path / Road",     fill: "#d1d5db", stroke: "#9ca3af", description: "Walkway or vehicle road" },
-  { id: "BUILDING",   code: "BLD",  name: "Building",        fill: "#475569", stroke: "#1e293b", description: "Office, chapel, admin" },
-  { id: "COLUMBARIUM",code: "COL",  name: "Columbarium",     fill: "#c4b5fd", stroke: "#6d28d9", description: "Cremation niche structure" },
-  { id: "MAUSOLEUM",  code: "MAU",  name: "Mausoleum",       fill: "#94a3b8", stroke: "#334155", description: "Above-ground tomb structure" },
-  { id: "WATER",      code: "WTR",  name: "Lake / Water",    fill: "#93c5fd", stroke: "#1d4ed8", description: "Pond, lake, stream or other water body" },
-  { id: "BRIDGE",     code: "BR",   name: "Bridge",          fill: "#c8a97e", stroke: "#8a6d3b", description: "Pedestrian or vehicle bridge" },
-  { id: "GARDEN",     code: "GDN",  name: "Garden / Trees",  fill: "#86efac", stroke: "#15803d", description: "Landscaping, lawn, tree area" },
-  { id: "PARKING",    code: "PRK",  name: "Parking",         fill: "#d6d3d1", stroke: "#78716c", description: "Visitor parking area" },
-  { id: "GATE",       code: "GT",   name: "Gate / Entrance", fill: "#fde68a", stroke: "#a16207", description: "Cemetery entrance or gate" },
+  // Sensible per-type shape defaults — paths/bridges are flexible polylines,
+  // water bodies and gardens are circles, the rest are rectangles. Users
+  // can override every one of these in Cemetery Setup.
+  { id: "PATH",       code: "PATH", name: "Path / Road",     fill: "#d1d5db", stroke: "#9ca3af", description: "Walkway or vehicle road",                       defaultShape: "path" },
+  { id: "BUILDING",   code: "BLD",  name: "Building",        fill: "#475569", stroke: "#1e293b", description: "Office, chapel, admin",                         defaultShape: "rect" },
+  { id: "COLUMBARIUM",code: "COL",  name: "Columbarium",     fill: "#c4b5fd", stroke: "#6d28d9", description: "Cremation niche structure",                     defaultShape: "rect" },
+  { id: "MAUSOLEUM",  code: "MAU",  name: "Mausoleum",       fill: "#94a3b8", stroke: "#334155", description: "Above-ground tomb structure",                   defaultShape: "rect" },
+  { id: "WATER",      code: "WTR",  name: "Lake / Water",    fill: "#93c5fd", stroke: "#1d4ed8", description: "Pond, lake, stream or other water body",        defaultShape: "circle" },
+  { id: "BRIDGE",     code: "BR",   name: "Bridge",          fill: "#c8a97e", stroke: "#8a6d3b", description: "Pedestrian or vehicle bridge",                  defaultShape: "path" },
+  { id: "GARDEN",     code: "GDN",  name: "Garden / Trees",  fill: "#86efac", stroke: "#15803d", description: "Landscaping, lawn, tree area",                  defaultShape: "circle" },
+  { id: "PARKING",    code: "PRK",  name: "Parking",         fill: "#d6d3d1", stroke: "#78716c", description: "Visitor parking area",                          defaultShape: "rect" },
+  { id: "GATE",       code: "GT",   name: "Gate / Entrance", fill: "#fde68a", stroke: "#a16207", description: "Cemetery entrance or gate",                     defaultShape: "rect" },
 ];
 
 export const DEFAULT_SPOT_TYPES: SpotType[] = [

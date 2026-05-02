@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, Image as ImageIcon, RotateCcw, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, RotateCcw, AlertCircle, Square, Circle as CircleIcon, Spline } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,24 @@ import {
   usePlotTypes, useSpotTypes, useBackgrounds,
   DEFAULT_PLOT_TYPES, DEFAULT_SPOT_TYPES,
   SPOT_ICONS, SPOT_ICON_KEYS,
-  type PlotType, type SpotType, type SpotIconKey,
+  type PlotType, type PlotShape, type SpotType, type SpotIconKey,
   newId,
 } from "@/lib/cemetery-config";
+
+// Shape options shown in the per-plot-type Shape selector. Picking one
+// here changes which canvas tool the Map Maker auto-activates when the
+// user clicks this plot type in the palette.
+const PLOT_SHAPE_OPTIONS: { value: PlotShape; label: string; hint: string }[] = [
+  { value: "rect",   label: "Rectangle", hint: "Drag to draw an axis-aligned rectangle (sections, buildings)." },
+  { value: "circle", label: "Circle",    hint: "Drag from center outward to set radius (ponds, gardens)." },
+  { value: "path",   label: "Flexible",  hint: "Click vertices to draw a polyline (roads, paths, bridges)." },
+];
+
+const SHAPE_ICONS: Record<PlotShape, typeof Square> = {
+  rect:   Square,
+  circle: CircleIcon,
+  path:   Spline,
+};
 
 export default function CemeteryTypes() {
   const [plotTypes, setPlotTypes, plotErr] = usePlotTypes();
@@ -25,6 +40,7 @@ export default function CemeteryTypes() {
     const t: PlotType = {
       id: newId("pt"), code: "NEW", name: "New plot type",
       fill: "#cbd5e1", stroke: "#64748b", description: "",
+      defaultShape: "rect",
     };
     setPlotTypes((prev) => [...prev, t]);
   };
@@ -87,11 +103,12 @@ export default function CemeteryTypes() {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="hidden md:grid grid-cols-[60px_100px_1fr_1fr_60px_60px_36px] gap-2 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <div className="hidden md:grid grid-cols-[60px_100px_1fr_1fr_130px_60px_60px_36px] gap-2 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             <div>Preview</div>
             <div>Code</div>
             <div>Name</div>
             <div>Description</div>
+            <div>Shape</div>
             <div>Fill</div>
             <div>Stroke</div>
             <div></div>
@@ -101,65 +118,99 @@ export default function CemeteryTypes() {
               No plot types yet. Click <strong>Add plot type</strong> or <strong>Reset defaults</strong> to seed the standard set.
             </p>
           )}
-          {plotTypes.map((p) => (
-            <div
-              key={p.id}
-              data-testid={`plot-type-row-${p.id}`}
-              className="grid grid-cols-2 md:grid-cols-[60px_100px_1fr_1fr_60px_60px_36px] gap-2 items-center rounded-md border border-border bg-background p-2"
-            >
-              <div className="flex items-center justify-center">
-                <div
-                  className="h-8 w-12 rounded border-2 flex items-center justify-center text-[10px] font-semibold text-white"
-                  style={{ background: p.fill, borderColor: p.stroke, color: isLight(p.fill) ? "#1f2937" : "#fff" }}
-                >
-                  {p.code}
-                </div>
-              </div>
-              <Input
-                value={p.code}
-                maxLength={8}
-                onChange={(e) => updatePlotType(p.id, { code: e.target.value.toUpperCase() })}
-                className="h-8 font-mono text-xs"
-                data-testid={`plot-type-code-${p.id}`}
-              />
-              <Input
-                value={p.name}
-                onChange={(e) => updatePlotType(p.id, { name: e.target.value })}
-                className="h-8"
-                data-testid={`plot-type-name-${p.id}`}
-              />
-              <Input
-                value={p.description ?? ""}
-                onChange={(e) => updatePlotType(p.id, { description: e.target.value })}
-                placeholder="Optional description"
-                className="h-8"
-              />
-              <Input
-                type="color"
-                value={p.fill}
-                onChange={(e) => updatePlotType(p.id, { fill: e.target.value })}
-                className="h-8 w-full p-0.5 cursor-pointer"
-                data-testid={`plot-type-fill-${p.id}`}
-              />
-              <Input
-                type="color"
-                value={p.stroke}
-                onChange={(e) => updatePlotType(p.id, { stroke: e.target.value })}
-                className="h-8 w-full p-0.5 cursor-pointer"
-              />
-              <Button
-                variant="ghost" size="sm"
-                onClick={() => removePlotType(p.id)}
-                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                data-testid={`plot-type-delete-${p.id}`}
-                aria-label={`Delete ${p.name}`}
+          {plotTypes.map((p) => {
+            const shape: PlotShape = p.defaultShape ?? "rect";
+            const ShapeIcon = SHAPE_ICONS[shape];
+            return (
+              <div
+                key={p.id}
+                data-testid={`plot-type-row-${p.id}`}
+                className="grid grid-cols-2 md:grid-cols-[60px_100px_1fr_1fr_130px_60px_60px_36px] gap-2 items-center rounded-md border border-border bg-background p-2"
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+                <div className="flex items-center justify-center">
+                  <div
+                    className="h-8 w-12 rounded border-2 flex items-center justify-center text-[10px] font-semibold text-white"
+                    style={{ background: p.fill, borderColor: p.stroke, color: isLight(p.fill) ? "#1f2937" : "#fff" }}
+                  >
+                    {p.code}
+                  </div>
+                </div>
+                <Input
+                  value={p.code}
+                  maxLength={8}
+                  onChange={(e) => updatePlotType(p.id, { code: e.target.value.toUpperCase() })}
+                  className="h-8 font-mono text-xs"
+                  data-testid={`plot-type-code-${p.id}`}
+                />
+                <Input
+                  value={p.name}
+                  onChange={(e) => updatePlotType(p.id, { name: e.target.value })}
+                  className="h-8"
+                  data-testid={`plot-type-name-${p.id}`}
+                />
+                <Input
+                  value={p.description ?? ""}
+                  onChange={(e) => updatePlotType(p.id, { description: e.target.value })}
+                  placeholder="Optional description"
+                  className="h-8"
+                />
+                {/* Default drawing shape — clicking this plot type in the
+                    Map Maker palette auto-activates the matching tool. */}
+                <Select
+                  value={shape}
+                  onValueChange={(v) => updatePlotType(p.id, { defaultShape: v as PlotShape })}
+                >
+                  <SelectTrigger className="h-8" data-testid={`plot-type-shape-${p.id}`} aria-label={`Default shape for ${p.name}`}>
+                    <SelectValue>
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <ShapeIcon className="h-3.5 w-3.5" /> {PLOT_SHAPE_OPTIONS.find((o) => o.value === shape)?.label}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLOT_SHAPE_OPTIONS.map((opt) => {
+                      const I = SHAPE_ICONS[opt.value];
+                      return (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <div className="flex items-start gap-2">
+                            <I className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-xs font-medium">{opt.label}</div>
+                              <div className="text-[10px] text-muted-foreground">{opt.hint}</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="color"
+                  value={p.fill}
+                  onChange={(e) => updatePlotType(p.id, { fill: e.target.value })}
+                  className="h-8 w-full p-0.5 cursor-pointer"
+                  data-testid={`plot-type-fill-${p.id}`}
+                />
+                <Input
+                  type="color"
+                  value={p.stroke}
+                  onChange={(e) => updatePlotType(p.id, { stroke: e.target.value })}
+                  className="h-8 w-full p-0.5 cursor-pointer"
+                />
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => removePlotType(p.id)}
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                  data-testid={`plot-type-delete-${p.id}`}
+                  aria-label={`Delete ${p.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            );
+          })}
           <p className="text-xs text-muted-foreground pt-2">
-            <strong>Tip:</strong> Existing plots on saved maps that reference a deleted type will render in gray with a "?" code until you re-assign them.
+            <strong>Tip:</strong> The <strong>Shape</strong> column controls which drawing tool the Map Maker auto-selects when you click this plot type in its palette. You can still pick any tool manually from the Map Maker toolbar (R = Rectangle, C = Circle, P = Path). Existing plots on saved maps that reference a deleted type will render in gray with a "?" code until you re-assign them.
           </p>
         </CardContent>
       </Card>
