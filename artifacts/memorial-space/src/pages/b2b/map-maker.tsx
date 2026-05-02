@@ -1238,10 +1238,10 @@ export default function MapMaker() {
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
                 <span>Plot Type</span>
-                <a href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</a>
+                <Link href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</Link>
               </div>
               {plotTypes.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No plot types configured. <a className="text-primary underline" href="/cemetery-setup">Add some →</a></p>
+                <p className="text-xs text-muted-foreground">No plot types configured. <Link className="text-primary underline" href="/cemetery-setup">Add some →</Link></p>
               ) : (
                 <div className="space-y-1">
                   {plotTypes.map((t) => {
@@ -1273,7 +1273,7 @@ export default function MapMaker() {
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
                 <span>Spot Type</span>
-                <a href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</a>
+                <Link href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</Link>
               </div>
               {spotTypes.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No spot types configured.</p>
