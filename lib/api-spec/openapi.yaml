@@ -3,20 +3,44 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: MemorialSpace API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: organizations
+    description: Cemetery organizations (multi-tenant)
+  - name: users
+    description: User management and roles
+  - name: plots
+    description: Cemetery plot management
+  - name: burials
+    description: Burial record management
+  - name: bookings
+    description: Plot reservations and sales
+  - name: memorials
+    description: Memorial pages (B2C)
+  - name: work-orders
+    description: Staff task management
+  - name: qr-codes
+    description: QR code generation and lookup
+  - name: obituaries
+    description: Obituary publishing
+  - name: marketplace
+    description: Flowers, urns, and services marketplace
+  - name: dashboard
+    description: Dashboard analytics and summaries
+  - name: public
+    description: Public-facing APIs (grave search, map data)
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +48,1152 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── ORGANIZATIONS ───────────────────────────────────────────────────────────
+
+  /organizations:
+    get:
+      operationId: listOrganizations
+      tags: [organizations]
+      summary: List all cemetery organizations
+      responses:
+        "200":
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organization"
+    post:
+      operationId: createOrganization
+      tags: [organizations]
+      summary: Create a new cemetery organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationBody"
+      responses:
+        "201":
+          description: Created organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+
+  /organizations/{id}:
+    get:
+      operationId: getOrganization
+      tags: [organizations]
+      summary: Get organization by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+    put:
+      operationId: updateOrganization
+      tags: [organizations]
+      summary: Update an organization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationBody"
+      responses:
+        "200":
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+    delete:
+      operationId: deleteOrganization
+      tags: [organizations]
+      summary: Delete an organization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── USERS ───────────────────────────────────────────────────────────────────
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users (optionally filtered by organization)
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── PLOTS ───────────────────────────────────────────────────────────────────
+
+  /plots:
+    get:
+      operationId: listPlots
+      tags: [plots]
+      summary: List plots for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [available, reserved, occupied, maintenance]
+        - name: section
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of plots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plot"
+    post:
+      operationId: createPlot
+      tags: [plots]
+      summary: Create a new plot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlotBody"
+      responses:
+        "201":
+          description: Created plot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plot"
+
+  /plots/{id}:
+    get:
+      operationId: getPlot
+      tags: [plots]
+      summary: Get plot by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plot"
+    put:
+      operationId: updatePlot
+      tags: [plots]
+      summary: Update a plot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlotBody"
+      responses:
+        "200":
+          description: Updated plot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plot"
+    delete:
+      operationId: deletePlot
+      tags: [plots]
+      summary: Delete a plot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /plots/map/{organizationId}:
+    get:
+      operationId: getMapData
+      tags: [plots, public]
+      summary: Get all plot map data (GeoJSON) for an organization
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: GeoJSON feature collection of plots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapData"
+
+  # ─── BURIALS ─────────────────────────────────────────────────────────────────
+
+  /burials:
+    get:
+      operationId: listBurials
+      tags: [burials]
+      summary: List burial records
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: plotId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of burials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Burial"
+    post:
+      operationId: createBurial
+      tags: [burials]
+      summary: Create a burial record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBurialBody"
+      responses:
+        "201":
+          description: Created burial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Burial"
+
+  /burials/{id}:
+    get:
+      operationId: getBurial
+      tags: [burials]
+      summary: Get burial record by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Burial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Burial"
+    put:
+      operationId: updateBurial
+      tags: [burials]
+      summary: Update a burial record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBurialBody"
+      responses:
+        "200":
+          description: Updated burial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Burial"
+    delete:
+      operationId: deleteBurial
+      tags: [burials]
+      summary: Delete a burial record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── BOOKINGS ────────────────────────────────────────────────────────────────
+
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, confirmed, cancelled, completed]
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking (reservation or sale)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "201":
+          description: Created booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get booking by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    put:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    delete:
+      operationId: deleteBooking
+      tags: [bookings]
+      summary: Delete/cancel a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── MEMORIALS ───────────────────────────────────────────────────────────────
+
+  /memorials:
+    get:
+      operationId: listMemorials
+      tags: [memorials]
+      summary: List memorial pages
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of memorials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Memorial"
+    post:
+      operationId: createMemorial
+      tags: [memorials]
+      summary: Create a memorial page
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemorialBody"
+      responses:
+        "201":
+          description: Created memorial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memorial"
+
+  /memorials/{id}:
+    get:
+      operationId: getMemorial
+      tags: [memorials]
+      summary: Get memorial page by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memorial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memorial"
+    put:
+      operationId: updateMemorial
+      tags: [memorials]
+      summary: Update a memorial page
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemorialBody"
+      responses:
+        "200":
+          description: Updated memorial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memorial"
+
+  /memorials/{id}/tributes:
+    get:
+      operationId: listTributes
+      tags: [memorials]
+      summary: List tribute messages for a memorial
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of tributes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tribute"
+    post:
+      operationId: createTribute
+      tags: [memorials]
+      summary: Add a tribute message to a memorial
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTributeBody"
+      responses:
+        "201":
+          description: Created tribute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tribute"
+
+  # ─── WORK ORDERS ─────────────────────────────────────────────────────────────
+
+  /work-orders:
+    get:
+      operationId: listWorkOrders
+      tags: [work-orders]
+      summary: List work orders for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, in_progress, completed, cancelled]
+        - name: assignedTo
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of work orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkOrder"
+    post:
+      operationId: createWorkOrder
+      tags: [work-orders]
+      summary: Create a work order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkOrderBody"
+      responses:
+        "201":
+          description: Created work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}:
+    get:
+      operationId: getWorkOrder
+      tags: [work-orders]
+      summary: Get work order by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+    put:
+      operationId: updateWorkOrder
+      tags: [work-orders]
+      summary: Update a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkOrderBody"
+      responses:
+        "200":
+          description: Updated work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+    delete:
+      operationId: deleteWorkOrder
+      tags: [work-orders]
+      summary: Delete a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── QR CODES ────────────────────────────────────────────────────────────────
+
+  /qr-codes:
+    get:
+      operationId: listQrCodes
+      tags: [qr-codes]
+      summary: List QR codes for an organization
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of QR codes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QrCode"
+    post:
+      operationId: createQrCode
+      tags: [qr-codes]
+      summary: Generate a QR code for a burial/plot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQrCodeBody"
+      responses:
+        "201":
+          description: Created QR code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrCode"
+
+  /qr-codes/{code}:
+    get:
+      operationId: resolveQrCode
+      tags: [qr-codes, public]
+      summary: Resolve a QR code to get memorial info
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: QR code resolution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrCodeResolution"
+
+  # ─── OBITUARIES ──────────────────────────────────────────────────────────────
+
+  /obituaries:
+    get:
+      operationId: listObituaries
+      tags: [obituaries]
+      summary: List obituaries
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+        - name: published
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of obituaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Obituary"
+    post:
+      operationId: createObituary
+      tags: [obituaries]
+      summary: Create an obituary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateObituaryBody"
+      responses:
+        "201":
+          description: Created obituary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obituary"
+
+  /obituaries/{id}:
+    get:
+      operationId: getObituary
+      tags: [obituaries]
+      summary: Get obituary by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Obituary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obituary"
+    put:
+      operationId: updateObituary
+      tags: [obituaries]
+      summary: Update an obituary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateObituaryBody"
+      responses:
+        "200":
+          description: Updated obituary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obituary"
+    delete:
+      operationId: deleteObituary
+      tags: [obituaries]
+      summary: Delete an obituary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── MARKETPLACE ─────────────────────────────────────────────────────────────
+
+  /marketplace/products:
+    get:
+      operationId: listProducts
+      tags: [marketplace]
+      summary: List marketplace products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [flowers, urns, services, other]
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [marketplace]
+      summary: Create a marketplace product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /marketplace/products/{id}:
+    get:
+      operationId: getProduct
+      tags: [marketplace]
+      summary: Get product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    put:
+      operationId: updateProduct
+      tags: [marketplace]
+      summary: Update a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [marketplace]
+      summary: Delete a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /marketplace/orders:
+    get:
+      operationId: listOrders
+      tags: [marketplace]
+      summary: List marketplace orders
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      operationId: createOrder
+      tags: [marketplace]
+      summary: Place a marketplace order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "201":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /marketplace/orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [marketplace]
+      summary: Get order by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  # ─── DASHBOARD ───────────────────────────────────────────────────────────────
+
+  /dashboard/summary/{organizationId}:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats for an organization
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent-activity/{organizationId}:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed for an organization
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/plot-status/{organizationId}:
+    get:
+      operationId: getPlotStatusBreakdown
+      tags: [dashboard]
+      summary: Get plot status breakdown counts for an organization
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plot status breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlotStatusBreakdown"
+
+  # ─── PUBLIC APIs ─────────────────────────────────────────────────────────────
+
+  /public/search:
+    get:
+      operationId: publicGraveSearch
+      tags: [public]
+      summary: Public grave search by name
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GraveSearchResult"
+
+  /public/obituaries:
+    get:
+      operationId: listPublicObituaries
+      tags: [public]
+      summary: List published obituaries (public)
+      parameters:
+        - name: organizationId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Published obituaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Obituary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +1204,835 @@ components:
       required:
         - status
 
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        website:
+          type: string
+        logoUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        totalPlots:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - slug
+        - createdAt
+
+    CreateOrganizationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        website:
+          type: string
+        logoUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required:
+        - name
+        - slug
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff, viewer]
+        avatarUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - role
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff, viewer]
+        avatarUrl:
+          type: string
+      required:
+        - name
+        - email
+        - role
+
+    Plot:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        plotNumber:
+          type: string
+        section:
+          type: string
+        row:
+          type: string
+        status:
+          type: string
+          enum: [available, reserved, occupied, maintenance]
+        type:
+          type: string
+          enum: [standard, double, family, mausoleum, cremation]
+        price:
+          type: number
+        ownerName:
+          type: string
+        ownerContact:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        geoJson:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - plotNumber
+        - status
+        - createdAt
+
+    CreatePlotBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        plotNumber:
+          type: string
+        section:
+          type: string
+        row:
+          type: string
+        status:
+          type: string
+          enum: [available, reserved, occupied, maintenance]
+        type:
+          type: string
+          enum: [standard, double, family, mausoleum, cremation]
+        price:
+          type: number
+        ownerName:
+          type: string
+        ownerContact:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        geoJson:
+          type: string
+        notes:
+          type: string
+      required:
+        - organizationId
+        - plotNumber
+        - status
+
+    MapData:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        plots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Plot"
+      required:
+        - organizationId
+        - plots
+
+    Burial:
+      type: object
+      properties:
+        id:
+          type: integer
+        plotId:
+          type: integer
+        organizationId:
+          type: integer
+        deceasedName:
+          type: string
+        deceasedDob:
+          type: string
+          format: date
+        deceasedDod:
+          type: string
+          format: date
+        burialDate:
+          type: string
+          format: date
+        religion:
+          type: string
+        notes:
+          type: string
+        photoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - plotId
+        - organizationId
+        - deceasedName
+        - createdAt
+
+    CreateBurialBody:
+      type: object
+      properties:
+        plotId:
+          type: integer
+        organizationId:
+          type: integer
+        deceasedName:
+          type: string
+        deceasedDob:
+          type: string
+          format: date
+        deceasedDod:
+          type: string
+          format: date
+        burialDate:
+          type: string
+          format: date
+        religion:
+          type: string
+        notes:
+          type: string
+        photoUrl:
+          type: string
+      required:
+        - plotId
+        - organizationId
+        - deceasedName
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        plotId:
+          type: integer
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        customerPhone:
+          type: string
+        type:
+          type: string
+          enum: [reservation, sale]
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, completed]
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        invoiceNumber:
+          type: string
+        notes:
+          type: string
+        bookingDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - plotId
+        - customerName
+        - type
+        - status
+        - createdAt
+
+    CreateBookingBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        plotId:
+          type: integer
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        customerPhone:
+          type: string
+        type:
+          type: string
+          enum: [reservation, sale]
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, completed]
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        notes:
+          type: string
+      required:
+        - organizationId
+        - plotId
+        - customerName
+        - type
+        - status
+
+    Memorial:
+      type: object
+      properties:
+        id:
+          type: integer
+        burialId:
+          type: integer
+        organizationId:
+          type: integer
+        title:
+          type: string
+        biography:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+        isPublic:
+          type: boolean
+        viewCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - burialId
+        - organizationId
+        - title
+        - createdAt
+
+    CreateMemorialBody:
+      type: object
+      properties:
+        burialId:
+          type: integer
+        organizationId:
+          type: integer
+        title:
+          type: string
+        biography:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+        isPublic:
+          type: boolean
+      required:
+        - burialId
+        - organizationId
+        - title
+
+    Tribute:
+      type: object
+      properties:
+        id:
+          type: integer
+        memorialId:
+          type: integer
+        authorName:
+          type: string
+        authorEmail:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - memorialId
+        - authorName
+        - message
+        - createdAt
+
+    CreateTributeBody:
+      type: object
+      properties:
+        authorName:
+          type: string
+        authorEmail:
+          type: string
+        message:
+          type: string
+      required:
+        - authorName
+        - message
+
+    WorkOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        plotId:
+          type: integer
+        assignedTo:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [maintenance, burial, cleaning, inspection, other]
+        status:
+          type: string
+          enum: [open, in_progress, completed, cancelled]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        dueDate:
+          type: string
+          format: date
+        completedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - title
+        - type
+        - status
+        - priority
+        - createdAt
+
+    CreateWorkOrderBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        plotId:
+          type: integer
+        assignedTo:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [maintenance, burial, cleaning, inspection, other]
+        status:
+          type: string
+          enum: [open, in_progress, completed, cancelled]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        dueDate:
+          type: string
+          format: date
+      required:
+        - organizationId
+        - title
+        - type
+        - status
+        - priority
+
+    QrCode:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        burialId:
+          type: integer
+        plotId:
+          type: integer
+        organizationId:
+          type: integer
+        memorialId:
+          type: integer
+        qrImageUrl:
+          type: string
+        scanCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - code
+        - organizationId
+        - createdAt
+
+    CreateQrCodeBody:
+      type: object
+      properties:
+        burialId:
+          type: integer
+        plotId:
+          type: integer
+        organizationId:
+          type: integer
+        memorialId:
+          type: integer
+      required:
+        - organizationId
+
+    QrCodeResolution:
+      type: object
+      properties:
+        qrCode:
+          $ref: "#/components/schemas/QrCode"
+        burial:
+          $ref: "#/components/schemas/Burial"
+        memorial:
+          $ref: "#/components/schemas/Memorial"
+        plot:
+          $ref: "#/components/schemas/Plot"
+      required:
+        - qrCode
+
+    Obituary:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        burialId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        photoUrl:
+          type: string
+        isPublished:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+        shareCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organizationId
+        - title
+        - content
+        - isPublished
+        - createdAt
+
+    CreateObituaryBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        burialId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        photoUrl:
+          type: string
+        isPublished:
+          type: boolean
+      required:
+        - organizationId
+        - title
+        - content
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [flowers, urns, services, other]
+        price:
+          type: number
+        imageUrl:
+          type: string
+        inStock:
+          type: boolean
+        stockCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - category
+        - price
+        - inStock
+        - createdAt
+
+    CreateProductBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [flowers, urns, services, other]
+        price:
+          type: number
+        imageUrl:
+          type: string
+        inStock:
+          type: boolean
+        stockCount:
+          type: integer
+      required:
+        - name
+        - category
+        - price
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        totalAmount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, processing, shipped, delivered, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerName
+        - items
+        - totalAmount
+        - status
+        - createdAt
+
+    OrderItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+      required:
+        - productId
+        - quantity
+        - unitPrice
+
+    CreateOrderBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        totalAmount:
+          type: number
+      required:
+        - customerName
+        - items
+        - totalAmount
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalPlots:
+          type: integer
+        availablePlots:
+          type: integer
+        occupiedPlots:
+          type: integer
+        reservedPlots:
+          type: integer
+        totalBurials:
+          type: integer
+        totalBookings:
+          type: integer
+        pendingBookings:
+          type: integer
+        totalRevenue:
+          type: number
+        monthlyRevenue:
+          type: number
+        openWorkOrders:
+          type: integer
+        totalMemorials:
+          type: integer
+        totalQrCodes:
+          type: integer
+      required:
+        - totalPlots
+        - availablePlots
+        - occupiedPlots
+        - reservedPlots
+        - totalBurials
+        - totalBookings
+        - pendingBookings
+        - totalRevenue
+        - monthlyRevenue
+        - openWorkOrders
+        - totalMemorials
+        - totalQrCodes
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [burial, booking, work_order, memorial, qr_scan]
+        description:
+          type: string
+        entityId:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - description
+        - createdAt
+
+    PlotStatusBreakdown:
+      type: object
+      properties:
+        available:
+          type: integer
+        reserved:
+          type: integer
+        occupied:
+          type: integer
+        maintenance:
+          type: integer
+      required:
+        - available
+        - reserved
+        - occupied
+        - maintenance
+
+    GraveSearchResult:
+      type: object
+      properties:
+        burial:
+          $ref: "#/components/schemas/Burial"
+        plot:
+          $ref: "#/components/schemas/Plot"
+        organization:
+          $ref: "#/components/schemas/Organization"
+        memorial:
+          $ref: "#/components/schemas/Memorial"
+      required:
+        - burial
+        - plot
+        - organization

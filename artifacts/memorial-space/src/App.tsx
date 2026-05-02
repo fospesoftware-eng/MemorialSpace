@@ -1,0 +1,99 @@
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/theme-provider";
+import NotFound from "@/pages/not-found";
+
+import { B2BLayout } from "@/components/layout/b2b-layout";
+import { PublicLayout } from "@/components/layout/public-layout";
+
+import Dashboard from "@/pages/b2b/dashboard";
+import Plots from "@/pages/b2b/plots";
+import MapPage from "@/pages/b2b/map";
+import Burials from "@/pages/b2b/burials";
+import Bookings from "@/pages/b2b/bookings";
+import WorkOrders from "@/pages/b2b/work-orders";
+import Memorials from "@/pages/b2b/memorials";
+import Obituaries from "@/pages/b2b/obituaries";
+import QrCodes from "@/pages/b2b/qr-codes";
+import Marketplace from "@/pages/b2b/marketplace";
+import Organizations from "@/pages/settings/organizations";
+import Users from "@/pages/settings/users";
+import Settings from "@/pages/settings/general";
+
+import GraveSearch from "@/pages/public/grave-search";
+import PublicMemorial from "@/pages/public/memorial";
+import PublicObituaries from "@/pages/public/obituaries";
+import PublicShop from "@/pages/public/shop";
+
+const queryClient = new QueryClient();
+
+function B2BRoutes() {
+  return (
+    <B2BLayout>
+      <Switch>
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/map" component={MapPage} />
+        <Route path="/plots" component={Plots} />
+        <Route path="/burials" component={Burials} />
+        <Route path="/bookings" component={Bookings} />
+        <Route path="/work-orders" component={WorkOrders} />
+        <Route path="/memorials" component={Memorials} />
+        <Route path="/obituaries" component={Obituaries} />
+        <Route path="/qr-codes" component={QrCodes} />
+        <Route path="/marketplace" component={Marketplace} />
+        <Route path="/organizations" component={Organizations} />
+        <Route path="/users" component={Users} />
+        <Route path="/settings" component={Settings} />
+        <Route component={NotFound} />
+      </Switch>
+    </B2BLayout>
+  );
+}
+
+function PublicRoutes() {
+  return (
+    <WouterRouter base="/public">
+      <PublicLayout>
+        <Switch>
+          <Route path="/" component={GraveSearch} />
+          <Route path="/memorial/:id" component={PublicMemorial} />
+          <Route path="/obituaries" component={PublicObituaries} />
+          <Route path="/shop" component={PublicShop} />
+          <Route component={NotFound} />
+        </Switch>
+      </PublicLayout>
+    </WouterRouter>
+  );
+}
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/">
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route path="/public" component={PublicRoutes} />
+      <Route path="/public/:rest*" component={PublicRoutes} />
+      <Route path="/:rest*" component={B2BRoutes} />
+    </Switch>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider defaultTheme="dark">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;
