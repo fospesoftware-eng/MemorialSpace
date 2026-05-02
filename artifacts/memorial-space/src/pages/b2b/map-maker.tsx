@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   usePlotTypes, useSpotTypes, useBackgrounds,
   SPOT_ICONS, FALLBACK_PLOT_TYPE, FALLBACK_SPOT_TYPE,
-  STATUS_COLORS, BACKGROUND_LIBRARY_LIMIT,
+  STATUS_COLORS, BACKGROUND_LIBRARY_LIMIT, MAX_HEADSTONE_IMAGES,
   type PlotType, type SpotType, type PlotStatus, type BurialSpot, type BackgroundEntry,
   newId, fileToDataUrl, downscaleImage, calcAge,
 } from "@/lib/cemetery-config";
@@ -116,16 +116,34 @@ function migrateDoc(raw: unknown): MapDoc {
         points,
       };
     }),
-    spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => ({
-      id: safeStr(s.id, newId("s")),
-      x: safeNum(s.x, 0), y: safeNum(s.y, 0),
-      name: safeStr(s.name, ""),
-      dob: safeOptStr(s.dob), dod: safeOptStr(s.dod),
-      spotTypeId: safeStr(s.spotTypeId, "civilian"),
-      headstoneImage: safeOptStr(s.headstoneImage),
-      lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
-      notes: safeOptStr(s.notes),
-    })),
+    spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
+      // Headstone images: migrate from the legacy single `headstoneImage`
+      // string into an array. Newer saves already store `headstoneImages`,
+      // and we tolerate both being present (newer wins, legacy is folded in
+      // only if the array is empty) so a downgraded client can't lose data.
+      const legacyOne = safeOptStr((s as LegacySpot & { headstoneImage?: unknown }).headstoneImage);
+      const fromArrayRaw = (s as LegacySpot & { headstoneImages?: unknown }).headstoneImages;
+      const fromArray = Array.isArray(fromArrayRaw)
+        ? fromArrayRaw
+            .filter((v): v is string => typeof v === "string" && v.length > 0)
+            .slice(0, MAX_HEADSTONE_IMAGES)
+        : [];
+      const headstoneImages = fromArray.length > 0
+        ? fromArray
+        : legacyOne
+          ? [legacyOne]
+          : undefined;
+      return {
+        id: safeStr(s.id, newId("s")),
+        x: safeNum(s.x, 0), y: safeNum(s.y, 0),
+        name: safeStr(s.name, ""),
+        dob: safeOptStr(s.dob), dod: safeOptStr(s.dod),
+        spotTypeId: safeStr(s.spotTypeId, "civilian"),
+        headstoneImages,
+        lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
+        notes: safeOptStr(s.notes),
+      };
+    }),
     updatedAt: safeNum(d.updatedAt, Date.now()),
   };
 }
@@ -724,18 +742,86 @@ export default function MapMaker() {
     setDoc((d) => ({ ...d, spots: d.spots.map((s) => s.id === selectedSpot.id ? { ...s, ...patch } : s), updatedAt: Date.now() }));
   };
 
+  // Append one or more headstone photos to the selected spot. Each file is
+  // downscaled in parallel and only the surviving ones are committed (one
+  // bad file shouldn't block the rest). Excess uploads beyond
+  // MAX_HEADSTONE_IMAGES are silently dropped with a status message.
+  //
+  // The merge runs inside a functional setDoc so two batches uploaded back
+  // to back can't clobber each other — each batch sees the latest array
+  // and re-clamps to the cap. We capture the spot id (not the spot object)
+  // before awaiting, so a selection change mid-upload still targets the
+  // right spot.
   const onUploadHeadstone = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file || !selectedSpot) return;
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      const scaled = await downscaleImage(dataUrl, 400);
-      updateSpot({ headstoneImage: scaled.data });
-    } catch {
-      setSaveError("Couldn't process the headstone image.");
+    if (files.length === 0 || !selectedSpot) return;
+    const spotId = selectedSpot.id;
+
+    const existingAtStart = selectedSpot.headstoneImages ?? [];
+    const room = Math.max(0, MAX_HEADSTONE_IMAGES - existingAtStart.length);
+    if (room === 0) {
+      setSaveError(`This spot already has the maximum of ${MAX_HEADSTONE_IMAGES} headstone photos. Remove one before adding more.`);
+      setTimeout(() => setSaveError(null), 4000);
+      return;
+    }
+    const accepted = files.slice(0, room);
+    const droppedUpFront = files.length - accepted.length;
+
+    const results = await Promise.allSettled(
+      accepted.map(async (file) => {
+        const dataUrl = await fileToDataUrl(file);
+        const scaled = await downscaleImage(dataUrl, 400);
+        return scaled.data;
+      }),
+    );
+    const newImages = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const failed = results.length - newImages.length;
+
+    let droppedAtCommit = 0;
+    if (newImages.length > 0) {
+      setDoc((d) => ({
+        ...d,
+        spots: d.spots.map((s) => {
+          if (s.id !== spotId) return s;
+          const current = s.headstoneImages ?? [];
+          const slots = Math.max(0, MAX_HEADSTONE_IMAGES - current.length);
+          const fit = newImages.slice(0, slots);
+          droppedAtCommit = newImages.length - fit.length;
+          if (fit.length === 0) return s;
+          return { ...s, headstoneImages: [...current, ...fit] };
+        }),
+        updatedAt: Date.now(),
+      }));
+    }
+
+    const totalDropped = droppedUpFront + droppedAtCommit;
+    if (failed > 0 || totalDropped > 0) {
+      const parts: string[] = [];
+      if (failed > 0) parts.push(`${failed} photo${failed === 1 ? "" : "s"} couldn't be processed`);
+      if (totalDropped > 0) parts.push(`${totalDropped} skipped (max ${MAX_HEADSTONE_IMAGES} per spot)`);
+      setSaveError(parts.join(" · "));
       setTimeout(() => setSaveError(null), 4000);
     }
+  };
+
+  // Remove a single headstone image by index from the selected spot. Uses a
+  // functional setDoc so a remove racing with a concurrent upload always
+  // operates on the latest array.
+  const onRemoveHeadstone = (index: number) => {
+    if (!selectedSpot) return;
+    const spotId = selectedSpot.id;
+    setDoc((d) => ({
+      ...d,
+      spots: d.spots.map((s) => {
+        if (s.id !== spotId) return s;
+        const current = s.headstoneImages ?? [];
+        if (index < 0 || index >= current.length) return s;
+        const next = current.filter((_, i) => i !== index);
+        return { ...s, headstoneImages: next.length > 0 ? next : undefined };
+      }),
+      updatedAt: Date.now(),
+    }));
   };
 
   // ----- Stats -----
@@ -1387,7 +1473,7 @@ export default function MapMaker() {
                   spotTypes={spotTypes}
                   onChange={updateSpot}
                   onUploadHeadstone={() => headstoneInputRef.current?.click()}
-                  onClearHeadstone={() => updateSpot({ headstoneImage: undefined })}
+                  onRemoveHeadstone={onRemoveHeadstone}
                   onDelete={() => {
                     setDoc((d) => ({ ...d, spots: d.spots.filter((s) => s.id !== selectedSpot.id), updatedAt: Date.now() }));
                     setSelection(null);
@@ -1399,7 +1485,7 @@ export default function MapMaker() {
                   Click a plot or burial spot on the canvas to edit it. Use the <strong>Plot</strong> tool to draw sections and the <strong>Spot</strong> tool to drop individual burial markers with full details.
                 </p>
               )}
-              <input ref={headstoneInputRef} type="file" accept="image/*" onChange={onUploadHeadstone} className="hidden" data-testid="headstone-input" />
+              <input ref={headstoneInputRef} type="file" accept="image/*" multiple onChange={onUploadHeadstone} className="hidden" data-testid="headstone-input" />
             </div>
 
             <div className="p-3 border-b border-border">
@@ -1514,13 +1600,15 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
   );
 }
 
-function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onClearHeadstone, onDelete }: {
+function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onRemoveHeadstone, onDelete }: {
   spot: BurialSpot; spotTypes: SpotType[];
   onChange: (patch: Partial<BurialSpot>) => void;
   onUploadHeadstone: () => void;
-  onClearHeadstone: () => void;
+  onRemoveHeadstone: (index: number) => void;
   onDelete: () => void;
 }) {
+  const images = spot.headstoneImages ?? [];
+  const canAddMore = images.length < MAX_HEADSTONE_IMAGES;
   const age = calcAge(spot.dob, spot.dod);
   const meta = spotTypes.find((t) => t.id === spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
   const Icon = SPOT_ICONS[meta.icon] ?? SPOT_ICONS.circle;
@@ -1580,21 +1668,50 @@ function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onClearHeads
       )}
 
       <div>
-        <Label className="text-xs">Headstone photo</Label>
-        {spot.headstoneImage ? (
-          <div className="mt-1 relative rounded-md overflow-hidden border border-border bg-muted">
-            <img src={spot.headstoneImage} alt="Headstone" className="w-full h-32 object-cover" />
-            <div className="absolute top-1 right-1 flex gap-1">
-              <Button size="sm" variant="secondary" className="h-7 px-2" onClick={onUploadHeadstone}>Replace</Button>
-              <Button size="sm" variant="destructive" className="h-7 w-7 p-0" onClick={onClearHeadstone} aria-label="Remove headstone">
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Headstone photos</Label>
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {images.length} / {MAX_HEADSTONE_IMAGES}
+          </span>
+        </div>
+        {images.length > 0 && (
+          <div className="mt-1 grid grid-cols-3 gap-1.5" data-testid="headstone-gallery">
+            {images.map((src, i) => (
+              <div
+                key={`${i}-${src.length}`}
+                className="relative aspect-square rounded-md overflow-hidden border border-border bg-muted group"
+              >
+                <img src={src} alt={`Headstone ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemoveHeadstone(i)}
+                  aria-label={`Remove headstone photo ${i + 1}`}
+                  data-testid={`remove-headstone-${i}`}
+                  className="absolute top-1 right-1 h-6 w-6 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shadow-sm hover:bg-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <div className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[9px] text-center py-0.5 leading-none">
+                  {i === 0 ? "Primary" : `Photo ${i + 1}`}
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <Button size="sm" variant="outline" className="w-full mt-1" onClick={onUploadHeadstone} data-testid="upload-headstone">
-            <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> Upload headstone image
-          </Button>
+        )}
+        <Button
+          size="sm" variant="outline"
+          className="w-full mt-1.5"
+          onClick={onUploadHeadstone}
+          disabled={!canAddMore}
+          data-testid="upload-headstone"
+        >
+          <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+          {images.length === 0 ? "Upload headstone photos" : canAddMore ? "Add more photos" : "Maximum reached"}
+        </Button>
+        {images.length === 0 && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            You can upload several photos at once — front, back, inscription close-up, etc.
+          </p>
         )}
       </div>
 

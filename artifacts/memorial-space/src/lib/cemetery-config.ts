@@ -50,11 +50,20 @@ export interface BurialSpot {
   dob?: string;
   dod?: string;
   spotTypeId: string;
-  headstoneImage?: string;
+  /**
+   * Headstone photographs (front, back, inscription close-up, surrounding
+   * area, etc.). Stored as downscaled data URLs. The legacy single-image
+   * field `headstoneImage` is migrated into the first slot of this array
+   * by `migrateDoc()` so older saved maps continue to work.
+   */
+  headstoneImages?: string[];
   lat?: number;
   lon?: number;
   notes?: string;
 }
+
+/** Hard cap so a single spot can't grow without bound and bust localStorage. */
+export const MAX_HEADSTONE_IMAGES = 8;
 
 export const DEFAULT_PLOT_TYPES: PlotType[] = [
   // ---- Burial sections ----
