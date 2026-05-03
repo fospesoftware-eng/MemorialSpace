@@ -130,8 +130,15 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
     : null;
   const qrImg = burial.qrImageUrl
     ?? (memorialUrl ? buildMemorialQrImageUrl(memorialUrl) : null);
+  // The B2B admin app is mounted under `/app` via a wouter nested router,
+  // so a plain `/c/...` link would be resolved relative to `/app` and 404
+  // as `/app/c/...`. Wouter's `~` prefix escapes the nest and routes from
+  // the SPA root, which is what we want for both the public-site embed
+  // and the admin "Open memorial page" link.
   const memorialHref = burial.memorialCode
-    ? (siteSlug ? `/c/${siteSlug}/memorial/${burial.memorialCode}` : `/memorial/${burial.memorialCode}`)
+    ? (siteSlug
+        ? `~/c/${siteSlug}/memorial/${burial.memorialCode}`
+        : `~/memorial/${burial.memorialCode}`)
     : null;
 
   const adminCardStyle =
