@@ -71,62 +71,97 @@ type FlowerSpec = {
   id: FlowerKind;
   label: string;
   meaning: string;
-  bg: string;
-  petal: string;
+  // Card gradient — a deep, jewel-toned backdrop chosen to make the petals
+  // *pop* (we never want a near-white flower on a near-white card). The two
+  // stops drive a 135° gradient on the .flower-cell.
+  bgFrom: string;
+  bgTo: string;
+  // Inner radial halo painted *inside* the SVG, behind the bloom. Guarantees
+  // contrast even if a host theme overrides the card background.
+  halo: string;
+  // Petals are rendered as a gradient (top → bottom) plus a stroke so light
+  // blooms still have a visible silhouette.
+  petalLight: string;
   petalDark: string;
+  petalStroke: string;
   centre: string;
-  // Drives the SVG renderer's petal layout.
+  centreGlow: string;
   shape: "rose" | "lily" | "mum" | "carnation" | "forget-me-not";
 };
 const FLOWER_KINDS: FlowerSpec[] = [
   {
+    // White roses on a deep crimson velvet card — classic funeral palette.
     id: "white-roses",
     label: "White roses",
     meaning: "Remembrance & reverence",
-    bg: "#f6ecec",
-    petal: "#fff",
-    petalDark: "#e7d8d8",
-    centre: "#dab27a",
+    bgFrom: "#3a1620",
+    bgTo: "#5a1d2c",
+    halo: "rgba(255, 200, 210, 0.28)",
+    petalLight: "#ffffff",
+    petalDark: "#e9c8c9",
+    petalStroke: "#a85f6b",
+    centre: "#d4a85a",
+    centreGlow: "#ffe28a",
     shape: "rose",
   },
   {
+    // Lilies on dusk-blue — pearl petals with golden centre.
     id: "lilies",
     label: "Lilies",
     meaning: "Restored innocence",
-    bg: "#f7f2e4",
-    petal: "#fffbea",
-    petalDark: "#e9dfb6",
-    centre: "#caa14a",
+    bgFrom: "#1f2b3d",
+    bgTo: "#324a64",
+    halo: "rgba(255, 240, 200, 0.32)",
+    petalLight: "#fffbea",
+    petalDark: "#e1cf99",
+    petalStroke: "#a87f3a",
+    centre: "#c97e2a",
+    centreGlow: "#ffce6e",
     shape: "lily",
   },
   {
+    // Chrysanthemums in their natural rich gold — the European mourning bloom.
     id: "chrysanthemums",
     label: "Chrysanthemums",
     meaning: "Honour & mourning",
-    bg: "#f3eedf",
-    petal: "#fff5c8",
-    petalDark: "#e6d385",
-    centre: "#b88735",
+    bgFrom: "#2b2410",
+    bgTo: "#4a3a18",
+    halo: "rgba(255, 220, 130, 0.32)",
+    petalLight: "#ffe680",
+    petalDark: "#d99a2a",
+    petalStroke: "#7a5210",
+    centre: "#5a3a10",
+    centreGlow: "#ffb84a",
     shape: "mum",
   },
   {
+    // Coral carnations — soft pink with deeper rose at the edges.
     id: "carnations",
-    label: "White carnations",
+    label: "Carnations",
     meaning: "Pure love",
-    bg: "#f4ecec",
-    petal: "#fff4f3",
-    petalDark: "#e6cfcd",
-    centre: "#c98c8c",
+    bgFrom: "#3a1d2a",
+    bgTo: "#5a2a3c",
+    halo: "rgba(255, 190, 200, 0.32)",
+    petalLight: "#ffd5dc",
+    petalDark: "#e07a93",
+    petalStroke: "#8a3a52",
+    centre: "#a83560",
+    centreGlow: "#ff8aab",
     shape: "carnation",
   },
   {
+    // Forget-me-nots in their iconic sky blue with a buttery centre.
     id: "forget-me-nots",
     label: "Forget-me-nots",
     meaning: "I will never forget you",
-    bg: "#e7eef5",
-    petal: "#aac4e8",
-    petalDark: "#7ea2cf",
-    centre: "#f4d76b",
+    bgFrom: "#142640",
+    bgTo: "#1f3a64",
+    halo: "rgba(190, 215, 255, 0.35)",
+    petalLight: "#a8c8f0",
+    petalDark: "#5a85c4",
+    petalStroke: "#2a4a7a",
+    centre: "#f4c84a",
+    centreGlow: "#ffe690",
     shape: "forget-me-not",
   },
 ];
@@ -134,26 +169,37 @@ const FLOWER_KINDS: FlowerSpec[] = [
 // Hand-drawn SVG flower used in place of emoji. Petal nodes are individually
 // animated via CSS so each bloom "opens" on mount and sways with a slight
 // per-petal delay, giving the wall a subtly organic feel.
-function FlowerSvg({ spec }: { spec: FlowerSpec }) {
-  const { petal, petalDark, centre, shape } = spec;
-  const petalCount = shape === "lily" ? 6 : shape === "rose" ? 5 : shape === "carnation" ? 7 : shape === "forget-me-not" ? 5 : 12;
+function FlowerSvg({ spec, size = 64 }: { spec: FlowerSpec; size?: number }) {
+  const { halo, petalLight, petalDark, petalStroke, centre, centreGlow, shape } = spec;
+  // A unique gradient id per shape so two flowers on the same page don't
+  // clash (they share spec but each <svg> root holds its own <defs>).
+  const gid = `pg-${shape}`;
+  const cid = `cg-${shape}`;
+  const hid = `hg-${shape}`;
+
+  const petalCount =
+    shape === "lily" ? 6 :
+    shape === "rose" ? 8 :
+    shape === "carnation" ? 9 :
+    shape === "forget-me-not" ? 5 : 14;
+  const ry =
+    shape === "lily" ? 22 :
+    shape === "mum" ? 14 :
+    shape === "rose" ? 13 :
+    shape === "carnation" ? 15 : 10;
+  const rx =
+    shape === "lily" ? 6 :
+    shape === "mum" ? 4 :
+    shape === "rose" ? 8 :
+    shape === "carnation" ? 5 : 9;
+  const cy =
+    shape === "lily" ? -20 :
+    shape === "mum" ? -12 :
+    shape === "rose" ? -11 :
+    shape === "carnation" ? -12 : -10;
+
   const petals = Array.from({ length: petalCount }, (_, i) => {
     const angle = (360 / petalCount) * i;
-    const ry =
-      shape === "lily" ? 18 :
-      shape === "mum" ? 9 :
-      shape === "rose" ? 11 :
-      shape === "carnation" ? 12 : 8;
-    const rx =
-      shape === "lily" ? 5 :
-      shape === "mum" ? 3.5 :
-      shape === "rose" ? 7 :
-      shape === "carnation" ? 4 : 7;
-    const cy =
-      shape === "lily" ? -16 :
-      shape === "mum" ? -10 :
-      shape === "rose" ? -10 :
-      shape === "carnation" ? -10 : -8;
     return (
       <ellipse
         key={i}
@@ -162,55 +208,139 @@ function FlowerSvg({ spec }: { spec: FlowerSpec }) {
         cy={cy}
         rx={rx}
         ry={ry}
-        fill={i % 2 === 0 ? petal : petalDark}
+        fill={`url(#${gid})`}
+        stroke={petalStroke}
+        strokeWidth="0.7"
+        strokeOpacity="0.55"
         transform={`rotate(${angle})`}
-        style={{ animationDelay: `${i * 35}ms`, transformOrigin: "0 0" }}
+        style={{ animationDelay: `${i * 45}ms`, transformOrigin: "0 0" }}
       />
     );
   });
-  // Inner ring for fuller blooms (mum, carnation) — purely cosmetic, gives
-  // the centre the layered, dense look real cemetery flowers have.
+
+  // Dense inner ring for chrysanthemums and carnations — gives the bloom the
+  // layered, packed look these cemetery flowers have in real life.
   const inner =
     shape === "mum" || shape === "carnation"
-      ? Array.from({ length: 8 }, (_, i) => {
-          const angle = (360 / 8) * i + 22;
+      ? Array.from({ length: 10 }, (_, i) => {
+          const angle = (360 / 10) * i + 18;
           return (
             <ellipse
               key={`inner-${i}`}
               className="flower-petal flower-petal-inner"
               cx="0"
-              cy="-5"
-              rx="2.5"
-              ry="5"
+              cy={shape === "mum" ? -7 : -6}
+              rx="3"
+              ry={shape === "mum" ? 8 : 7}
               fill={petalDark}
+              stroke={petalStroke}
+              strokeWidth="0.5"
+              strokeOpacity="0.4"
               transform={`rotate(${angle})`}
-              style={{ animationDelay: `${i * 25 + 200}ms`, transformOrigin: "0 0" }}
+              style={{ animationDelay: `${i * 30 + 250}ms`, transformOrigin: "0 0" }}
             />
           );
         })
       : null;
+
+  // Sparkle dots that orbit a hovered bloom — six pre-positioned, animated
+  // by CSS only when the parent .flower-cell is hovered. Cheap and decorative.
+  const sparkles = Array.from({ length: 6 }, (_, i) => {
+    const a = (360 / 6) * i;
+    const r = 26;
+    const x = Math.cos((a * Math.PI) / 180) * r;
+    const y = Math.sin((a * Math.PI) / 180) * r;
+    return (
+      <circle
+        key={`spk-${i}`}
+        className="flower-sparkle"
+        cx={x}
+        cy={y}
+        r="1.2"
+        fill={centreGlow}
+        style={{ animationDelay: `${i * 120}ms` }}
+      />
+    );
+  });
+
   return (
-    <svg viewBox="-24 -28 48 56" width="44" height="44" aria-hidden className="flower-svg">
-      {/* Stem */}
+    <svg
+      viewBox="-36 -40 72 78"
+      width={size}
+      height={size}
+      aria-hidden
+      className="flower-svg"
+    >
+      <defs>
+        {/* Petal gradient — light tip → dark base, gives each petal volume. */}
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={petalLight} />
+          <stop offset="65%" stopColor={petalLight} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={petalDark} />
+        </linearGradient>
+        {/* Centre glow — bright pollen core. */}
+        <radialGradient id={cid} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={centreGlow} />
+          <stop offset="60%" stopColor={centre} />
+          <stop offset="100%" stopColor={centre} stopOpacity="0.6" />
+        </radialGradient>
+        {/* Backdrop halo — radial light that always sits behind the bloom. */}
+        <radialGradient id={hid} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={halo} />
+          <stop offset="100%" stopColor={halo} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* The halo guarantees contrast even on light cards. */}
+      <circle cx="0" cy="-4" r="32" fill={`url(#${hid})`} className="flower-halo" />
+
+      {/* Stem grows in on mount. */}
       <path
-        d="M 0 22 Q 1 12 0 0"
-        stroke="#5a7a4a"
-        strokeWidth="1.6"
+        d="M 0 30 Q 2 16 0 0"
+        stroke="#3d6a3d"
+        strokeWidth="2"
         fill="none"
         strokeLinecap="round"
         className="flower-stem"
       />
-      {/* Leaf */}
+      {/* Pair of leaves for a fuller silhouette. */}
       <path
-        d="M 0 12 Q 8 8 10 14 Q 4 14 0 14"
-        fill="#6a8a55"
+        d="M 0 16 Q 10 10 14 18 Q 6 18 0 18"
+        fill="#4a8a3a"
+        stroke="#2d5a25"
+        strokeWidth="0.5"
         className="flower-leaf"
       />
+      <path
+        d="M 0 22 Q -9 17 -12 24 Q -5 24 0 24"
+        fill="#5a9a48"
+        stroke="#2d5a25"
+        strokeWidth="0.5"
+        className="flower-leaf flower-leaf-2"
+      />
+
       <g className="flower-bloom">
         {petals}
         {inner}
-        <circle cx="0" cy="0" r={shape === "lily" ? 2.5 : 3.5} fill={centre} />
+        {/* Centre — radial gradient + a subtle pulsing dot on top. */}
+        <circle
+          cx="0"
+          cy="-4"
+          r={shape === "lily" ? 3.5 : 5}
+          fill={`url(#${cid})`}
+          className="flower-centre"
+        />
+        <circle
+          cx="0"
+          cy="-4"
+          r={shape === "lily" ? 1.4 : 2}
+          fill={centreGlow}
+          className="flower-pollen"
+        />
       </g>
+
+      {/* Sparkle ring — only animates on hover via CSS. */}
+      <g className="flower-sparkles">{sparkles}</g>
     </svg>
   );
 }
@@ -609,23 +739,29 @@ function FlowerCard({ ritual, highlight }: { ritual: PublicRitual; highlight: bo
       data-testid={`ritual-flower-${ritual.id}`}
       className={`flower-cell ${highlight ? "flower-highlight" : ""}`}
       style={{
-        background: `linear-gradient(135deg, ${kind.bg} 0%, hsl(var(--site-card)) 100%)`,
-        border: "1px solid hsl(var(--site-border))",
+        // Per-flower jewel-toned gradient. Always dark behind the bloom so
+        // even pale petals (white roses) stand out. Border picks up the
+        // halo tint so the card feels colour-coordinated with the flower.
+        background: `linear-gradient(135deg, ${kind.bgFrom} 0%, ${kind.bgTo} 100%)`,
+        border: `1px solid ${kind.bgTo}`,
         borderRadius: "var(--site-radius)",
+        // Used by CSS to draw the celebrate ring + sparkle tints.
+        ["--flower-halo" as string]: kind.halo,
+        ["--flower-glow" as string]: kind.centreGlow,
       }}
     >
       <div className="flower-art" aria-hidden>
         <FlowerSvg spec={kind} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate" style={{ color: "hsl(var(--site-fg))" }}>
+        <div className="text-sm font-semibold truncate" style={{ color: "#fff" }}>
           {ritual.visitorName ?? "Anonymous"}
         </div>
-        <div className="text-[11px] opacity-70 mb-1" style={{ color: "hsl(var(--site-fg))" }}>
+        <div className="text-[11px] opacity-80 mb-1" style={{ color: "#fff" }}>
           {kind.label} · {timeAgo(ritual.createdAt)}
         </div>
         {ritual.message ? (
-          <div className="text-xs italic line-clamp-2" style={{ color: "hsl(var(--site-fg))" }}>
+          <div className="text-xs italic line-clamp-2" style={{ color: "rgba(255,255,255,0.85)" }}>
             "{ritual.message}"
           </div>
         ) : null}
