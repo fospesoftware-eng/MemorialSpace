@@ -8,19 +8,43 @@
 }
 
 /* --- candle wall ---------------------------------------------------------- */
+/* The wall sits on a soft gradient haze so the candles read as if they're
+ * standing on a polished stone shelf — not floating in flat colour. */
 .candle-wall {
   position: relative;
   overflow: hidden;
+  padding: 1.5rem 0 0.5rem;
+}
+
+.candle-wall::before {
+  /* Subtle radial uplight from the bottom-centre, like ambient candlelight
+   * pooling on the wall behind. */
+  content: "";
+  position: absolute;
+  inset: auto 10% 0 10%;
+  height: 50%;
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    rgba(255, 180, 90, 0.18) 0%,
+    rgba(255, 180, 90, 0.06) 40%,
+    transparent 75%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .candle-cell {
-  animation: candle-rise 600ms ease-out backwards;
+  position: relative;
+  z-index: 1;
+  animation: candle-rise 700ms cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
 }
 
+/* Each candle gets a unique CSS-variable seed so multiple candles flicker
+ * out of phase — set inline via style on the <Candle> element. */
 .candle-stage {
   position: relative;
   width: 56px;
-  height: 92px;
+  height: 110px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -31,11 +55,57 @@
 
 .candle-body {
   width: 22px;
-  height: 56px;
-  background: linear-gradient(180deg, #fff8ea 0%, var(--candle-body) 50%, #d6c8a0 100%);
+  height: 60px;
+  background:
+    linear-gradient(
+      180deg,
+      #fff8ea 0%,
+      var(--candle-body) 45%,
+      #d6c8a0 100%
+    );
   border-radius: 4px 4px 2px 2px;
   position: relative;
-  box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.08), inset 2px 0 4px rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset -3px 0 6px rgba(0, 0, 0, 0.08),
+    inset 2px 0 4px rgba(255, 255, 255, 0.6);
+  /* Soft warm uplight from the flame sitting just above. */
+  background-image:
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(255, 200, 110, 0.55) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg, #fff8ea 0%, var(--candle-body) 45%, #d6c8a0 100%);
+}
+
+/* Wax pooled at the lip — a small organic detail that sells "real candle". */
+.candle-body::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 5px;
+  background: radial-gradient(ellipse at 50% 0%, #fff5d6 0%, #e3d4a8 80%);
+  border-radius: 50% 50% 50% 50% / 100% 100% 0 0;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.1);
+}
+
+/* A single, slow drip running down the side. The drip-y position uses a
+ * per-candle delay so the wall doesn't all drip in unison. */
+.candle-body::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  width: 3px;
+  height: 8px;
+  background: linear-gradient(180deg, #fff5d6 0%, #e3d4a8 100%);
+  border-radius: 50% 50% 50% 50% / 30% 30% 70% 70%;
+  opacity: 0.85;
+  animation: candle-drip 9s ease-in-out infinite;
+  animation-delay: var(--candle-seed, 0s);
 }
 
 .candle-base {
@@ -45,69 +115,140 @@
   background: linear-gradient(180deg, #c2b48a 0%, #8e7f5a 100%);
   border-radius: 3px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  position: relative;
+  z-index: 1;
 }
 
 .wick {
   width: 2px;
-  height: 6px;
-  background: #2a1f12;
+  height: 8px;
+  background: linear-gradient(180deg, #2a1f12 0%, #4a3520 50%, #2a1f12 100%);
   margin-bottom: -2px;
   position: relative;
   z-index: 2;
+  border-radius: 1px;
 }
 
 .flame {
   position: absolute;
-  bottom: 60px; /* sits above the wick */
+  bottom: 64px; /* sits above the wick */
   width: 16px;
-  height: 26px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  z-index: 3;
 }
 
-.flame-core {
+/* Outer envelope — the larger soft glow body of the flame. */
+.flame-outer {
   position: absolute;
-  width: 10px;
-  height: 18px;
+  width: 14px;
+  height: 26px;
   background: radial-gradient(
-    ellipse at 50% 75%,
-    #fff7c0 0%,
-    var(--flame-color, #ffcf6b) 45%,
-    #ff8a3d 80%,
+    ellipse at 50% 80%,
+    rgba(255, 220, 140, 0.95) 0%,
+    var(--flame-color, #ffcf6b) 35%,
+    rgba(255, 138, 61, 0.7) 70%,
     rgba(255, 90, 30, 0) 100%
   );
-  border-radius: 50% 50% 35% 35% / 60% 60% 40% 40%;
-  filter: blur(0.4px);
-  transform-origin: center bottom;
-  animation: flame-flicker 220ms ease-in-out infinite alternate,
-    flame-sway 2300ms ease-in-out infinite;
+  border-radius: 50% 50% 35% 35% / 65% 65% 35% 35%;
+  filter: blur(0.6px);
+  transform-origin: 50% 100%;
+  animation:
+    flame-flicker 180ms ease-in-out infinite alternate,
+    flame-sway 2400ms ease-in-out infinite;
+  animation-delay: var(--candle-seed, 0s);
+  mix-blend-mode: screen;
+}
+
+/* Inner core — the bright white-hot tip that pulses faster than the body. */
+.flame-core {
+  position: absolute;
+  width: 6px;
+  height: 14px;
+  bottom: 4px;
+  background: radial-gradient(
+    ellipse at 50% 75%,
+    #fffaf0 0%,
+    #ffe8a8 50%,
+    rgba(255, 220, 140, 0.5) 80%,
+    transparent 100%
+  );
+  border-radius: 50% 50% 40% 40% / 70% 70% 30% 30%;
+  filter: blur(0.3px);
+  transform-origin: 50% 100%;
+  animation:
+    flame-core-flicker 140ms ease-in-out infinite alternate,
+    flame-sway 2400ms ease-in-out infinite;
 }
 
 .flame-glow {
   position: absolute;
-  width: 60px;
-  height: 60px;
+  width: 70px;
+  height: 70px;
   background: radial-gradient(
     circle,
     rgba(255, 200, 90, 0.55) 0%,
     rgba(255, 200, 90, 0.18) 40%,
     transparent 70%
   );
-  filter: blur(4px);
+  filter: blur(5px);
   animation: flame-glow 2500ms ease-in-out infinite;
 }
 
+/* Smoke wisp drifting up off the flame — only visible faintly, like real
+ * candle smoke. We render two layers offset in time for a continuous trail. */
+.candle-smoke {
+  position: absolute;
+  bottom: 88px;
+  width: 8px;
+  height: 28px;
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    rgba(220, 220, 220, 0.35) 0%,
+    rgba(220, 220, 220, 0.1) 60%,
+    transparent 100%
+  );
+  border-radius: 50%;
+  filter: blur(2px);
+  opacity: 0;
+  animation: candle-smoke 4200ms linear infinite;
+  animation-delay: var(--candle-seed, 0s);
+  pointer-events: none;
+}
+.candle-smoke-2 {
+  animation-delay: calc(var(--candle-seed, 0s) + 2100ms);
+}
+
+/* Tiny embers floating up — three particles per candle, staggered. */
+.candle-ember {
+  position: absolute;
+  bottom: 78px;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: #ffb957;
+  box-shadow: 0 0 4px #ffae54;
+  opacity: 0;
+  animation: candle-ember 3200ms ease-out infinite;
+}
+.candle-ember-1 { left: 46%; animation-delay: calc(var(--candle-seed, 0s) + 0ms); }
+.candle-ember-2 { left: 52%; animation-delay: calc(var(--candle-seed, 0s) + 1100ms); }
+.candle-ember-3 { left: 49%; animation-delay: calc(var(--candle-seed, 0s) + 2200ms); }
+
 /* Highlight the just-added candle for a few seconds */
 .candle-highlight .candle-stage {
-  animation: candle-bob 4500ms ease-in-out infinite,
+  animation:
+    candle-bob 4500ms ease-in-out infinite,
     candle-celebrate 1800ms ease-out 1;
 }
 
 @keyframes candle-rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; transform: translateY(14px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes candle-bob {
@@ -116,18 +257,25 @@
 }
 
 @keyframes flame-flicker {
-  0% { transform: scale(0.95, 1.02) translateX(-0.3px); opacity: 0.92; }
-  100% { transform: scale(1.05, 0.95) translateX(0.5px); opacity: 1; }
+  0% { transform: scale(0.94, 1.06) translateX(-0.4px); opacity: 0.92; }
+  35% { transform: scale(1.08, 0.92) translateX(0.6px); opacity: 1; }
+  70% { transform: scale(0.96, 1.04) translateX(-0.2px); opacity: 0.95; }
+  100% { transform: scale(1.04, 0.96) translateX(0.5px); opacity: 1; }
+}
+
+@keyframes flame-core-flicker {
+  0% { transform: scale(0.9, 1.1) translateY(0.3px); opacity: 0.85; }
+  100% { transform: scale(1.08, 0.92) translateY(-0.3px); opacity: 1; }
 }
 
 @keyframes flame-sway {
-  0%, 100% { transform: rotate(-1.5deg); }
-  50% { transform: rotate(1.5deg); }
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
 }
 
 @keyframes flame-glow {
-  0%, 100% { opacity: 0.55; transform: scale(0.95); }
-  50% { opacity: 0.85; transform: scale(1.08); }
+  0%, 100% { opacity: 0.5; transform: scale(0.94); }
+  50% { opacity: 0.85; transform: scale(1.1); }
 }
 
 @keyframes candle-celebrate {
@@ -136,37 +284,162 @@
   100% { transform: scale(1) translateY(0); }
 }
 
+@keyframes candle-drip {
+  0%, 70% { transform: translateY(0); height: 8px; opacity: 0.85; }
+  85% { transform: translateY(8px); height: 10px; opacity: 0.9; }
+  100% { transform: translateY(14px); height: 4px; opacity: 0; }
+}
+
+@keyframes candle-smoke {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  20% { opacity: 0.35; }
+  100% { opacity: 0; transform: translate(8px, -32px) scale(1.6); }
+}
+
+@keyframes candle-ember {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  15% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(var(--ember-drift, 6px), -36px) scale(0.4);
+  }
+}
+
 /* --- flower garden -------------------------------------------------------- */
+.flower-garden {
+  position: relative;
+}
+
+/* Faint floating petals layer that drifts behind the cards — purely decorative
+ * but really sells the "garden" feel. The actual petals are absolutely
+ * positioned pseudo-elements so they don't add DOM weight per-card. */
+.flower-garden::before,
+.flower-garden::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 12% 24%, rgba(255, 220, 220, 0.5) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 62%, rgba(220, 230, 255, 0.55) 0 2px, transparent 3px),
+    radial-gradient(circle at 45% 88%, rgba(255, 240, 200, 0.5) 0 2px, transparent 3px);
+  background-size: 280px 320px;
+  animation: petals-drift 22s linear infinite;
+  opacity: 0.45;
+  z-index: 0;
+}
+.flower-garden::after {
+  background-image:
+    radial-gradient(circle at 60% 18%, rgba(220, 200, 220, 0.45) 0 2px, transparent 3px),
+    radial-gradient(circle at 22% 70%, rgba(255, 220, 220, 0.5) 0 2px, transparent 3px);
+  animation-duration: 35s;
+  animation-direction: reverse;
+}
+
 .flower-cell {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
   padding: 0.85rem 1rem;
   position: relative;
   overflow: hidden;
-  animation: flower-bloom 700ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
-  transition: transform 250ms ease;
+  z-index: 1;
+  animation: flower-bloom 800ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transition: transform 250ms ease, box-shadow 250ms ease;
 }
 
 .flower-cell:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 }
 
-.flower-emoji {
-  font-size: 2rem;
-  line-height: 1;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
-  animation: flower-sway 5000ms ease-in-out infinite;
+/* Sheen sweep on hover — like sun catching the petals. */
+.flower-cell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 800ms ease;
+  pointer-events: none;
+}
+.flower-cell:hover::after {
+  transform: translateX(100%);
+}
+
+.flower-art {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.12));
+}
+
+.flower-svg {
+  display: block;
+  overflow: visible;
+  animation: flower-sway 5200ms ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+/* Each petal pops out from the centre on mount, like the bloom opening. */
+.flower-petal {
+  animation: petal-open 900ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transform-box: fill-box;
+}
+
+.flower-petal-inner {
+  animation-duration: 1100ms;
+}
+
+.flower-stem {
+  animation: stem-grow 700ms ease-out backwards;
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation-fill-mode: forwards;
+}
+
+.flower-leaf {
+  animation: leaf-grow 900ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms backwards;
+  transform-origin: 0 12px;
+}
+
+/* Picker tile — a chunkier flower so the visitor can recognise the bloom
+ * before they pick it. Disable sway here so the picker isn't visually noisy. */
+.flower-pick {
+  text-align: left;
+}
+.flower-pick-art {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.flower-pick .flower-svg {
+  width: 36px;
+  height: 36px;
+  animation: none;
 }
 
 .flower-highlight {
-  animation: flower-bloom 700ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    flower-celebrate 1800ms ease-out 1;
+  animation:
+    flower-bloom 800ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    flower-celebrate 2000ms ease-out 1;
 }
 
 @keyframes flower-bloom {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
+  0% { opacity: 0; transform: scale(0.85) translateY(6px); }
+  70% { opacity: 1; transform: scale(1.04) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 @keyframes flower-sway {
@@ -174,9 +447,30 @@
   50% { transform: rotate(3deg); }
 }
 
+@keyframes petal-open {
+  0% { opacity: 0; transform: scale(0.2); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes stem-grow {
+  0% { stroke-dashoffset: 30; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes leaf-grow {
+  0% { opacity: 0; transform: scale(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 @keyframes flower-celebrate {
   0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.55); }
-  100% { box-shadow: 0 0 0 16px rgba(236, 72, 153, 0); }
+  100% { box-shadow: 0 0 0 18px rgba(236, 72, 153, 0); }
+}
+
+@keyframes petals-drift {
+  from { background-position: 0 0; }
+  to { background-position: 0 320px; }
 }
 
 /* --- prayer wall ---------------------------------------------------------- */
@@ -284,9 +578,18 @@
 /* --- reduced motion ------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .candle-stage,
+  .flame-outer,
   .flame-core,
   .flame-glow,
-  .flower-emoji,
+  .candle-smoke,
+  .candle-ember,
+  .candle-body::after,
+  .flower-svg,
+  .flower-petal,
+  .flower-stem,
+  .flower-leaf,
+  .flower-garden::before,
+  .flower-garden::after,
   .prayer-waveform .bar.bar-active,
   .record-dot,
   .ritual-cta-glow::after {

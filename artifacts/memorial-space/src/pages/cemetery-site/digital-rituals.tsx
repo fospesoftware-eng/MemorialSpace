@@ -55,14 +55,165 @@ const CANDLE_COLORS: { id: CandleColor; label: string; hex: string }[] = [
   { id: "rose", label: "Rose", hex: "#ffb1c4" },
 ];
 
-type FlowerKind = "white-roses" | "lilies" | "sunflowers" | "chrysanthemums" | "mixed-bouquet";
-const FLOWER_KINDS: { id: FlowerKind; label: string; emoji: string; color: string }[] = [
-  { id: "white-roses", label: "White roses", emoji: "🌹", color: "#fce7e7" },
-  { id: "lilies", label: "Lilies", emoji: "🌷", color: "#fdf6e3" },
-  { id: "sunflowers", label: "Sunflowers", emoji: "🌻", color: "#ffe6a0" },
-  { id: "chrysanthemums", label: "Chrysanthemums", emoji: "🌼", color: "#fff1c4" },
-  { id: "mixed-bouquet", label: "Mixed bouquet", emoji: "💐", color: "#fde2f3" },
+// Cemetery-appropriate flowers only — these are the canonical Western funerary
+// blooms (white roses for remembrance, lilies for restored innocence,
+// chrysanthemums for mourning in Europe/Asia, carnations for pure love,
+// forget-me-nots for "I will never forget you"). Each entry carries the
+// petal/centre colours used by the SVG illustration so the bouquet looks
+// hand-drawn rather than emoji-clipart.
+type FlowerKind =
+  | "white-roses"
+  | "lilies"
+  | "chrysanthemums"
+  | "carnations"
+  | "forget-me-nots";
+type FlowerSpec = {
+  id: FlowerKind;
+  label: string;
+  meaning: string;
+  bg: string;
+  petal: string;
+  petalDark: string;
+  centre: string;
+  // Drives the SVG renderer's petal layout.
+  shape: "rose" | "lily" | "mum" | "carnation" | "forget-me-not";
+};
+const FLOWER_KINDS: FlowerSpec[] = [
+  {
+    id: "white-roses",
+    label: "White roses",
+    meaning: "Remembrance & reverence",
+    bg: "#f6ecec",
+    petal: "#fff",
+    petalDark: "#e7d8d8",
+    centre: "#dab27a",
+    shape: "rose",
+  },
+  {
+    id: "lilies",
+    label: "Lilies",
+    meaning: "Restored innocence",
+    bg: "#f7f2e4",
+    petal: "#fffbea",
+    petalDark: "#e9dfb6",
+    centre: "#caa14a",
+    shape: "lily",
+  },
+  {
+    id: "chrysanthemums",
+    label: "Chrysanthemums",
+    meaning: "Honour & mourning",
+    bg: "#f3eedf",
+    petal: "#fff5c8",
+    petalDark: "#e6d385",
+    centre: "#b88735",
+    shape: "mum",
+  },
+  {
+    id: "carnations",
+    label: "White carnations",
+    meaning: "Pure love",
+    bg: "#f4ecec",
+    petal: "#fff4f3",
+    petalDark: "#e6cfcd",
+    centre: "#c98c8c",
+    shape: "carnation",
+  },
+  {
+    id: "forget-me-nots",
+    label: "Forget-me-nots",
+    meaning: "I will never forget you",
+    bg: "#e7eef5",
+    petal: "#aac4e8",
+    petalDark: "#7ea2cf",
+    centre: "#f4d76b",
+    shape: "forget-me-not",
+  },
 ];
+
+// Hand-drawn SVG flower used in place of emoji. Petal nodes are individually
+// animated via CSS so each bloom "opens" on mount and sways with a slight
+// per-petal delay, giving the wall a subtly organic feel.
+function FlowerSvg({ spec }: { spec: FlowerSpec }) {
+  const { petal, petalDark, centre, shape } = spec;
+  const petalCount = shape === "lily" ? 6 : shape === "rose" ? 5 : shape === "carnation" ? 7 : shape === "forget-me-not" ? 5 : 12;
+  const petals = Array.from({ length: petalCount }, (_, i) => {
+    const angle = (360 / petalCount) * i;
+    const ry =
+      shape === "lily" ? 18 :
+      shape === "mum" ? 9 :
+      shape === "rose" ? 11 :
+      shape === "carnation" ? 12 : 8;
+    const rx =
+      shape === "lily" ? 5 :
+      shape === "mum" ? 3.5 :
+      shape === "rose" ? 7 :
+      shape === "carnation" ? 4 : 7;
+    const cy =
+      shape === "lily" ? -16 :
+      shape === "mum" ? -10 :
+      shape === "rose" ? -10 :
+      shape === "carnation" ? -10 : -8;
+    return (
+      <ellipse
+        key={i}
+        className="flower-petal"
+        cx="0"
+        cy={cy}
+        rx={rx}
+        ry={ry}
+        fill={i % 2 === 0 ? petal : petalDark}
+        transform={`rotate(${angle})`}
+        style={{ animationDelay: `${i * 35}ms`, transformOrigin: "0 0" }}
+      />
+    );
+  });
+  // Inner ring for fuller blooms (mum, carnation) — purely cosmetic, gives
+  // the centre the layered, dense look real cemetery flowers have.
+  const inner =
+    shape === "mum" || shape === "carnation"
+      ? Array.from({ length: 8 }, (_, i) => {
+          const angle = (360 / 8) * i + 22;
+          return (
+            <ellipse
+              key={`inner-${i}`}
+              className="flower-petal flower-petal-inner"
+              cx="0"
+              cy="-5"
+              rx="2.5"
+              ry="5"
+              fill={petalDark}
+              transform={`rotate(${angle})`}
+              style={{ animationDelay: `${i * 25 + 200}ms`, transformOrigin: "0 0" }}
+            />
+          );
+        })
+      : null;
+  return (
+    <svg viewBox="-24 -28 48 56" width="44" height="44" aria-hidden className="flower-svg">
+      {/* Stem */}
+      <path
+        d="M 0 22 Q 1 12 0 0"
+        stroke="#5a7a4a"
+        strokeWidth="1.6"
+        fill="none"
+        strokeLinecap="round"
+        className="flower-stem"
+      />
+      {/* Leaf */}
+      <path
+        d="M 0 12 Q 8 8 10 14 Q 4 14 0 14"
+        fill="#6a8a55"
+        className="flower-leaf"
+      />
+      <g className="flower-bloom">
+        {petals}
+        {inner}
+        <circle cx="0" cy="0" r={shape === "lily" ? 2.5 : 3.5} fill={centre} />
+      </g>
+    </svg>
+  );
+}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -368,18 +519,38 @@ function RitualCounters({
 // --- candle wall ------------------------------------------------------------
 function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolean }) {
   const color = CANDLE_COLORS.find((c) => c.id === ritual.variant) ?? CANDLE_COLORS[0]!;
-  // Stable per-candle flicker delay so the wall doesn't pulse in unison.
+  // Stable per-candle flicker delay + ember drift so the wall flickers out
+  // of phase. We derive both from the ritual id so they're deterministic
+  // across renders (no jumpy SSR/CSR mismatch) but vary candle-to-candle.
   const delay = (ritual.id % 13) * 137;
+  const seed = ((ritual.id * 73) % 2400) / 1000; // 0–2.4s
+  const drift = (((ritual.id * 31) % 9) - 4) + "px"; // -4..+4 px ember drift
   return (
     <div
       data-testid={`ritual-candle-${ritual.id}`}
       className={`candle-cell flex flex-col items-center gap-2 ${highlight ? "candle-highlight" : ""}`}
       title={`Lit by ${ritual.visitorName ?? "Anonymous"} · ${timeAgo(ritual.createdAt)}`}
     >
-      <div className="candle-stage" style={{ animationDelay: `${delay}ms` }}>
+      <div
+        className="candle-stage"
+        style={{
+          animationDelay: `${delay}ms`,
+          // Per-candle CSS-variable seed used by drip/smoke/ember keyframes.
+          ["--candle-seed" as string]: `${seed}s`,
+          ["--ember-drift" as string]: drift,
+        }}
+      >
+        {/* Smoke wisps drifting up — two layers offset in time. */}
+        <div className="candle-smoke" aria-hidden />
+        <div className="candle-smoke candle-smoke-2" aria-hidden />
+        {/* Tiny embers floating off the flame. */}
+        <div className="candle-ember candle-ember-1" aria-hidden />
+        <div className="candle-ember candle-ember-2" aria-hidden />
+        <div className="candle-ember candle-ember-3" aria-hidden />
         <div className="flame" style={{ ["--flame-color" as string]: color.hex }} aria-hidden>
-          <div className="flame-core" />
           <div className="flame-glow" />
+          <div className="flame-outer" />
+          <div className="flame-core" />
         </div>
         <div className="wick" />
         <div className="candle-body" />
@@ -430,18 +601,22 @@ function CandleWall({ rituals, highlightId }: { rituals: PublicRitual[]; highlig
 
 // --- flower garden ----------------------------------------------------------
 function FlowerCard({ ritual, highlight }: { ritual: PublicRitual; highlight: boolean }) {
-  const kind = FLOWER_KINDS.find((k) => k.id === ritual.variant) ?? FLOWER_KINDS[4]!;
+  // Fall back to white roses (the universal cemetery flower) if the stored
+  // variant predates the cemetery-only picker (e.g. legacy "sunflowers").
+  const kind = FLOWER_KINDS.find((k) => k.id === ritual.variant) ?? FLOWER_KINDS[0]!;
   return (
     <div
       data-testid={`ritual-flower-${ritual.id}`}
       className={`flower-cell ${highlight ? "flower-highlight" : ""}`}
       style={{
-        background: `linear-gradient(135deg, ${kind.color} 0%, hsl(var(--site-card)) 100%)`,
+        background: `linear-gradient(135deg, ${kind.bg} 0%, hsl(var(--site-card)) 100%)`,
         border: "1px solid hsl(var(--site-border))",
         borderRadius: "var(--site-radius)",
       }}
     >
-      <div className="flower-emoji" aria-hidden>{kind.emoji}</div>
+      <div className="flower-art" aria-hidden>
+        <FlowerSvg spec={kind} />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold truncate" style={{ color: "hsl(var(--site-fg))" }}>
           {ritual.visitorName ?? "Anonymous"}
@@ -462,7 +637,7 @@ function FlowerCard({ ritual, highlight }: { ritual: PublicRitual; highlight: bo
 function FlowerGarden({ rituals, highlightId }: { rituals: PublicRitual[]; highlightId: number | null }) {
   return (
     <div
-      className="grid gap-3"
+      className="flower-garden grid gap-3"
       style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
       data-testid="flower-garden"
     >
@@ -720,10 +895,16 @@ function ComposeDialog(props: ComposeProps) {
                       border: `1px solid ${variant === k.id ? "hsl(var(--site-primary))" : "hsl(var(--site-border))"}`,
                       borderRadius: "var(--site-radius)",
                     }}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-sm transition"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm transition flower-pick"
+                    title={k.meaning}
                   >
-                    <span className="text-xl" aria-hidden>{k.emoji}</span>
-                    {k.label}
+                    <span className="flower-pick-art" aria-hidden>
+                      <FlowerSvg spec={k} />
+                    </span>
+                    <span className="flex flex-col items-start min-w-0">
+                      <span className="font-semibold leading-tight truncate">{k.label}</span>
+                      <span className="text-[10px] opacity-70 leading-tight truncate">{k.meaning}</span>
+                    </span>
                   </button>
                 ))}
               </div>
