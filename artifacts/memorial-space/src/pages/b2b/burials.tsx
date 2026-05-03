@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Users } from "lucide-react";
 import { format } from "date-fns";
+import { BurialDetailSheet, type BurialRecord } from "@/components/plot-detail-sheet";
 
 const ORG_ID = 1;
 
 export default function Burials() {
   const [search, setSearch] = useState("");
+  const [selectedBurial, setSelectedBurial] = useState<BurialRecord | null>(null);
   const { data: burials, isLoading } = useListBurials({ organizationId: ORG_ID });
 
   const filteredBurials = burials?.filter(b => 
@@ -67,11 +69,23 @@ export default function Burials() {
               </TableRow>
             ) : (
               filteredBurials.map((burial) => (
-                <TableRow key={burial.id}>
+                <TableRow
+                  key={burial.id}
+                  data-testid={`burial-row-${burial.id}`}
+                  onClick={() => setSelectedBurial(burial as BurialRecord)}
+                  className="cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedBurial(burial as BurialRecord);
+                    }
+                  }}
+                >
                   <TableCell className="font-medium">{burial.deceasedName}</TableCell>
                   <TableCell>{burial.deceasedDob ? format(new Date(burial.deceasedDob), 'MMM d, yyyy') : '-'}</TableCell>
                   <TableCell>{burial.deceasedDod ? format(new Date(burial.deceasedDod), 'MMM d, yyyy') : '-'}</TableCell>
-                  <TableCell>{burial.deceasedDob ? format(new Date(burial.burialDate!), 'MMM d, yyyy') : '-'}</TableCell>
+                  <TableCell>{burial.burialDate ? format(new Date(burial.burialDate), 'MMM d, yyyy') : '-'}</TableCell>
                   <TableCell>{burial.religion || '-'}</TableCell>
                   <TableCell>{burial.plotId}</TableCell>
                 </TableRow>
@@ -80,6 +94,12 @@ export default function Burials() {
           </TableBody>
         </Table>
       </div>
+
+      <BurialDetailSheet
+        burial={selectedBurial}
+        open={selectedBurial != null}
+        onOpenChange={(open) => !open && setSelectedBurial(null)}
+      />
     </div>
   );
 }
