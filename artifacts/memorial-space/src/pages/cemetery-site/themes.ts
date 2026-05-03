@@ -5,6 +5,21 @@ export type ThemeKey =
   | "celestial-night"
   | "japanese-zen";
 
+// Each layout key drives a structurally-different memorial hero, lifespan
+// strip, and photo gallery — not just a recolour. Memorial.tsx switches
+// on this to render genuinely distinct page templates.
+//   - split-formal     → portrait card LEFT, name/dates/actions RIGHT
+//   - full-bleed       → photography-led hero, portrait fills the band
+//   - editorial        → magazine cover, oversized display type centered
+//   - monumental       → dark single-column with circular portrait + huge years
+//   - vertical-zen     → asymmetric, sumi-e proportions with vertical accent line
+export type HeroLayout =
+  | "split-formal"
+  | "full-bleed"
+  | "editorial"
+  | "monumental"
+  | "vertical-zen";
+
 export type ThemeDef = {
   key: ThemeKey;
   label: string;
@@ -15,6 +30,7 @@ export type ThemeDef = {
   fontStack: { heading: string; body: string };
   swatch: { primary: string; background: string };
   heroOverlay: string;
+  layout: HeroLayout;
 };
 
 export const THEMES: Record<ThemeKey, ThemeDef> = {
@@ -42,6 +58,7 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(150 45% 24%)", background: "hsl(42 30% 96%)" },
     heroOverlay: "linear-gradient(180deg, hsla(150,30%,8%,0.55), hsla(150,30%,8%,0.75))",
+    layout: "split-formal",
   },
   "modern-minimal": {
     key: "modern-minimal",
@@ -67,6 +84,7 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(0 0% 9%)", background: "hsl(0 0% 100%)" },
     heroOverlay: "linear-gradient(180deg, hsla(0,0%,0%,0.25), hsla(0,0%,0%,0.55))",
+    layout: "full-bleed",
   },
   "heritage-garden": {
     key: "heritage-garden",
@@ -92,6 +110,7 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(350 55% 30%)", background: "hsl(40 35% 94%)" },
     heroOverlay: "linear-gradient(180deg, hsla(350,30%,12%,0.45), hsla(350,30%,12%,0.7))",
+    layout: "editorial",
   },
   // Dark, ethereal theme — deep indigo background with warm gold accents
   // and a soft cream foreground. Designed for night-watch / starlit-vigil
@@ -120,6 +139,7 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(42 75% 62%)", background: "hsl(232 38% 10%)" },
     heroOverlay: "linear-gradient(180deg, hsla(232,40%,6%,0.55), hsla(232,40%,6%,0.85))",
+    layout: "monumental",
   },
   // Calm, contemplative theme inspired by sumi-e ink and washi paper —
   // warm beige paper background, deep ink foreground, and a single
@@ -148,6 +168,7 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(20 12% 14%)", background: "hsl(36 32% 92%)" },
     heroOverlay: "linear-gradient(180deg, hsla(20,15%,8%,0.4), hsla(20,15%,8%,0.7))",
+    layout: "vertical-zen",
   },
 };
 
