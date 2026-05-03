@@ -14,6 +14,7 @@ import {
   Globe,
   Sparkles,
   Info,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -80,6 +81,18 @@ const portals: Portal[] = [
     accent: "green",
     audience: "Cemetery managers & groundskeepers",
     highlights: ["Interactive plot map", "Burial & booking workflows", "QR codes & memorial pages"],
+  },
+  {
+    key: "vendor",
+    name: "Marketplace Vendor",
+    tagline: "Third-party service providers — florists, stonemasons, transport — managing services and incoming family requests.",
+    url: "/vendor/dashboard",
+    email: "florist@test.com",
+    password: "password123",
+    icon: Store,
+    accent: "violet",
+    audience: "Florists, stonemasons & care providers",
+    highlights: ["Service catalog & pricing", "Incoming request inbox", "Public listing on /vendors"],
   },
   {
     key: "admin",
