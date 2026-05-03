@@ -24,10 +24,15 @@ import {
   qrCodesTable,
   organizationsTable,
   memorialRitualsTable,
+  cemeteryProductsTable,
+  cemeteryCategoriesTable,
+  cemeteryOrdersTable,
   RITUAL_TYPES,
   RITUAL_ACTIVE_MS,
   ritualTypeSchema,
   type MemorialRitual,
+  type CemeteryProduct,
+  type CemeteryCategory,
 } from "@workspace/db";
 import { and, eq, gte, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -82,6 +87,47 @@ async function resolveBurialByCode(slug: string, rawCode: string) {
     .where(and(eq(burialsTable.id, qr.burialId), eq(burialsTable.organizationId, org.id)));
   if (!burial) return null;
   return { orgId: org.id, burial };
+}
+
+// Map a cemetery product/category pair into the matching ritual type.
+// We use simple keyword heuristics on category + product name so cemeteries
+// don't need to tag their catalogue specially: a category called "Floral
+// Arrangements" or a product called "Memorial Wreath" both bucket as flower.
+// Returns null when nothing matches — those products are still available
+// in the marketplace, they just don't show up as a "send a real one" upsell
+// inside the rituals dialog.
+function classifyProductAsRitual(
+  product: CemeteryProduct,
+  category: CemeteryCategory | null,
+): "candle" | "flower" | "prayer" | null {
+  const haystack = `${category?.name ?? ""} ${category?.slug ?? ""} ${product.name} ${product.shortDescription ?? ""}`.toLowerCase();
+  if (/\b(candle|votive|lantern)/.test(haystack)) return "candle";
+  if (/\b(flower|floral|bouquet|wreath|rose|lily|bloom|garland)/.test(haystack)) return "flower";
+  if (/\b(prayer|religious|ceremony|ceremonial|service|priest|rabbi|imam|mass|memorial.service|blessing)/.test(haystack)) return "prayer";
+  return null;
+}
+
+// Public-facing product shape — mirrors `PublicProduct` on the cemetery-site
+// FE so we can reuse the existing product-detail link from the rituals UI.
+function publicProduct(p: CemeteryProduct) {
+  return {
+    id: p.id,
+    organizationId: p.organizationId,
+    categoryId: p.categoryId,
+    name: p.name,
+    slug: p.slug,
+    shortDescription: p.shortDescription,
+    description: p.description,
+    price: p.price,
+    compareAtPrice: p.compareAtPrice,
+    type: p.type as "product" | "service",
+    stockQuantity: p.stockQuantity,
+    photos: p.photos,
+    isFeatured: p.isFeatured,
+    isPublished: p.isPublished,
+    stripeEnabled: p.stripeEnabled,
+    sortOrder: p.sortOrder,
+  };
 }
 
 // Sanitize ritual rows for the public response — strip nothing for now,
@@ -144,10 +190,60 @@ router.get("/c/:slug/memorial/:code/rituals", async (req, res) => {
     if (row.type in totals) totals[row.type] = { active: row.active, total: row.total };
   }
 
+  // --- Marketplace integration --------------------------------------------
+  // Pull the cemetery's published catalogue and bucket products by ritual
+  // type so the FE can offer a "send a real one" upgrade alongside each
+  // virtual ritual. We also count real orders linked to this burial so the
+  // ritual wall can show "X orders fulfilled by the cemetery for this person"
+  // — making the integration with the existing marketplace tangible.
+  const [productRows, realOrderCountRow] = await Promise.all([
+    db
+      .select({ product: cemeteryProductsTable, category: cemeteryCategoriesTable })
+      .from(cemeteryProductsTable)
+      .leftJoin(
+        cemeteryCategoriesTable,
+        eq(cemeteryProductsTable.categoryId, cemeteryCategoriesTable.id),
+      )
+      .where(
+        and(
+          eq(cemeteryProductsTable.organizationId, ctx.orgId),
+          eq(cemeteryProductsTable.isPublished, true),
+        ),
+      )
+      .orderBy(desc(cemeteryProductsTable.isFeatured), cemeteryProductsTable.sortOrder),
+    db
+      .select({ count: sql<number>`COUNT(*)::int`.mapWith(Number) })
+      .from(cemeteryOrdersTable)
+      .where(eq(cemeteryOrdersTable.burialId, ctx.burial.id)),
+  ]);
+
+  const products: { candle: ReturnType<typeof publicProduct>[]; flower: ReturnType<typeof publicProduct>[]; prayer: ReturnType<typeof publicProduct>[] } = {
+    candle: [],
+    flower: [],
+    prayer: [],
+  };
+  // Up to 3 products per type — keeps the ritual dialog scannable rather
+  // than dumping the whole catalogue inline.
+  const PER_TYPE_LIMIT = 3;
+  for (const row of productRows) {
+    const cls = classifyProductAsRitual(row.product, row.category);
+    if (!cls) continue;
+    if (products[cls].length >= PER_TYPE_LIMIT) continue;
+    products[cls].push(publicProduct(row.product));
+  }
+
+  const realOrderCount = realOrderCountRow[0]?.count ?? 0;
+
   res.json({
     rituals: active.map(publicRitual),
     totals,
     types: RITUAL_TYPES,
+    // New: lets the FE deep-link to the existing marketplace flow with the
+    // memorial code already attached to the order on submission.
+    marketplace: {
+      products,
+      realOrderCount,
+    },
   });
 });
 

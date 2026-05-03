@@ -275,6 +275,10 @@ export type RitualsResponse = {
   rituals: PublicRitual[];
   totals: RitualTotals;
   types: readonly RitualType[];
+  marketplace: {
+    products: { candle: PublicProduct[]; flower: PublicProduct[]; prayer: PublicProduct[] };
+    realOrderCount: number;
+  };
 };
 
 export function useMemorialRituals(slug: string, code: string) {
@@ -331,6 +335,10 @@ export type SubmitOrderPayload = {
   customerEmail: string;
   customerPhone?: string | null;
   customerNotes?: string | null;
+  // Optional QR memorial code — when present, the order is back-linked to
+  // the corresponding burial server-side so the cemetery's CRM can see all
+  // tributes (virtual + real) for one person in a single view.
+  memorialCode?: string | null;
   items: Array<{ productId: number; quantity: number }>;
 };
 

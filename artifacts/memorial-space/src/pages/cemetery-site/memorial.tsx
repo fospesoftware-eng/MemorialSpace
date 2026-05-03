@@ -196,6 +196,9 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
     const params = new URLSearchParams();
     params.set("for", memorial.deceasedName ?? "Memorial");
     if (memorial.plotLabel) params.set("plotRef", memorial.plotLabel);
+    // Pass the QR code so the cart can back-link the order to this burial
+    // server-side — same code that resolves the memorial on this page.
+    params.set("memorialCode", code);
     return `/c/${slug}/marketplace?${params.toString()}`;
   })();
 

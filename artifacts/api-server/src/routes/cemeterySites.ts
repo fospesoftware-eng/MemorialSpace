@@ -1130,6 +1130,37 @@ router.post("/c/:slug/orders", async (req, res) => {
     return;
   }
 
+  // Resolve the optional memorial code → burialId. We treat this as a hint:
+  // any failure (bad code, foreign org, missing burial) silently drops the
+  // link rather than rejecting the order, because losing a paying customer
+  // because they had a stale URL is much worse than a missing back-link.
+  let linkedBurialId: number | null = null;
+  if (parsed.data.memorialCode) {
+    const codeUpper = parsed.data.memorialCode.toUpperCase();
+    const [qr] = await db
+      .select({ burialId: qrCodesTable.burialId })
+      .from(qrCodesTable)
+      .where(
+        and(
+          eq(qrCodesTable.code, codeUpper),
+          eq(qrCodesTable.organizationId, ctx.org.id),
+        ),
+      );
+    if (qr?.burialId != null) {
+      // Confirm the burial still belongs to this org before persisting.
+      const [b] = await db
+        .select({ id: burialsTable.id })
+        .from(burialsTable)
+        .where(
+          and(
+            eq(burialsTable.id, qr.burialId),
+            eq(burialsTable.organizationId, ctx.org.id),
+          ),
+        );
+      if (b) linkedBurialId = b.id;
+    }
+  }
+
   // Fetch all referenced products in one query; verify they all belong to
   // THIS cemetery and are published. Any mismatch → 400.
   const productIds = Array.from(new Set(parsed.data.items.map((i) => i.productId)));
@@ -1202,6 +1233,7 @@ router.post("/c/:slug/orders", async (req, res) => {
         .insert(cemeteryOrdersTable)
         .values({
           organizationId: ctx.org.id,
+          burialId: linkedBurialId,
           orderNumber,
           customerName: parsed.data.customerName,
           customerEmail: parsed.data.customerEmail,

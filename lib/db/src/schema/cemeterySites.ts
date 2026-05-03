@@ -13,6 +13,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { organizationsTable } from "./organizations";
+import { burialsTable } from "./burials";
 
 // ---------------------------------------------------------------------------
 // Cemetery Website Builder
@@ -201,6 +202,15 @@ export const cemeteryOrdersTable = pgTable(
     organizationId: integer("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    // Optional link to the burial the order is for. Set when the customer
+    // arrived at the marketplace from a specific memorial page (the memorial
+    // code is resolved server-side to a burial scoped to this org). Cascades
+    // on burial delete so we don't keep dangling references; the order row
+    // itself is preserved (org-scoped) when the burial link is just nulled
+    // because we don't want to lose revenue history when a record is moved.
+    burialId: integer("burial_id").references(() => burialsTable.id, {
+      onDelete: "set null",
+    }),
     // Display-friendly order number. Allocated server-side as
     // ORD-YYYYMMDD-NNNN where NNNN resets daily per org. Unique per org so
     // multiple cemeteries can share the same number on different days.
@@ -228,6 +238,9 @@ export const cemeteryOrdersTable = pgTable(
   (t) => [
     uniqueIndex("cemetery_orders_org_number_unique").on(t.organizationId, t.orderNumber),
     index("cemetery_orders_org_status_idx").on(t.organizationId, t.status),
+    // Lets the rituals endpoint count "real orders for this burial" without
+    // a sequential scan; also speeds up the burial detail screen later.
+    index("cemetery_orders_burial_idx").on(t.burialId),
   ],
 );
 
@@ -306,6 +319,17 @@ export const createCemeteryOrderSchema = z.object({
   customerEmail: z.email().max(200),
   customerPhone: z.string().max(60).nullable().optional(),
   customerNotes: z.string().max(2000).nullable().optional(),
+  // Optional QR memorial code linking this order to a specific burial. When
+  // provided, the server resolves it to a burial within the same cemetery
+  // and stores `burialId`. Treated as an opaque hint — invalid/foreign codes
+  // are silently dropped rather than rejecting the order, because losing a
+  // legitimate purchase would be a worse outcome than a missing back-link.
+  memorialCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Fa-f0-9]{8,64}$/)
+    .nullable()
+    .optional(),
   items: z
     .array(
       z.object({

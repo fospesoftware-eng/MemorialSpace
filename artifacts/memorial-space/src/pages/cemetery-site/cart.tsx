@@ -12,7 +12,7 @@ type Props = { slug: string; site: PublicSite };
 // which plot/loved-one this order is for.
 const ORDER_CONTEXT_KEY = (slug: string) => `cemetery-order-context:${slug}`;
 
-function readOrderContext(slug: string): { for?: string; plotRef?: string } | null {
+function readOrderContext(slug: string): { for?: string; plotRef?: string; memorialCode?: string } | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(ORDER_CONTEXT_KEY(slug));
@@ -82,12 +82,17 @@ export function CemeterySiteCart({ slug, site }: Props) {
     e.preventDefault();
     setError(null);
     if (!isValid) return;
+    // Pull the memorial code out of the persisted order context so the
+    // server can back-link this order to the burial. We prefer the freshly
+    // read value over a stale closure capture.
+    const ctx = readOrderContext(slug);
     submit.mutate(
       {
         customerName: form.customerName.trim(),
         customerEmail: form.customerEmail.trim(),
         customerPhone: form.customerPhone.trim() || null,
         customerNotes: form.customerNotes.trim() || null,
+        memorialCode: ctx?.memorialCode ?? null,
         items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       },
       {

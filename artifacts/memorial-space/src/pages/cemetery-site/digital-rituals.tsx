@@ -11,17 +11,41 @@
  * blends seamlessly with whichever theme the cemetery has picked.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Flame, Flower2, Mic, Square, Send, Trash2, Heart, Play, Pause, X } from "lucide-react";
+import { Link } from "wouter";
+import {
+  Flame, Flower2, Mic, Square, Send, Trash2, Heart, Play, Pause, X,
+  ShoppingBag, ArrowRight, Sparkles,
+} from "lucide-react";
 import {
   useMemorialRituals,
   useCreateRitual,
   type PublicRitual,
   type RitualType,
   type RitualTotals,
+  type PublicProduct,
 } from "./api";
 import "./digital-rituals.css";
 
 type Props = { slug: string; code: string; deceasedName: string | null };
+
+// Build the marketplace deep-link with the memorial context already attached.
+// The marketplace page picks these up, persists them in the order context,
+// and the cart submits the memorialCode with the order so it back-links to
+// the burial server-side.
+function marketplaceHref(opts: {
+  slug: string;
+  code: string;
+  deceasedName: string | null;
+  productSlug?: string;
+}): string {
+  const params = new URLSearchParams();
+  params.set("for", opts.deceasedName ?? "Memorial");
+  params.set("memorialCode", opts.code);
+  const base = opts.productSlug
+    ? `/c/${opts.slug}/marketplace/${opts.productSlug}`
+    : `/c/${opts.slug}/marketplace`;
+  return `${base}?${params.toString()}`;
+}
 
 type CandleColor = "white" | "gold" | "amber" | "rose";
 const CANDLE_COLORS: { id: CandleColor; label: string; hex: string }[] = [
@@ -66,6 +90,9 @@ export function DigitalRituals({ slug, code, deceasedName }: Props) {
   };
   const rituals = data?.rituals ?? [];
   const filtered = rituals.filter((r) => r.type === tab);
+  const marketplaceProducts = data?.marketplace?.products ?? { candle: [], flower: [], prayer: [] };
+  const realOrderCount = data?.marketplace?.realOrderCount ?? 0;
+  const tabProducts = marketplaceProducts[tab] ?? [];
 
   // Used to celebrate the visitor's own contribution with a brief glow ring.
   useEffect(() => {
@@ -109,6 +136,27 @@ export function DigitalRituals({ slug, code, deceasedName }: Props) {
             Light a candle, offer flowers, or leave a prayer. Your gesture is shared
             with everyone who visits this memorial.
           </p>
+
+          {/* Real-order badge — surfaces tributes the cemetery has already
+              fulfilled in person, integrating the digital wall with the
+              cemetery's marketplace orders for this person. */}
+          {realOrderCount > 0 ? (
+            <div
+              data-testid="rituals-real-order-badge"
+              className="inline-flex items-center gap-2 mt-4 px-3 py-1.5 text-xs font-semibold"
+              style={{
+                background: "hsl(var(--site-card))",
+                color: "hsl(var(--site-fg))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "999px",
+              }}
+            >
+              <ShoppingBag className="h-3 w-3" style={{ color: "hsl(var(--site-primary))" }} />
+              <span>
+                {realOrderCount} real {realOrderCount === 1 ? "tribute" : "tributes"} fulfilled by the cemetery
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {/* Counter pills — read at-a-glance how many people have already left
@@ -116,8 +164,9 @@ export function DigitalRituals({ slug, code, deceasedName }: Props) {
             toward the lifetime total without crowding the wall. */}
         <RitualCounters totals={totals} active={tab} onChange={setTab} />
 
-        {/* Compose CTA */}
-        <div className="text-center mb-8">
+        {/* Compose CTA + secondary "send a real one" CTA when the cemetery
+            has matching products in their catalogue. */}
+        <div className="text-center mb-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={() => setComposeOpen(true)}
             data-testid="rituals-compose-open"
@@ -133,7 +182,88 @@ export function DigitalRituals({ slug, code, deceasedName }: Props) {
             {tab === "prayer" ? <Mic className="h-4 w-4" /> : null}
             {tab === "candle" ? "Light a candle" : tab === "flower" ? "Offer flowers" : "Leave a prayer"}
           </button>
+          {tabProducts.length > 0 ? (
+            <Link
+              href={marketplaceHref({ slug, code, deceasedName, productSlug: tabProducts[0]!.slug })}
+              data-testid="rituals-marketplace-cta"
+              style={{
+                background: "hsl(var(--site-card))",
+                color: "hsl(var(--site-fg))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold hover:opacity-90 transition-all"
+            >
+              <Sparkles className="h-4 w-4" style={{ color: "hsl(var(--site-primary))" }} />
+              Send a real {tab === "candle" ? "candle" : tab === "flower" ? "bouquet" : "service"}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          ) : null}
         </div>
+
+        {/* Real-product upsell strip — surfaces the cemetery's actual
+            catalogue alongside the virtual wall. Tapping a card deep-links
+            to product detail with the memorial code already attached. */}
+        {tabProducts.length > 0 ? (
+          <div
+            data-testid="rituals-product-upsell"
+            className="mb-8"
+          >
+            <div
+              className="flex items-baseline justify-between mb-3 px-1"
+            >
+              <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "hsl(var(--site-muted-fg))" }}>
+                Or send a real {tab === "candle" ? "candle" : tab === "flower" ? "tribute" : "service"} from the cemetery
+              </h3>
+              <Link
+                href={marketplaceHref({ slug, code, deceasedName })}
+                style={{ color: "hsl(var(--site-primary))" }}
+                className="text-xs hover:underline"
+                data-testid="rituals-marketplace-link-all"
+              >
+                Browse all →
+              </Link>
+            </div>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+              {tabProducts.map((p) => (
+                <Link
+                  key={p.id}
+                  href={marketplaceHref({ slug, code, deceasedName, productSlug: p.slug })}
+                  data-testid={`ritual-product-${p.slug}`}
+                  style={{
+                    background: "hsl(var(--site-card))",
+                    border: "1px solid hsl(var(--site-border))",
+                    borderRadius: "var(--site-radius)",
+                  }}
+                  className="overflow-hidden hover:shadow-md transition-all hover:-translate-y-0.5 flex"
+                >
+                  <div
+                    aria-hidden
+                    style={{
+                      width: 84,
+                      height: 84,
+                      flexShrink: 0,
+                      background: p.photos[0]
+                        ? `url(${p.photos[0]}) center/cover`
+                        : "hsl(var(--site-muted))",
+                    }}
+                  />
+                  <div className="p-3 flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="text-sm font-semibold truncate" style={{ color: "hsl(var(--site-fg))" }}>
+                      {p.name}
+                    </div>
+                    <div className="text-xs opacity-70 truncate mb-1" style={{ color: "hsl(var(--site-muted-fg))" }}>
+                      {p.type === "service" ? "Service" : "Product"}
+                    </div>
+                    <div className="text-sm font-semibold" style={{ color: "hsl(var(--site-primary))" }}>
+                      ${p.price.toFixed(2)}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* The wall — different layout per ritual type. */}
         <div className="mt-4">

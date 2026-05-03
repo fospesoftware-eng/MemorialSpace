@@ -12,7 +12,7 @@ type Props = { slug: string; site: PublicSite };
 // prefill the customer notes ("[For Jane Doe — Plot A-12-007] …").
 const ORDER_CONTEXT_KEY = (slug: string) => `cemetery-order-context:${slug}`;
 
-type OrderContext = { for?: string; plotRef?: string };
+type OrderContext = { for?: string; plotRef?: string; memorialCode?: string };
 
 function readOrderContext(slug: string): OrderContext | null {
   if (typeof window === "undefined") return null;
@@ -61,15 +61,21 @@ export function CemeterySiteMarketplace({ slug, site }: Props) {
     const params = new URLSearchParams(window.location.search);
     const forName = params.get("for");
     const plotRef = params.get("plotRef");
-    if (forName || plotRef) {
-      const ctx = {
+    // Memorial code lets the cart back-link the order to a specific burial
+    // server-side, so the cemetery's CRM sees all tributes (virtual + real)
+    // for one person in a single view.
+    const memorialCode = params.get("memorialCode");
+    if (forName || plotRef || memorialCode) {
+      const ctx: OrderContext = {
         for: forName ?? undefined,
         plotRef: plotRef ?? undefined,
+        memorialCode: memorialCode ?? undefined,
       };
       writeOrderContext(slug, ctx);
       setOrderCtx(ctx);
       params.delete("for");
       params.delete("plotRef");
+      params.delete("memorialCode");
       const next = params.toString();
       const url = window.location.pathname + (next ? `?${next}` : "");
       window.history.replaceState({}, "", url);
