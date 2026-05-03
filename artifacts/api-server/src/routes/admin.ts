@@ -16,6 +16,8 @@ import {
   PLATFORM_INVOICE_STATUSES,
   BILLING_PERIODS,
   PLATFORM_PAYMENT_METHODS,
+  CEMETERY_TYPES,
+  PLATFORM_FEATURES,
 } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -644,6 +646,14 @@ router.patch("/admin/organizations/:id", async (req, res) => {
     name: z.string().min(1).optional(),
     email: z.string().email().nullable().optional(),
     phone: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    city: z.string().nullable().optional(),
+    country: z.string().nullable().optional(),
+    website: z.string().nullable().optional(),
+    cemeteryType: z.enum(CEMETERY_TYPES).optional(),
+    cemeteryTypes: z.array(z.enum(CEMETERY_TYPES)).optional(),
+    enabledFeatures: z.record(z.enum(PLATFORM_FEATURES), z.boolean()).optional(),
+    featuresColumbarium: z.boolean().optional(),
     internalNotes: z.string().nullable().optional(),
     suspensionReason: z.string().nullable().optional(),
   });
@@ -651,9 +661,28 @@ router.patch("/admin/organizations/:id", async (req, res) => {
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid payload", details: parsed.error.issues }); return;
   }
+  // Server-side consistency: every org must have at least one cemetery type;
+  // when types or features change, keep the legacy primary `cemeteryType` and
+  // `featuresColumbarium` mirror in sync so older code paths still see truth.
+  const patch: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.cemeteryTypes !== undefined) {
+    if (parsed.data.cemeteryTypes.length === 0) {
+      res.status(400).json({ error: "At least one cemetery type is required." });
+      return;
+    }
+    if (parsed.data.cemeteryType === undefined) {
+      patch.cemeteryType = parsed.data.cemeteryTypes[0];
+    }
+  }
+  if (parsed.data.enabledFeatures !== undefined) {
+    const cb = parsed.data.enabledFeatures.columbarium;
+    if (typeof cb === "boolean" && parsed.data.featuresColumbarium === undefined) {
+      patch.featuresColumbarium = cb;
+    }
+  }
   const [row] = await db
     .update(organizationsTable)
-    .set(parsed.data)
+    .set(patch)
     .where(eq(organizationsTable.id, id))
     .returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }

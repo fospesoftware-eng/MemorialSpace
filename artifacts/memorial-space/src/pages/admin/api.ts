@@ -47,10 +47,15 @@ export interface OrgAdminRow {
   name: string;
   slug: string;
   cemeteryType: string;
+  cemeteryTypes: string[];
+  enabledFeatures: Record<string, boolean>;
+  featuresColumbarium: boolean;
   email: string | null;
   phone: string | null;
+  address: string | null;
   city: string | null;
   country: string | null;
+  website: string | null;
   status: "active" | "trial" | "suspended" | "cancelled";
   suspendedAt: string | null;
   suspensionReason: string | null;

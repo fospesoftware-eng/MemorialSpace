@@ -13,7 +13,7 @@ export default function SignInCemetery() {
       demoPassword="Cemetery2026!"
       redirectTo="/app/dashboard"
       signUpLabel="Don't have an account yet?"
-      signUpHref="/#pricing"
+      signUpHref="/signup/cemetery"
       rightPanel={
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs text-primary font-semibold">

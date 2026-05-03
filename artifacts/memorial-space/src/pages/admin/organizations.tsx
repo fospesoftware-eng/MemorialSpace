@@ -31,6 +31,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import {
+  CEMETERY_TYPE_META,
+  FEATURE_GROUPS,
+  FEATURE_META,
+  type CemeteryType,
+  type PlatformFeature,
+} from "@/lib/cemetery-features";
+import { Settings2, Layers } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -590,6 +599,10 @@ function OrgDetailSheet({ id, onClose }: { id: number | null; onClose: () => voi
               </div>
             </div>
 
+            <OrgCemeteryTypesEditor org={data.org} />
+
+            <OrgFeaturesEditor org={data.org} />
+
             <div>
               <Label className="text-xs">Internal notes (Super Admin only)</Label>
               <Textarea
@@ -610,6 +623,185 @@ function OrgDetailSheet({ id, onClose }: { id: number | null; onClose: () => voi
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function OrgCemeteryTypesEditor({ org }: { org: OrgAdminRow }) {
+  const update = useUpdateOrg();
+  const { toast } = useToast();
+  // Local optimistic state so rapid toggles aren't fighting an in-flight PATCH.
+  // Resync when the org id changes (different sheet) or the server payload
+  // genuinely changes (after invalidate/refetch).
+  const initial = (
+    org.cemeteryTypes && org.cemeteryTypes.length > 0
+      ? org.cemeteryTypes
+      : [org.cemeteryType]
+  ) as CemeteryType[];
+  const [current, setCurrent] = useState<CemeteryType[]>(initial);
+  const lastKey = `${org.id}:${initial.slice().sort().join(",")}`;
+  const [seenKey, setSeenKey] = useState(lastKey);
+  if (lastKey !== seenKey) {
+    setSeenKey(lastKey);
+    setCurrent(initial);
+  }
+
+  function toggle(t: CemeteryType) {
+    const next = current.includes(t)
+      ? current.filter((x) => x !== t)
+      : [...current, t];
+    if (next.length === 0) {
+      toast({
+        title: "Keep at least one type",
+        description: "An organization must have at least one cemetery type.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCurrent(next); // optimistic — subsequent toggles read this, not the prop
+    update.mutate(
+      {
+        id: org.id,
+        cemeteryTypes: next as unknown as OrgAdminRow["cemeteryTypes"],
+        cemeteryType: next[0],
+      },
+      {
+        onSuccess: () => toast({ title: "Cemetery types updated" }),
+        onError: (e: Error) => {
+          setCurrent(initial); // rollback
+          toast({ title: "Failed", description: e.message, variant: "destructive" });
+        },
+      },
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="font-semibold mb-3 flex items-center gap-2">
+        <Layers className="h-4 w-4 text-[#d4a843]" /> Cemetery types
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {CEMETERY_TYPE_META.map((t) => {
+          const Icon = t.icon;
+          const on = current.includes(t.value);
+          return (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => toggle(t.value)}
+              data-testid={`admin-org-type-${t.value}`}
+              className={
+                "flex items-center gap-2 p-2 rounded-md border text-left text-xs transition-colors " +
+                (on
+                  ? "border-[#d4a843]/50 bg-[#d4a843]/10 text-foreground"
+                  : "border-border/40 bg-muted/20 text-muted-foreground hover:text-foreground")
+              }
+            >
+              <Icon className={"h-4 w-4 " + (on ? "text-[#d4a843]" : t.accent)} />
+              <span className="font-medium truncate">{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function OrgFeaturesEditor({ org }: { org: OrgAdminRow }) {
+  const update = useUpdateOrg();
+  const { toast } = useToast();
+  // Mirror local state so rapid toggles don't read stale prop data while a
+  // PATCH is in flight (the prop only updates after the cache invalidates).
+  const initial = (org.enabledFeatures ?? {}) as Record<PlatformFeature, boolean>;
+  const [features, setFeatures] = useState<Record<PlatformFeature, boolean>>(initial);
+  const featuresKey = `${org.id}:${Object.entries(initial)
+    .sort()
+    .map(([k, v]) => `${k}=${v ? 1 : 0}`)
+    .join(",")}`;
+  const [seenKey, setSeenKey] = useState(featuresKey);
+  if (featuresKey !== seenKey) {
+    setSeenKey(featuresKey);
+    setFeatures(initial);
+  }
+
+  function setFeature(key: PlatformFeature, value: boolean) {
+    const next = { ...features, [key]: value };
+    setFeatures(next); // optimistic
+    update.mutate(
+      {
+        id: org.id,
+        enabledFeatures: next as unknown as OrgAdminRow["enabledFeatures"],
+        ...(key === "columbarium" ? { featuresColumbarium: value } : {}),
+      },
+      {
+        onSuccess: () =>
+          toast({
+            title: value ? "Feature enabled" : "Feature disabled",
+            description: FEATURE_META.find((f) => f.key === key)?.label,
+          }),
+        onError: (e: Error) => {
+          setFeatures(initial); // rollback
+          toast({ title: "Failed", description: e.message, variant: "destructive" });
+        },
+      },
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="font-semibold mb-3 flex items-center gap-2">
+        <Settings2 className="h-4 w-4 text-[#d4a843]" /> Available features
+      </h3>
+      <p className="text-xs text-muted-foreground mb-3">
+        Toggle which modules this organization can use. Disabled modules are
+        hidden from their team's navigation.
+      </p>
+      <div className="space-y-4">
+        {FEATURE_GROUPS.map((group) => {
+          const items = FEATURE_META.filter((f) => f.group === group);
+          return (
+            <div key={group}>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                {group}
+              </p>
+              <div className="grid grid-cols-1 gap-1.5">
+                {items.map((f) => {
+                  const Icon = f.icon;
+                  const on = !!features[f.key];
+                  return (
+                    <div
+                      key={f.key}
+                      className="flex items-center gap-3 p-2 rounded-md border border-border/40 bg-muted/10"
+                    >
+                      <div
+                        className={
+                          "h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0 " +
+                          (on
+                            ? "bg-[#d4a843]/15 text-[#d4a843]"
+                            : "bg-card text-muted-foreground border border-border/40")
+                        }
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-tight">{f.label}</p>
+                        <p className="text-xs text-muted-foreground leading-snug">
+                          {f.description}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={on}
+                        onCheckedChange={(v) => setFeature(f.key, v)}
+                        data-testid={`admin-org-feature-${f.key}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

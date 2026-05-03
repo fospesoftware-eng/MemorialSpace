@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
+import cemeterySignupRouter from "./cemeterySignup";
 import organizationsRouter from "./organizations";
 import usersRouter from "./users";
 import plotsRouter from "./plots";
@@ -43,6 +44,7 @@ const router: IRouter = Router();
 // themselves where appropriate.
 router.use(healthRouter);
 router.use(authRouter);
+router.use(cemeterySignupRouter);
 router.use(publicApiRouter);
 router.use(cemeterySitesRouter);
 router.use(memorialRitualsRouter);

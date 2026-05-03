@@ -28,6 +28,7 @@ import SignInCemetery from "@/pages/auth/sign-in-cemetery";
 import SignInFamily from "@/pages/auth/sign-in-family";
 import SignInAdmin from "@/pages/auth/sign-in-admin";
 import SignInVendor from "@/pages/auth/sign-in-vendor";
+import SignupCemetery from "@/pages/auth/signup-cemetery";
 
 // Vendor (marketplace)
 import VendorSignup from "@/pages/vendor/signup";
@@ -272,6 +273,7 @@ function Router() {
       <Route path="/contact">
         <SaasMarketingRoutes><ContactPage /></SaasMarketingRoutes>
       </Route>
+      <Route path="/signup/cemetery" component={SignupCemetery} />
       <Route path="/tutorial">
         <SaasMarketingRoutes><TutorialHubPage /></SaasMarketingRoutes>
       </Route>
