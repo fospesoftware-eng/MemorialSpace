@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { QrCode, Plus, Copy, Scan } from "lucide-react";
+import { QrCode, Plus, Copy, Scan, Wand2, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 const ORG_ID = 1;
 
@@ -35,6 +37,33 @@ export default function QrCodes() {
   const createQrCode = useCreateQrCode();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ burialId: "", plotId: "", memorialId: "" });
+  const [bulking, setBulking] = useState(false);
+
+  const handleBulkGenerate = async () => {
+    setBulking(true);
+    try {
+      const res = await fetch(`${BASE}/api/qr-codes/bulk-generate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organizationId: ORG_ID }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as { created: number; alreadyCovered: number; total: number };
+      queryClient.invalidateQueries({ queryKey: getListQrCodesQueryKey() });
+      toast({
+        title: data.created > 0 ? `Generated ${data.created} new QR codes` : "All burials already have QR codes",
+        description: `${data.alreadyCovered + data.created} of ${data.total} burials are now covered.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Bulk generation failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulking(false);
+    }
+  };
 
   const handleCreate = () => {
     createQrCode.mutate(
@@ -62,10 +91,45 @@ export default function QrCodes() {
           <h1 className="text-3xl font-bold tracking-tight">QR Codes</h1>
           <p className="text-muted-foreground mt-1">Generate and manage QR codes linking to memorial pages.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-qr"><Plus className="h-4 w-4 mr-2" />Generate QR Code</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                const res = await fetch(`${BASE}/api/qr-codes/backfill-pins`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ organizationId: ORG_ID }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = (await res.json()) as { updated: number; total: number };
+                queryClient.invalidateQueries({ queryKey: getListQrCodesQueryKey() });
+                toast({
+                  title: data.updated > 0 ? `Issued ${data.updated} edit PINs` : "Every QR already has a PIN",
+                  description: `${data.total} QR codes total.`,
+                });
+              } catch (err) {
+                toast({ title: "Couldn't issue PINs", description: err instanceof Error ? err.message : "Try again.", variant: "destructive" });
+              }
+            }}
+            data-testid="button-issue-pins"
+          >
+            <KeyRound className="h-4 w-4 mr-2" />
+            Issue missing PINs
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleBulkGenerate}
+            disabled={bulking}
+            data-testid="button-bulk-qr"
+          >
+            <Wand2 className="h-4 w-4 mr-2" />
+            {bulking ? "Generating…" : "Generate for all burials"}
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-qr"><Plus className="h-4 w-4 mr-2" />Generate QR Code</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Generate QR Code</DialogTitle><DialogDescription>Generate a QR code linking to a burial or memorial page.</DialogDescription></DialogHeader>
             <div className="space-y-4">
@@ -95,7 +159,8 @@ export default function QrCodes() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
@@ -112,7 +177,15 @@ export default function QrCodes() {
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
                       <Scan className="h-3 w-3" />{qr.scanCount ?? 0} scans
                     </div>
-                    <Badge variant="outline" className="text-xs mb-3">Burial #{qr.burialId ?? "—"}</Badge>
+                    <Badge variant="outline" className="text-xs mb-2">Burial #{qr.burialId ?? "—"}</Badge>
+                    {qr.editPin ? (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3" data-testid={`pin-${qr.id}`}>
+                        <KeyRound className="h-3 w-3" />
+                        Edit PIN: <span className="font-mono font-semibold tracking-widest text-foreground">{qr.editPin}</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 mb-3">No PIN issued — families can't edit yet.</div>
+                    )}
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => copyCode(qr.code)} className="flex-1" data-testid={`button-copy-qr-${qr.id}`}>
                         <Copy className="h-3 w-3 mr-1" />Copy Link

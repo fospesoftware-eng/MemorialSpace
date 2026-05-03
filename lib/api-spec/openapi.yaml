@@ -2217,6 +2217,10 @@ components:
           type: string
         scanCount:
           type: integer
+        editPin:
+          type: string
+          nullable: true
+          description: 6-digit PIN required to edit the memorial via the public edit page. Operator-visible only.
         createdAt:
           type: string
           format: date-time

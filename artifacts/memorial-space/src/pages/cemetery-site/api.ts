@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -83,6 +83,7 @@ export type PublicMapData = {
 
 export type PublicMemorial = {
   code: string;
+  memorialId: number | null;
   title: string;
   deceasedName: string;
   bornDate: string | null;
@@ -94,6 +95,11 @@ export type PublicMemorial = {
   plotLabel: string | null;
   plotSection: string | null;
   plotRow: string | null;
+  plotLatitude: number | null;
+  plotLongitude: number | null;
+  cemeteryName: string | null;
+  cemeteryAddress: string | null;
+  canEdit: boolean;
 };
 
 export type OrderItemSnapshot = {
@@ -186,6 +192,42 @@ export function usePublicMemorial(slug: string, code: string) {
         `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}${qs}`,
       ),
     enabled: !!code,
+  });
+}
+
+export type UpdatePublicMemorialPayload = {
+  editPin: string;
+  title?: string;
+  biography?: string | null;
+  photos?: string[];
+};
+
+export function useUpdatePublicMemorial(slug: string, code: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UpdatePublicMemorialPayload) => {
+      const qs = previewQS();
+      const res = await fetch(
+        `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}/edit${qs}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        // Preserve the status so the UI can distinguish "wrong PIN" (401)
+        // from "memorial not found" (404) and other failures.
+        const err = new Error(body || `${res.status}`);
+        (err as Error & { status?: number }).status = res.status;
+        throw err;
+      }
+      return res.json() as Promise<{ ok: true }>;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["public-memorial", slug, code] });
+    },
   });
 }
 

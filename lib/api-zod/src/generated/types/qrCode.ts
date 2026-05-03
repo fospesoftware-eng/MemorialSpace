@@ -15,5 +15,7 @@ export interface QrCode {
   memorialId?: number;
   qrImageUrl?: string;
   scanCount?: number;
+  /** 6-digit PIN required to edit the memorial via the public edit page. Operator-visible only. */
+  editPin?: string | null;
   createdAt: Date;
 }

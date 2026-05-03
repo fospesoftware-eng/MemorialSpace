@@ -865,6 +865,12 @@ export const ListQrCodesResponseItem = zod.object({
   memorialId: zod.number().optional(),
   qrImageUrl: zod.string().optional(),
   scanCount: zod.number().optional(),
+  editPin: zod
+    .string()
+    .nullish()
+    .describe(
+      "6-digit PIN required to edit the memorial via the public edit page. Operator-visible only.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListQrCodesResponse = zod.array(ListQrCodesResponseItem);
@@ -896,6 +902,12 @@ export const ResolveQrCodeResponse = zod.object({
     memorialId: zod.number().optional(),
     qrImageUrl: zod.string().optional(),
     scanCount: zod.number().optional(),
+    editPin: zod
+      .string()
+      .nullish()
+      .describe(
+        "6-digit PIN required to edit the memorial via the public edit page. Operator-visible only.",
+      ),
     createdAt: zod.coerce.date(),
   }),
   burial: zod

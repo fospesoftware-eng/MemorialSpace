@@ -15,6 +15,12 @@ export const qrCodesTable = pgTable("qr_codes", {
   memorialId: integer("memorial_id").references(() => memorialsTable.id),
   qrImageUrl: text("qr_image_url"),
   scanCount: integer("scan_count").default(0),
+  // Edit PIN — separate secret required to edit the memorial. Issued at QR
+  // creation time and shown to operators only (never embedded in the
+  // public memorial URL or QR image). This decouples the read credential
+  // (the QR code in the share URL) from the write credential, so a shared
+  // memorial link can't be used to vandalise the page.
+  editPin: text("edit_pin"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

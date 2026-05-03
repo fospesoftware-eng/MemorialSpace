@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, MapPin, Calendar, ScanLine, ShoppingBag, ImageOff } from "lucide-react";
+import {
+  ArrowLeft, MapPin, Calendar, ScanLine, ShoppingBag, ImageOff,
+  Share2, Navigation, Pencil, Check, Copy,
+} from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMemorial, type PublicSite } from "./api";
 
@@ -10,11 +13,7 @@ function fmtDate(value: string | null | undefined): string | null {
   if (!value) return null;
   const d = new Date(value);
   if (isNaN(d.valueOf())) return null;
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
 function fmtAge(dob: string | null | undefined, dod: string | null | undefined): number | null {
@@ -28,12 +27,28 @@ function fmtAge(dob: string | null | undefined, dod: string | null | undefined):
   return age >= 0 && age < 200 ? age : null;
 }
 
+// Build a Google Maps directions URL. Prefers exact lat/lng; falls back to
+// the cemetery's street address. We use the universal "?api=1" form so it
+// opens natively on iOS / Android maps apps and gracefully on desktop.
+function directionsUrl(opts: { lat?: number | null; lng?: number | null; address?: string | null; cemeteryName?: string | null }): string | null {
+  const { lat, lng, address, cemeteryName } = opts;
+  if (typeof lat === "number" && typeof lng === "number") {
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  }
+  const target = [cemeteryName, address].filter(Boolean).join(", ");
+  if (target) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}`;
+  }
+  return null;
+}
+
 export function CemeterySiteMemorial({ slug, site, code }: Props) {
   const themeKey: ThemeKey = isThemeKey(site.theme) ? site.theme : "classic-marble";
   const theme = THEMES[themeKey];
   const headingFont = { fontFamily: theme.fontHeading };
   const { data: memorial, isLoading, isError } = usePublicMemorial(slug, code);
   const [activePhoto, setActivePhoto] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   if (isLoading) {
     return (
@@ -75,14 +90,45 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
 
   const heroPhoto = memorial.photos[activePhoto] ?? memorial.photos[0] ?? null;
 
-  // Pre-fill the marketplace context so a "Order a QR Plaque" tap lands
-  // on the marketplace with a banner and a notes prefill on the cart.
   const orderHref = (() => {
     const params = new URLSearchParams();
     params.set("for", memorial.deceasedName);
     if (memorial.plotLabel) params.set("plotRef", memorial.plotLabel);
     return `/c/${slug}/marketplace?${params.toString()}`;
   })();
+
+  const directions = directionsUrl({
+    lat: memorial.plotLatitude,
+    lng: memorial.plotLongitude,
+    address: memorial.cemeteryAddress,
+    cemeteryName: memorial.cemeteryName,
+  });
+
+  const shareTitle = `In memory of ${memorial.deceasedName}`;
+  const shareText = `${memorial.deceasedName} (${yearsLine}) — visit their memorial page.`;
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+
+  const handleShare = async () => {
+    if (typeof navigator !== "undefined" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
+      try {
+        await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // user cancelled or unsupported — fall through to copy
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignored
+    }
+  };
 
   return (
     <div>
@@ -106,9 +152,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8 items-center">
             <div
               style={{
-                background: heroPhoto
-                  ? `url(${heroPhoto}) center/cover`
-                  : "hsl(var(--site-card))",
+                background: heroPhoto ? `url(${heroPhoto}) center/cover` : "hsl(var(--site-card))",
                 aspectRatio: "1 / 1",
                 border: "1px solid hsl(var(--site-border))",
                 borderRadius: "var(--site-radius)",
@@ -117,10 +161,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
               data-testid="memorial-portrait"
             >
               {!heroPhoto ? (
-                <ImageOff
-                  className="h-12 w-12 opacity-30"
-                  style={{ color: "hsl(var(--site-muted-fg))" }}
-                />
+                <ImageOff className="h-12 w-12 opacity-30" style={{ color: "hsl(var(--site-muted-fg))" }} />
               ) : null}
             </div>
             <div className="text-center md:text-left">
@@ -138,10 +179,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
               >
                 {memorial.deceasedName}
               </h1>
-              <p
-                style={{ color: "hsl(var(--site-muted-fg))" }}
-                className="text-lg md:text-xl mb-4"
-              >
+              <p style={{ color: "hsl(var(--site-muted-fg))" }} className="text-lg md:text-xl mb-4">
                 {yearsLine}
                 {age != null ? <span className="opacity-70"> · {age} years</span> : null}
               </p>
@@ -176,6 +214,56 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
                     {memorial.religion}
                   </span>
                 ) : null}
+              </div>
+
+              {/* Action toolbar — share / directions / edit. These are the
+                  three things visitors at the gravesite actually want to do. */}
+              <div className="flex flex-wrap gap-2 mt-6 justify-center md:justify-start">
+                <button
+                  onClick={handleShare}
+                  data-testid="memorial-share"
+                  style={{
+                    background: "hsl(var(--site-primary))",
+                    color: "hsl(var(--site-primary-fg))",
+                    borderRadius: "var(--site-radius)",
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+                  {copied ? "Link copied" : "Share"}
+                </button>
+                {directions ? (
+                  <a
+                    href={directions}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="memorial-directions"
+                    style={{
+                      background: "hsl(var(--site-card))",
+                      color: "hsl(var(--site-fg))",
+                      border: "1px solid hsl(var(--site-border))",
+                      borderRadius: "var(--site-radius)",
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold hover:opacity-90"
+                  >
+                    <Navigation className="h-3.5 w-3.5" />
+                    Get directions
+                  </a>
+                ) : null}
+                <Link
+                  href={`/c/${slug}/memorial/${code}/edit`}
+                  data-testid="memorial-edit"
+                  style={{
+                    background: "hsl(var(--site-card))",
+                    color: "hsl(var(--site-fg))",
+                    border: "1px solid hsl(var(--site-border))",
+                    borderRadius: "var(--site-radius)",
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold hover:opacity-90"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit memorial
+                </Link>
               </div>
             </div>
           </div>
@@ -271,48 +359,126 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
             </p>
           </article>
         ) : (
-          <p
-            className="text-center italic"
-            style={{ color: "hsl(var(--site-muted-fg))" }}
-          >
-            A biography for {memorial.deceasedName} hasn't been added yet.
-          </p>
+          <div className="text-center" data-testid="memorial-bio-empty">
+            <p className="italic mb-4" style={{ color: "hsl(var(--site-muted-fg))" }}>
+              A biography for {memorial.deceasedName} hasn't been added yet.
+            </p>
+            <Link
+              href={`/c/${slug}/memorial/${code}/edit`}
+              style={{
+                background: "hsl(var(--site-primary))",
+                color: "hsl(var(--site-primary-fg))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Add their story
+            </Link>
+          </div>
         )}
       </section>
 
-      {/* Order CTA — encourages QR plaque + memorial-services purchases */}
+      {/* Visit / location card */}
+      {(memorial.cemeteryAddress || (memorial.plotLatitude && memorial.plotLongitude)) ? (
+        <section
+          style={{
+            background: "hsl(var(--site-muted))",
+            borderTop: "1px solid hsl(var(--site-border))",
+            borderBottom: "1px solid hsl(var(--site-border))",
+          }}
+          className="py-10 md:py-12"
+        >
+          <div className="container mx-auto max-w-3xl px-4 sm:px-6">
+            <div
+              style={{
+                background: "hsl(var(--site-card))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="p-6 md:p-8 flex flex-col md:flex-row gap-6 items-start md:items-center"
+            >
+              <div
+                style={{ background: "hsl(var(--site-primary))", color: "hsl(var(--site-primary-fg))", borderRadius: "var(--site-radius)" }}
+                className="h-12 w-12 flex items-center justify-center shrink-0"
+              >
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 style={headingFont} className="text-xl font-semibold mb-1">
+                  Visit the gravesite
+                </h3>
+                <p className="text-sm" style={{ color: "hsl(var(--site-muted-fg))" }}>
+                  {memorial.cemeteryName}
+                  {memorial.cemeteryAddress ? <> · {memorial.cemeteryAddress}</> : null}
+                  {memorial.plotLabel ? <> · Plot {memorial.plotLabel}</> : null}
+                </p>
+              </div>
+              {directions ? (
+                <a
+                  href={directions}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="memorial-directions-card"
+                  style={{
+                    background: "hsl(var(--site-primary))",
+                    color: "hsl(var(--site-primary-fg))",
+                    borderRadius: "var(--site-radius)",
+                  }}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold hover:opacity-90"
+                >
+                  <Navigation className="h-4 w-4" />
+                  Open in Maps
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Order CTA */}
       <section
-        style={{
-          background: "hsl(var(--site-muted))",
-          borderTop: "1px solid hsl(var(--site-border))",
-        }}
+        style={{ background: "hsl(var(--site-muted))" }}
         className="py-12 md:py-16"
       >
         <div className="container mx-auto max-w-3xl px-4 sm:px-6 text-center">
           <h2 style={headingFont} className="text-2xl md:text-3xl font-semibold mb-3">
             Honour their memory
           </h2>
-          <p
-            style={{ color: "hsl(var(--site-muted-fg))" }}
-            className="mb-8 max-w-xl mx-auto"
-          >
-            Order a printed QR plaque, fresh flowers, headstone care, or a
-            memorial service from {site.organizationName}. We'll be in touch
-            to confirm details.
+          <p style={{ color: "hsl(var(--site-muted-fg))" }} className="mb-8 max-w-xl mx-auto">
+            Order a printed QR plaque, fresh flowers, headstone care, or a memorial service from {site.organizationName}. We'll be in touch to confirm details.
           </p>
-          <Link
-            href={orderHref}
-            data-testid="order-from-memorial"
-            style={{
-              background: "hsl(var(--site-primary))",
-              color: "hsl(var(--site-primary-fg))",
-              borderRadius: "var(--site-radius)",
-            }}
-            className="inline-flex items-center gap-2 px-6 py-3 font-semibold hover:opacity-90 transition-opacity"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            Browse memorial marketplace
-          </Link>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <Link
+              href={orderHref}
+              data-testid="order-from-memorial"
+              style={{
+                background: "hsl(var(--site-primary))",
+                color: "hsl(var(--site-primary-fg))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 font-semibold hover:opacity-90 transition-opacity"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              Browse memorial marketplace
+            </Link>
+            <button
+              onClick={async () => {
+                try { await navigator.clipboard.writeText(shareUrl); setCopied(true); window.setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
+              }}
+              data-testid="memorial-copy-link"
+              style={{
+                background: "hsl(var(--site-card))",
+                color: "hsl(var(--site-fg))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 font-semibold hover:opacity-90"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? "Link copied" : "Copy link"}
+            </button>
+          </div>
         </div>
       </section>
     </div>

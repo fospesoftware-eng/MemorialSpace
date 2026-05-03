@@ -773,6 +773,8 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
           plotNumber: plotsTable.plotNumber,
           section: plotsTable.section,
           row: plotsTable.row,
+          latitude: plotsTable.latitude,
+          longitude: plotsTable.longitude,
         })
         .from(plotsTable)
         .where(eq(plotsTable.id, burial.plotId))
@@ -813,8 +815,17 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
     photos = [burial.photoUrl, ...photos];
   }
 
+  // Pull the cemetery address so the public memorial page can offer
+  // "Get directions" even for plots that don't have their own lat/lng
+  // mapped yet — visitors are dropped at the cemetery gate and walk in.
+  const [siteContact] = await db
+    .select({ address: cemeterySitesTable.contactAddress })
+    .from(cemeterySitesTable)
+    .where(eq(cemeterySitesTable.organizationId, ctx.org.id));
+
   res.json({
     code: qr.code,
+    memorialId: memorial?.id ?? null,
     title: memorial?.title ?? burial.deceasedName,
     deceasedName: burial.deceasedName,
     bornDate: burial.deceasedDob,
@@ -826,7 +837,191 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
     plotLabel: plot?.plotNumber ?? null,
     plotSection: plot?.section ?? null,
     plotRow: plot?.row ?? null,
+    plotLatitude: plot?.latitude ?? null,
+    plotLongitude: plot?.longitude ?? null,
+    cemeteryName: ctx.org.name,
+    cemeteryAddress: siteContact?.address ?? null,
+    canEdit: true,
   });
+});
+
+// Public memorial edit. Gated by the QR code itself acting as the secret —
+// the physical plaque on the gravesite IS the credential. This matches the
+// real-world UX families expect ("I'm at the grave with the QR, I should be
+// able to update grandma's bio"). The code is 16 hex chars (~64 bits of
+// entropy) which is acceptable for a low-value, idempotent edit. Operators
+// can disable the surface entirely by toggling `memorial.isPublic = false`,
+// which makes both the GET and this PATCH return 404.
+// In-memory rate limiter for the PIN gate. The PIN is only 6 digits
+// (10^6 keyspace) so without throttling an attacker with the public QR
+// code could brute-force it in seconds. We allow a burst of 5 attempts
+// per 15 minutes per (ip + code) tuple — enough for fat-finger families,
+// way too few for online brute force. Cleared periodically so the map
+// can't grow without bound.
+const editPinAttempts = new Map<string, { count: number; resetAt: number }>();
+const EDIT_PIN_WINDOW_MS = 15 * 60 * 1000;
+const EDIT_PIN_MAX = 5;
+function checkEditPinRateLimit(key: string): { ok: true } | { ok: false; retryAfter: number } {
+  const now = Date.now();
+  const entry = editPinAttempts.get(key);
+  if (!entry || entry.resetAt < now) {
+    editPinAttempts.set(key, { count: 1, resetAt: now + EDIT_PIN_WINDOW_MS });
+    return { ok: true };
+  }
+  if (entry.count >= EDIT_PIN_MAX) {
+    return { ok: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
+  }
+  entry.count += 1;
+  return { ok: true };
+}
+// Reset successful keys so a legitimate user isn't penalised after one mistake.
+function resetEditPinRateLimit(key: string) { editPinAttempts.delete(key); }
+// Best-effort cleanup so the map stays small in long-running processes.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of editPinAttempts) if (v.resetAt < now) editPinAttempts.delete(k);
+}, EDIT_PIN_WINDOW_MS).unref?.();
+
+const PublicMemorialEditSchema = z.object({
+  // Edit PIN issued at QR creation time and held by the operator/family —
+  // separate from the QR code itself so a shared read URL can't be used
+  // to vandalise the memorial. We accept it in the body OR a header
+  // (`x-edit-pin`) so the UI can keep the PIN out of any URL bar history.
+  editPin: z.string().min(4).max(12).optional(),
+  title: z.string().min(1).max(200).optional(),
+  biography: z.string().max(20000).nullable().optional(),
+  photos: z.array(z.string().url().max(1000)).max(20).optional(),
+});
+router.patch("/c/:slug/memorial/:code/edit", async (req, res) => {
+  const ctx = await resolvePublicSite(req, res);
+  if (!ctx) return;
+  const code = String(req.params.code ?? "").toUpperCase();
+  if (!/^[A-F0-9]{8,64}$/.test(code)) {
+    res.status(400).json({ error: "Invalid memorial code" });
+    return;
+  }
+  const parsed = PublicMemorialEditSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload", details: parsed.error.issues });
+    return;
+  }
+
+  // Resolve QR → org-scoped to prevent code-spraying across cemeteries.
+  const [qr] = await db
+    .select()
+    .from(qrCodesTable)
+    .where(
+      and(eq(qrCodesTable.code, code), eq(qrCodesTable.organizationId, ctx.org.id)),
+    );
+  if (!qr || qr.burialId == null) {
+    res.status(404).json({ error: "Memorial not found" });
+    return;
+  }
+
+  // Verify the edit PIN. We deliberately return a distinct 401 (not 404)
+  // so families know the memorial exists and they just need the PIN —
+  // no information leak since they already had a valid scan code. If the
+  // QR has no PIN set (legacy row), refuse the edit until an operator
+  // backfills one via the admin UI.
+  const submittedPin =
+    parsed.data.editPin ?? (typeof req.headers["x-edit-pin"] === "string" ? String(req.headers["x-edit-pin"]) : undefined);
+  if (!qr.editPin) {
+    res.status(409).json({ error: "Editing not yet enabled for this memorial. Ask the cemetery to issue an edit PIN." });
+    return;
+  }
+  // Rate-limit per (client-ip, code). We deliberately key on `code` rather
+  // than `qr.id` so the limit applies even before we trust the request.
+  const rlKey = `${req.ip ?? "unknown"}:${code}`;
+  const rl = checkEditPinRateLimit(rlKey);
+  if (!rl.ok) {
+    res.setHeader("Retry-After", String(rl.retryAfter));
+    res.status(429).json({ error: "Too many edit attempts. Please try again later." });
+    return;
+  }
+  if (!submittedPin || submittedPin.trim() !== qr.editPin) {
+    res.status(401).json({ error: "Invalid edit PIN" });
+    return;
+  }
+  // Successful auth — reset the counter so a family who mis-typed once
+  // doesn't get locked out after legitimate edits.
+  resetEditPinRateLimit(rlKey);
+
+  const [burial] = await db
+    .select()
+    .from(burialsTable)
+    .where(
+      and(eq(burialsTable.id, qr.burialId), eq(burialsTable.organizationId, ctx.org.id)),
+    );
+  if (!burial) { res.status(404).json({ error: "Memorial not found" }); return; }
+
+  // Find or create the memorial row. Most QRs created by the operator UI
+  // already have memorialId set; legacy rows might not — for those we
+  // upsert a fresh memorial pinned to the burial so the family can still
+  // edit on first visit.
+  let memorialId = qr.memorialId;
+  if (memorialId) {
+    const [existing] = await db
+      .select({ isPublic: memorialsTable.isPublic })
+      .from(memorialsTable)
+      .where(
+        and(
+          eq(memorialsTable.id, memorialId),
+          eq(memorialsTable.organizationId, ctx.org.id),
+        ),
+      );
+    if (!existing) { res.status(404).json({ error: "Memorial not found" }); return; }
+    if (existing.isPublic === false) {
+      // Operator has hidden this memorial — refuse to edit (matches GET behaviour).
+      res.status(404).json({ error: "Memorial not found" });
+      return;
+    }
+  } else {
+    // Wrap the memorial insert + QR update in a transaction so we can't
+    // end up with an orphan memorial row if the QR link write fails
+    // mid-flight.
+    memorialId = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(memorialsTable)
+        .values({
+          burialId: burial.id,
+          organizationId: ctx.org.id,
+          title: burial.deceasedName,
+          biography: null,
+          photos: null,
+          isPublic: true,
+        })
+        .returning({ id: memorialsTable.id });
+      await tx
+        .update(qrCodesTable)
+        .set({ memorialId: created.id })
+        .where(eq(qrCodesTable.id, qr.id));
+      return created.id;
+    });
+  }
+
+  // Build the patch. Photos array is stringified to JSON because the
+  // legacy column is `text` (we kept the on-disk shape stable).
+  const patch: Record<string, unknown> = {};
+  if (parsed.data.title !== undefined) patch.title = parsed.data.title;
+  if (parsed.data.biography !== undefined) patch.biography = parsed.data.biography;
+  if (parsed.data.photos !== undefined) patch.photos = JSON.stringify(parsed.data.photos);
+
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: "Nothing to update" });
+    return;
+  }
+
+  await db
+    .update(memorialsTable)
+    .set(patch)
+    .where(
+      and(
+        eq(memorialsTable.id, memorialId),
+        eq(memorialsTable.organizationId, ctx.org.id),
+      ),
+    );
+
+  res.json({ ok: true });
 });
 
 // Public order submission. The server validates the cart against the live

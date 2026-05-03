@@ -9,6 +9,7 @@ import { CemeterySiteCart } from "./cart";
 import { CemeterySiteSuccess } from "./success";
 import { CemeterySiteMap } from "./map";
 import { CemeterySiteMemorial } from "./memorial";
+import { CemeterySiteMemorialEdit } from "./memorial-edit";
 
 export function CemeterySiteRoutes({ slug }: { slug: string }) {
   const { data: site, isLoading, isError, error } = usePublicSite(slug);
@@ -67,6 +68,15 @@ export function CemeterySiteRoutes({ slug }: { slug: string }) {
           {() => <CemeterySiteFindGrave slug={slug} site={site} />}
         </Route>
         <Route path="/map">{() => <CemeterySiteMap slug={slug} site={site} />}</Route>
+        <Route path="/memorial/:code/edit">
+          {(p) => (
+            <CemeterySiteMemorialEdit
+              slug={slug}
+              site={site}
+              code={p.code ?? ""}
+            />
+          )}
+        </Route>
         <Route path="/memorial/:code">
           {(p) => (
             <CemeterySiteMemorial
