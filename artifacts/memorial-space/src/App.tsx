@@ -18,6 +18,9 @@ import DemoCredentials from "@/pages/marketing/demo";
 import FeaturesPage from "@/pages/marketing/features";
 import PricingPage from "@/pages/marketing/pricing";
 import ContactPage from "@/pages/marketing/contact";
+import TutorialHubPage from "@/pages/marketing/tutorial-hub";
+import TutorialCemeteryPage from "@/pages/marketing/tutorial-cemetery";
+import TutorialFamilyPage from "@/pages/marketing/tutorial-family";
 
 // Auth (sign-in)
 import SignInHub from "@/pages/auth/sign-in-hub";
@@ -268,6 +271,15 @@ function Router() {
       </Route>
       <Route path="/contact">
         <SaasMarketingRoutes><ContactPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/tutorial">
+        <SaasMarketingRoutes><TutorialHubPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/tutorial/cemetery">
+        <SaasMarketingRoutes><TutorialCemeteryPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/tutorial/family">
+        <SaasMarketingRoutes><TutorialFamilyPage /></SaasMarketingRoutes>
       </Route>
       <Route path="/">
         <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>

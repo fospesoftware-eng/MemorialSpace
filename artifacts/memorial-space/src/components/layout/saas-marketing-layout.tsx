@@ -9,6 +9,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
   const links = [
     { href: "/features", label: "Features" },
     { href: "/pricing", label: "Pricing" },
+    { href: "/tutorial", label: "Tutorial" },
     { href: "/contact", label: "Contact Sales" },
     { href: "/find", label: "Find a Loved One" },
     { href: "/demo", label: "Demo Access" },
