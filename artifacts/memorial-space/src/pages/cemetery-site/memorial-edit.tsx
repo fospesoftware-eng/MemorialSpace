@@ -66,7 +66,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
           </p>
         ) : null}
         <Link
-          href={`/c/${slug}/find-grave`}
+          href={`/find-grave`}
           style={{ color: "hsl(var(--site-primary))" }}
           className="text-sm font-semibold"
         >
@@ -142,7 +142,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
   return (
     <div className="container mx-auto max-w-2xl px-4 sm:px-6 py-10 md:py-14">
       <Link
-        href={`/c/${slug}/memorial/${code}`}
+        href={`/memorial/${code}`}
         style={{ color: "hsl(var(--site-muted-fg))" }}
         className="inline-flex items-center gap-1.5 text-xs font-medium mb-6 hover:opacity-80"
       >

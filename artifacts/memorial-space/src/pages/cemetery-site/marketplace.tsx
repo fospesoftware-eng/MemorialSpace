@@ -227,7 +227,7 @@ export function CemeterySiteMarketplace({ slug, site }: Props) {
           {products.map((p) => (
             <Link
               key={p.id}
-              href={`/c/${slug}/marketplace/${p.slug}`}
+              href={`/marketplace/${p.slug}`}
               data-testid={`product-card-${p.slug}`}
               style={{
                 background: "hsl(var(--site-card))",

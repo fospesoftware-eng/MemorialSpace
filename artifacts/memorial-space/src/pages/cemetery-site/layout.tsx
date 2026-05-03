@@ -48,15 +48,19 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
   const headingFont = { fontFamily: theme.fontHeading };
 
   const navItems = [
-    { href: `/c/${slug}`, label: "Home", icon: Home },
-    { href: `/c/${slug}/find-grave`, label: "Find a Grave", icon: Search },
-    { href: `/c/${slug}/map`, label: "Cemetery Map", icon: MapIcon },
-    { href: `/c/${slug}/marketplace`, label: "Marketplace", icon: ShoppingBag },
+    { href: `/`, label: "Home", icon: Home },
+    { href: `/find-grave`, label: "Find a Grave", icon: Search },
+    { href: `/map`, label: "Cemetery Map", icon: MapIcon },
+    { href: `/marketplace`, label: "Marketplace", icon: ShoppingBag },
   ];
 
   const isActive = (href: string) => {
-    if (href === `/c/${slug}`) return location === "/" || location === "";
-    return location.startsWith(href.replace(`/c/${slug}`, ""));
+    // `location` is relative to the cemetery-site nest base ("/c/<slug>"),
+    // so it's "/", "/find-grave", "/marketplace", etc. Match exactly for
+    // home; for sub-routes match either the exact path or the path
+    // followed by "/" so "/map" never falsely flags "/map-foo".
+    if (href === `/`) return location === "/" || location === "";
+    return location === href || location.startsWith(href + "/");
   };
 
   return (
@@ -85,7 +89,7 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
         <div className="container mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex h-16 items-center justify-between gap-4">
             <Link
-              href={`/c/${slug}`}
+              href={`/`}
               style={headingFont}
               className="text-xl font-semibold tracking-tight truncate"
             >
@@ -112,7 +116,7 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
                 );
               })}
               <Link
-                href={`/c/${slug}/cart`}
+                href={`/cart`}
                 data-testid="nav-cart"
                 style={{
                   background: "hsl(var(--site-primary))",
@@ -137,7 +141,7 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
               </Link>
             </nav>
             <Link
-              href={`/c/${slug}/cart`}
+              href={`/cart`}
               data-testid="nav-cart-mobile"
               style={{ color: "hsl(var(--site-primary))" }}
               className="md:hidden flex items-center gap-1.5 text-sm font-semibold"

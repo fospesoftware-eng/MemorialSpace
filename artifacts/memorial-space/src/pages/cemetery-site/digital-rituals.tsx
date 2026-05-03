@@ -32,6 +32,13 @@ type Props = { slug: string; code: string; deceasedName: string | null };
 // The marketplace page picks these up, persists them in the order context,
 // and the cart submits the memorialCode with the order so it back-links to
 // the burial server-side.
+//
+// IMPORTANT: this href is rendered inside wouter's `<Route path="/c/:slug" nest>`
+// router, which already has base="/c/<slug>". Returning an absolute path like
+// `/c/<slug>/marketplace/...` causes wouter to prepend the base again,
+// producing a 404 at `/c/<slug>/c/<slug>/marketplace/...`. So we return the
+// path *relative to the nest base* and let wouter resolve it. The `slug`
+// argument is kept for API compatibility but is no longer used in the URL.
 function marketplaceHref(opts: {
   slug: string;
   code: string;
@@ -42,8 +49,8 @@ function marketplaceHref(opts: {
   params.set("for", opts.deceasedName ?? "Memorial");
   params.set("memorialCode", opts.code);
   const base = opts.productSlug
-    ? `/c/${opts.slug}/marketplace/${opts.productSlug}`
-    : `/c/${opts.slug}/marketplace`;
+    ? `/marketplace/${opts.productSlug}`
+    : `/marketplace`;
   return `${base}?${params.toString()}`;
 }
 
@@ -1234,6 +1241,14 @@ function VoiceRecorder({
     !!navigator.mediaDevices?.getUserMedia &&
     typeof window.MediaRecorder !== "undefined";
 
+  // True when the page is running inside an iframe (e.g. the Replit
+  // workspace preview pane). The browser blocks getUserMedia in iframes
+  // unless the parent set `allow="microphone"`, which third-party
+  // previews rarely do — so we surface a hint that opening the link in
+  // a new tab is required to record audio.
+  const inIframe =
+    typeof window !== "undefined" && window.self !== window.top;
+
   const cleanupTimers = () => {
     if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
     if (stopTimeoutRef.current) { window.clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
@@ -1318,11 +1333,25 @@ function VoiceRecorder({
         try { rec.state === "recording" && rec.stop(); } catch { /* noop */ }
       }, MAX_RECORD_MS);
     } catch (e) {
-      setError(
-        (e as Error)?.name === "NotAllowedError"
-          ? "Microphone access was denied. You can still type your prayer above."
-          : "Could not start recording.",
-      );
+      // Surface a *specific* reason so visitors know whether to grant
+      // permission, plug in a mic, switch browsers, or open the page in a
+      // new tab (iframe sandboxing is the most common gotcha when the
+      // memorial is viewed inside the Replit workspace preview).
+      const err = e as Error & { name?: string; message?: string };
+      const name = err?.name ?? "";
+      let msg = "Could not start recording. You can still type your prayer above.";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        msg = inIframe
+          ? "Microphone is blocked inside this preview frame. Open the memorial in a new tab to record a voice prayer, or just type it above."
+          : "Microphone access was denied. Allow microphone access in your browser, or just type your prayer above.";
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        msg = "No microphone was found on this device. You can still type your prayer above.";
+      } else if (name === "NotReadableError") {
+        msg = "Your microphone is busy in another app. Close it and try again, or type your prayer above.";
+      } else if (window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+        msg = "Voice recording requires a secure (https://) connection. Type your prayer above instead.";
+      }
+      setError(msg);
     }
   };
 
@@ -1411,7 +1440,14 @@ function VoiceRecorder({
           </button>
         )}
         {error ? (
-          <div className="text-xs mt-2" style={{ color: "#c0392b" }}>{error}</div>
+          <div
+            className="text-xs mt-2"
+            style={{ color: "#c0392b" }}
+            role="alert"
+            aria-live="polite"
+          >
+            {error}
+          </div>
         ) : null}
       </div>
     </div>

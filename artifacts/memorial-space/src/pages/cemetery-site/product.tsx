@@ -31,7 +31,7 @@ export function CemeterySiteProduct({ slug, site, productSlug }: Props) {
           Product not found
         </h1>
         <Link
-          href={`/c/${slug}/marketplace`}
+          href={`/marketplace`}
           style={{ color: "hsl(var(--site-primary))" }}
           className="hover:underline"
         >
@@ -46,7 +46,7 @@ export function CemeterySiteProduct({ slug, site, productSlug }: Props) {
   return (
     <div className="container mx-auto max-w-6xl px-4 sm:px-6 py-8 md:py-12">
       <Link
-        href={`/c/${slug}/marketplace`}
+        href={`/marketplace`}
         style={{ color: "hsl(var(--site-muted-fg))" }}
         className="inline-flex items-center gap-1 text-sm hover:opacity-80 mb-6"
         data-testid="link-back"
@@ -188,7 +188,7 @@ export function CemeterySiteProduct({ slug, site, productSlug }: Props) {
                   },
                   qty,
                 );
-                setLocation(`/c/${slug}/cart`);
+                setLocation(`/cart`);
               }}
               data-testid="button-add-to-cart"
               style={{

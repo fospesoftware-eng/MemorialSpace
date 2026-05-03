@@ -98,7 +98,7 @@ export function CemeterySiteCart({ slug, site }: Props) {
       {
         onSuccess: (data) => {
           clear();
-          setLocation(`/c/${slug}/order/${data.orderNumber}`);
+          setLocation(`/order/${data.orderNumber}`);
         },
         onError: (err) => {
           setError(err instanceof Error ? err.message : "Failed to submit order");
@@ -121,7 +121,7 @@ export function CemeterySiteCart({ slug, site }: Props) {
           Browse our marketplace to find services and products.
         </p>
         <Link
-          href={`/c/${slug}/marketplace`}
+          href={`/marketplace`}
           style={{
             background: "hsl(var(--site-primary))",
             color: "hsl(var(--site-primary-fg))",

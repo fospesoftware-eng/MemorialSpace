@@ -81,7 +81,7 @@ export function CemeterySiteMap({ slug, site }: Props) {
     const params = new URLSearchParams();
     if (p.burial?.name) params.set("for", p.burial.name);
     params.set("plotRef", p.plotNumber);
-    return `/c/${slug}/marketplace?${params.toString()}`;
+    return `/marketplace?${params.toString()}`;
   };
 
   return (

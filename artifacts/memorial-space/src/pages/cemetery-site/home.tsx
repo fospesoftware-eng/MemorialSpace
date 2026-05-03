@@ -51,7 +51,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
             ) : null}
             <div className="flex flex-wrap gap-3">
               <Link
-                href={`/c/${slug}/find-grave`}
+                href={`/find-grave`}
                 style={{
                   background: "hsl(var(--site-primary))",
                   color: "hsl(var(--site-primary-fg))",
@@ -64,7 +64,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
                 Find a Grave
               </Link>
               <Link
-                href={`/c/${slug}/marketplace`}
+                href={`/marketplace`}
                 style={{
                   background: "rgba(255,255,255,0.15)",
                   color: "white",
@@ -98,7 +98,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
               </h2>
             </div>
             <Link
-              href={`/c/${slug}/marketplace`}
+              href={`/marketplace`}
               style={{ color: "hsl(var(--site-primary))" }}
               className="hidden sm:inline-flex items-center gap-1 text-sm font-semibold hover:opacity-80"
             >
@@ -109,7 +109,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
             {featured.map((p) => (
               <Link
                 key={p.id}
-                href={`/c/${slug}/marketplace/${p.slug}`}
+                href={`/marketplace/${p.slug}`}
                 data-testid={`featured-product-${p.slug}`}
                 style={{
                   background: "hsl(var(--site-card))",
@@ -154,7 +154,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
       <section className="container mx-auto max-w-6xl px-4 sm:px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link
-            href={`/c/${slug}/map`}
+            href={`/map`}
             data-testid="discover-map"
             style={{
               background: "hsl(var(--site-card))",
@@ -236,7 +236,7 @@ export function CemeterySiteHome({ slug, site }: Props) {
                 any language. Order a plaque from our marketplace.
               </p>
               <Link
-                href={`/c/${slug}/marketplace`}
+                href={`/marketplace`}
                 style={{ color: "hsl(var(--site-primary))" }}
                 className="inline-flex items-center gap-1 text-sm font-semibold hover:gap-2 transition-all"
               >

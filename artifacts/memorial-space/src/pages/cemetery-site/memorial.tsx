@@ -79,7 +79,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
             : "This memorial may have been removed or the link may be incorrect."}
         </p>
         <Link
-          href={`/c/${slug}/find-grave`}
+          href={`/find-grave`}
           style={{
             background: "hsl(var(--site-primary))",
             color: "hsl(var(--site-primary-fg))",
@@ -199,7 +199,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
     // Pass the QR code so the cart can back-link the order to this burial
     // server-side — same code that resolves the memorial on this page.
     params.set("memorialCode", code);
-    return `/c/${slug}/marketplace?${params.toString()}`;
+    return `/marketplace?${params.toString()}`;
   })();
 
   const directions = directionsUrl({
@@ -247,7 +247,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
       >
         <div className="container mx-auto max-w-5xl px-4 sm:px-6">
           <Link
-            href={`/c/${slug}/find-grave`}
+            href={`/find-grave`}
             style={{ color: "hsl(var(--site-muted-fg))" }}
             className="inline-flex items-center gap-1.5 text-xs font-medium mb-6 hover:opacity-80"
           >
@@ -356,7 +356,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
                   </a>
                 ) : null}
                 <Link
-                  href={`/c/${slug}/memorial/${code}/edit`}
+                  href={`/memorial/${code}/edit`}
                   data-testid="memorial-edit"
                   style={{
                     background: "hsl(var(--site-card))",
@@ -532,7 +532,7 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
               A biography for {memorial.deceasedName ?? "this person"} hasn't been added yet.
             </p>
             <Link
-              href={`/c/${slug}/memorial/${code}/edit`}
+              href={`/memorial/${code}/edit`}
               style={{
                 background: "hsl(var(--site-primary))",
                 color: "hsl(var(--site-primary-fg))",

@@ -51,7 +51,7 @@ export function CemeterySiteSuccess({ slug, site, orderNumber }: Props) {
       </div>
       <div className="flex flex-wrap gap-3 justify-center">
         <Link
-          href={`/c/${slug}`}
+          href={`/`}
           style={{
             background: "hsl(var(--site-primary))",
             color: "hsl(var(--site-primary-fg))",
@@ -62,7 +62,7 @@ export function CemeterySiteSuccess({ slug, site, orderNumber }: Props) {
           Back to home
         </Link>
         <Link
-          href={`/c/${slug}/marketplace`}
+          href={`/marketplace`}
           style={{
             border: "1px solid hsl(var(--site-border))",
             color: "hsl(var(--site-fg))",
