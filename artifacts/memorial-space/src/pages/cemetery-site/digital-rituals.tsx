@@ -48,11 +48,50 @@ function marketplaceHref(opts: {
 }
 
 type CandleColor = "white" | "gold" | "amber" | "rose";
-const CANDLE_COLORS: { id: CandleColor; label: string; hex: string }[] = [
-  { id: "white", label: "Pure white", hex: "#fff7e0" },
-  { id: "gold", label: "Soft gold", hex: "#ffd479" },
-  { id: "amber", label: "Warm amber", hex: "#ffae54" },
-  { id: "rose", label: "Rose", hex: "#ffb1c4" },
+type CandleSpec = {
+  id: CandleColor;
+  label: string;
+  hex: string;
+  // Jewel-toned card gradient (mirrors the flower-card pattern) so each
+  // candle sits in its own little shrine box with the wax colour echoed
+  // in the backdrop.
+  bgFrom: string;
+  bgTo: string;
+  halo: string;
+};
+const CANDLE_COLORS: CandleSpec[] = [
+  {
+    id: "white",
+    label: "Pure white",
+    hex: "#fff7e0",
+    bgFrom: "#1a1f2a",
+    bgTo: "#2a3140",
+    halo: "rgba(255, 240, 200, 0.35)",
+  },
+  {
+    id: "gold",
+    label: "Soft gold",
+    hex: "#ffd479",
+    bgFrom: "#2b2410",
+    bgTo: "#4a3a18",
+    halo: "rgba(255, 220, 130, 0.4)",
+  },
+  {
+    id: "amber",
+    label: "Warm amber",
+    hex: "#ffae54",
+    bgFrom: "#2b1810",
+    bgTo: "#4a2818",
+    halo: "rgba(255, 174, 84, 0.45)",
+  },
+  {
+    id: "rose",
+    label: "Rose",
+    hex: "#ffb1c4",
+    bgFrom: "#3a1620",
+    bgTo: "#5a2030",
+    halo: "rgba(255, 177, 196, 0.4)",
+  },
 ];
 
 // Cemetery-appropriate flowers only — these are the canonical Western funerary
@@ -660,6 +699,17 @@ function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolea
       data-testid={`ritual-candle-${ritual.id}`}
       className={`candle-cell flex flex-col items-center gap-2 ${highlight ? "candle-highlight" : ""}`}
       title={`Lit by ${ritual.visitorName ?? "Anonymous"} · ${timeAgo(ritual.createdAt)}`}
+      style={{
+        // Per-candle jewel-toned shrine box (mirrors the flower garden's
+        // card pattern). Wax colour is echoed in the backdrop so each
+        // candle reads as its own little altar.
+        background: `linear-gradient(165deg, ${color.bgFrom} 0%, ${color.bgTo} 100%)`,
+        border: `1px solid ${color.bgTo}`,
+        borderRadius: "var(--site-radius)",
+        padding: "1.25rem 0.75rem 1rem",
+        boxShadow: "0 6px 18px rgba(0, 0, 0, 0.28)",
+        ["--candle-card-halo" as string]: color.halo,
+      }}
     >
       <div
         className="candle-stage"
@@ -687,10 +737,10 @@ function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolea
         <div className="candle-base" />
       </div>
       <div className="text-center">
-        <div className="text-[11px] font-medium truncate max-w-[100px]" style={{ color: "hsl(var(--site-fg))" }}>
+        <div className="text-[11px] font-medium truncate max-w-[100px]" style={{ color: "#fff" }}>
           {ritual.visitorName ?? "Anonymous"}
         </div>
-        <div className="text-[10px] opacity-60" style={{ color: "hsl(var(--site-muted-fg))" }}>
+        <div className="text-[10px] opacity-75" style={{ color: "#fff" }}>
           {timeAgo(ritual.createdAt)}
         </div>
       </div>
@@ -698,8 +748,8 @@ function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolea
         <div
           className="text-[10px] italic px-2 py-1 max-w-[120px] text-center"
           style={{
-            color: "hsl(var(--site-muted-fg))",
-            background: "hsl(var(--site-card) / 0.5)",
+            color: "rgba(255, 255, 255, 0.85)",
+            background: "rgba(0, 0, 0, 0.25)",
             borderRadius: "calc(var(--site-radius) / 2)",
           }}
         >
