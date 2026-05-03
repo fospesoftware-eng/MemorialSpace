@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Map, QrCode, Users, ShoppingBag, FileText, Calendar,
-  Award, ArrowRight, Check, Sparkles, Building2, BarChart3,
+  ArrowRight, Check, Sparkles, Building2, BarChart3,
   Heart, Search, Shield, Zap, Globe, Star,
 } from "lucide-react";
+import { MARKETING_PLANS } from "./_plans";
 
 const features = [
   { icon: Map, title: "Interactive Plot Mapping", desc: "GeoJSON-powered cemetery maps with real-time status: available, reserved, occupied, maintenance.", color: "from-emerald-500/20 to-emerald-500/5" },
@@ -22,37 +23,6 @@ const stats = [
   { value: "1.2M", label: "Memorial pages created" },
   { value: "98%", label: "Customer retention" },
   { value: "24/7", label: "Family portal access" },
-];
-
-const tiers = [
-  {
-    name: "Starter",
-    price: 199,
-    cadence: "/mo",
-    desc: "Small cemeteries getting digitized.",
-    features: ["Up to 500 plots", "Plot mapping & burials", "Basic obituaries", "Family search portal", "Email support"],
-    cta: "Start free trial",
-    highlight: false,
-  },
-  {
-    name: "Professional",
-    price: 499,
-    cadence: "/mo",
-    desc: "Most popular for active cemeteries.",
-    features: ["Up to 5,000 plots", "QR memorial codes", "Marketplace & e-commerce", "Bookings & scheduling", "Work orders", "Priority support"],
-    cta: "Start free trial",
-    highlight: true,
-    badge: "Most Popular",
-  },
-  {
-    name: "Enterprise",
-    price: null,
-    cadence: "",
-    desc: "Multi-location operators.",
-    features: ["Unlimited plots", "Multi-tenant orgs", "Custom integrations", "API access", "Dedicated CSM", "SLA & compliance"],
-    cta: "Contact sales",
-    highlight: false,
-  },
 ];
 
 const testimonials = [
@@ -101,16 +71,16 @@ export default function SaasHome() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8 h-12 text-base shadow-lg shadow-primary/20" data-testid="cta-trial">
-              <Link href="/app/dashboard">Start free 30-day trial<ArrowRight className="h-4 w-4 ml-2" /></Link>
+              <Link href="/sign-in/cemetery">Start 14-day free trial<ArrowRight className="h-4 w-4 ml-2" /></Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 px-8 text-base" data-testid="cta-demo">
-              <Link href="/#pricing">Book a demo</Link>
+              <Link href="/contact">Book a demo</Link>
             </Button>
           </div>
 
           {/* Portal selector */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto">
-            <Link href="/app/dashboard" data-testid="portal-cemetery" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
+            <Link href="/sign-in/cemetery" data-testid="portal-cemetery" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Building2 className="h-5 w-5 text-primary" />
@@ -122,7 +92,7 @@ export default function SaasHome() {
                 <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
               </div>
             </Link>
-            <Link href="/account" data-testid="portal-family" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
+            <Link href="/sign-in/family" data-testid="portal-family" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-rose-500/10 flex items-center justify-center group-hover:bg-rose-500/20 transition-colors">
                   <Heart className="h-5 w-5 text-rose-400" />
@@ -134,7 +104,7 @@ export default function SaasHome() {
                 <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
               </div>
             </Link>
-            <Link href="/admin" data-testid="portal-admin" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-[#d4a843]/40 hover:bg-card transition-all text-left">
+            <Link href="/sign-in/admin" data-testid="portal-admin" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-[#d4a843]/40 hover:bg-card transition-all text-left">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-[#d4a843]/10 flex items-center justify-center group-hover:bg-[#d4a843]/20 transition-colors">
                   <Shield className="h-5 w-5 text-[#d4a843]" />
@@ -185,6 +155,11 @@ export default function SaasHome() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+          <div className="text-center mt-10">
+            <Button asChild variant="outline" size="lg">
+              <Link href="/features">See every feature in detail<ArrowRight className="h-4 w-4 ml-2" /></Link>
+            </Button>
           </div>
         </div>
       </section>
@@ -254,34 +229,34 @@ export default function SaasHome() {
           <div className="text-center mb-16">
             <Badge variant="outline" className="mb-4">Pricing</Badge>
             <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4">Simple, transparent plans</h2>
-            <p className="text-lg text-muted-foreground">Pick a plan, start free for 30 days. No credit card required.</p>
+            <p className="text-lg text-muted-foreground">Start free. Cancel anytime. No credit card required.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {tiers.map((t) => (
-              <Card key={t.name} className={`relative border-border/60 bg-card transition-all ${t.highlight ? "border-primary/60 shadow-2xl shadow-primary/10 scale-105" : "hover:border-primary/30"}`}>
+            {MARKETING_PLANS.map((t) => (
+              <Card key={t.slug} className={`relative border-border/60 bg-card transition-all ${t.highlight ? "border-primary/60 shadow-2xl shadow-primary/10 md:scale-105" : "hover:border-primary/30"}`}>
                 {t.badge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-primary text-primary-foreground border-none">{t.badge}</Badge>
                   </div>
                 )}
                 <CardContent className="p-8">
-                  <h3 className="text-xl font-bold mb-2">{t.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-6">{t.desc}</p>
+                  <h3 className="text-xl font-bold mb-1">{t.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-6">{t.tagline}</p>
                   <div className="mb-6">
-                    {t.price !== null ? (
+                    {t.priceUsd !== null ? (
                       <>
-                        <span className="text-5xl font-bold">${t.price}</span>
+                        <span className="text-5xl font-bold">${t.priceUsd}</span>
                         <span className="text-muted-foreground">{t.cadence}</span>
                       </>
                     ) : (
                       <span className="text-3xl font-bold">Custom</span>
                     )}
                   </div>
-                  <Button asChild className={`w-full mb-6 ${t.highlight ? "bg-primary hover:bg-primary/90" : ""}`} variant={t.highlight ? "default" : "outline"} data-testid={`pricing-${t.name.toLowerCase()}`}>
-                    <Link href="/app/dashboard">{t.cta}</Link>
+                  <Button asChild className={`w-full mb-6 ${t.highlight ? "bg-primary hover:bg-primary/90" : ""}`} variant={t.highlight ? "default" : "outline"} data-testid={`pricing-${t.slug}`}>
+                    <Link href={t.cta.href}>{t.cta.label}</Link>
                   </Button>
                   <ul className="space-y-3">
-                    {t.features.map((f) => (
+                    {t.highlights.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm">
                         <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                         <span>{f}</span>
@@ -291,6 +266,11 @@ export default function SaasHome() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+          <div className="text-center mt-10">
+            <Button asChild variant="outline">
+              <Link href="/pricing">Compare every feature side by side<ArrowRight className="h-4 w-4 ml-2" /></Link>
+            </Button>
           </div>
         </div>
       </section>
@@ -309,10 +289,10 @@ export default function SaasHome() {
               <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">Join hundreds of cemeteries already running on MemorialSpace. Set up takes 2 weeks. ROI takes 2 months.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8">
-                  <Link href="/app/dashboard">Get started free</Link>
+                  <Link href="/sign-in/cemetery">Get started free</Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="px-8">
-                  <Link href="/find">See the family portal</Link>
+                  <Link href="/contact">Talk to sales</Link>
                 </Button>
               </div>
             </CardContent>

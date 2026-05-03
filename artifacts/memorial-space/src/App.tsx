@@ -15,6 +15,9 @@ import { SaasMarketingLayout } from "@/components/layout/saas-marketing-layout";
 // SaaS marketing
 import SaasHome from "@/pages/marketing/saas-home";
 import DemoCredentials from "@/pages/marketing/demo";
+import FeaturesPage from "@/pages/marketing/features";
+import PricingPage from "@/pages/marketing/pricing";
+import ContactPage from "@/pages/marketing/contact";
 
 // Auth (sign-in)
 import SignInHub from "@/pages/auth/sign-in-hub";
@@ -205,6 +208,15 @@ function Router() {
       </Route>
       <Route path="/demo">
         <SaasMarketingRoutes><DemoCredentials /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/features">
+        <SaasMarketingRoutes><FeaturesPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/pricing">
+        <SaasMarketingRoutes><PricingPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/contact">
+        <SaasMarketingRoutes><ContactPage /></SaasMarketingRoutes>
       </Route>
       <Route path="/">
         <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>

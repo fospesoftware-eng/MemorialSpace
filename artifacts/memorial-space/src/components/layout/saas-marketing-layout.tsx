@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
 export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const links = [
-    { href: "/#features", label: "Features" },
-    { href: "/#pricing", label: "Pricing" },
-    { href: "/#testimonials", label: "Customers" },
+    { href: "/features", label: "Features" },
+    { href: "/pricing", label: "Pricing" },
+    { href: "/contact", label: "Contact Sales" },
     { href: "/find", label: "Find a Loved One" },
     { href: "/demo", label: "Demo Access" },
   ];
@@ -45,10 +45,10 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
 
           <div className="hidden md:flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" data-testid="link-signin">
-              <Link href="/sign-in">Client Sign In</Link>
+              <Link href="/sign-in">Sign In</Link>
             </Button>
-            <Button asChild size="sm" className="bg-primary hover:bg-primary/90" data-testid="link-demo">
-              <Link href="/#pricing">Request Demo</Link>
+            <Button asChild size="sm" className="bg-primary hover:bg-primary/90" data-testid="link-trial">
+              <Link href="/sign-in/cemetery">Start Free Trial</Link>
             </Button>
           </div>
 
@@ -64,8 +64,8 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
                   <Link key={l.href} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
                 ))}
                 <div className="border-t border-border my-3" />
-                <Button asChild variant="outline"><Link href="/sign-in">Client Sign In</Link></Button>
-                <Button asChild><Link href="/#pricing">Request Demo</Link></Button>
+                <Button asChild variant="outline"><Link href="/sign-in">Sign In</Link></Button>
+                <Button asChild><Link href="/sign-in/cemetery">Start Free Trial</Link></Button>
                 <div className="border-t border-border my-3" />
                 <Link href="/account" className="text-sm text-muted-foreground py-1">My Account</Link>
                 <Link href="/admin" className="text-sm text-muted-foreground py-1">Admin Console</Link>
@@ -92,8 +92,9 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             <div>
               <p className="text-sm font-semibold mb-3">Product</p>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/#features" className="hover:text-foreground">Features</Link></li>
-                <li><Link href="/#pricing" className="hover:text-foreground">Pricing</Link></li>
+                <li><Link href="/features" className="hover:text-foreground">Features</Link></li>
+                <li><Link href="/pricing" className="hover:text-foreground">Pricing</Link></li>
+                <li><Link href="/contact" className="hover:text-foreground">Contact Sales</Link></li>
                 <li><Link href="/find" className="hover:text-foreground">Family Portal</Link></li>
                 <li><Link href="/demo" className="hover:text-foreground">Demo Access</Link></li>
               </ul>
