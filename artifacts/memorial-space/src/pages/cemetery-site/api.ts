@@ -339,6 +339,13 @@ export type SubmitOrderPayload = {
   // the corresponding burial server-side so the cemetery's CRM can see all
   // tributes (virtual + real) for one person in a single view.
   memorialCode?: string | null;
+  // Optional scheduled-delivery date (YYYY-MM-DD). Null/omitted means
+  // "deliver as soon as possible". `scheduleOccasion` is a short label
+  // describing why this date matters (e.g. "death_anniversary"); set to
+  // "custom" when the customer typed a free date.
+  scheduledFor?: string | null;
+  scheduleOccasion?: string | null;
+  recurringYearly?: boolean;
   items: Array<{ productId: number; quantity: number }>;
 };
 
@@ -346,6 +353,9 @@ export type SubmitOrderResponse = {
   orderNumber: string;
   total: number;
   items: OrderItemSnapshot[];
+  scheduledFor?: string | null;
+  scheduleOccasion?: string | null;
+  recurringYearly?: boolean;
 };
 
 export function useSubmitOrder(slug: string) {

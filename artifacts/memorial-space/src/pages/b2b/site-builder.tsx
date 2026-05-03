@@ -106,6 +106,9 @@ type Order = {
   paymentStatus: string;
   operatorNotes: string | null;
   createdAt: string;
+  scheduledFor: string | null;
+  scheduleOccasion: string | null;
+  recurringYearly: boolean;
 };
 
 type Org = { id: number; name: string; slug: string };
@@ -1362,6 +1365,39 @@ function OrdersTab({ toast }: { toast: ToastFn }) {
                     </ul>
                   </div>
                 </div>
+                {o.scheduledFor ? (
+                  <div
+                    className="mt-3 pt-3 border-t"
+                    data-testid={`order-schedule-${o.id}`}
+                  >
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                      Scheduled delivery
+                    </div>
+                    <p className="text-sm font-medium">
+                      {new Date(o.scheduledFor + "T00:00:00").toLocaleDateString(undefined, {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                      {o.scheduleOccasion && o.scheduleOccasion !== "custom" ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (
+                          {o.scheduleOccasion
+                            .split("_")
+                            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(" ")}
+                          )
+                        </span>
+                      ) : null}
+                      {o.recurringYearly ? (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Repeats yearly
+                        </Badge>
+                      ) : null}
+                    </p>
+                  </div>
+                ) : null}
                 {o.customerNotes ? (
                   <div className="mt-3 pt-3 border-t">
                     <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">

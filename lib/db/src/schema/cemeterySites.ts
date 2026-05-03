@@ -6,6 +6,7 @@ import {
   real,
   boolean,
   timestamp,
+  date,
   jsonb,
   uniqueIndex,
   index,
@@ -221,6 +222,23 @@ export const cemeteryOrdersTable = pgTable(
     // Free-form note from the customer — special instructions, plot ID,
     // delivery date preferences, etc.
     customerNotes: text("customer_notes"),
+    // Optional scheduled-delivery date for the order — typically used for
+    // flowers tied to a death anniversary, birthday, holiday, or any custom
+    // date the customer specifies. Null means "deliver as soon as possible".
+    // Stored as a calendar date (no time / no TZ) — the cemetery operator
+    // schedules fulfilment in their local time anyway.
+    scheduledFor: date("scheduled_for"),
+    // Free-form short label describing why this date was chosen, e.g.
+    // "death_anniversary", "birthday", "memorial_day", "mothers_day",
+    // "fathers_day", "christmas", "valentines", or "custom". Purely
+    // informational — the cemetery sees it on the order so they know to,
+    // for example, prep an anniversary card alongside the flowers.
+    scheduleOccasion: text("schedule_occasion"),
+    // True when the customer asked us to deliver every year on the same
+    // calendar date (anniversaries especially). The operator UI surfaces
+    // this so the cemetery can either set up a recurring task or contact
+    // the customer to confirm next year.
+    recurringYearly: boolean("recurring_yearly").notNull().default(false),
     items: jsonb("items").$type<CemeteryOrderItem[]>().notNull().default([]),
     subtotal: real("subtotal").notNull().default(0),
     total: real("total").notNull().default(0),
@@ -312,6 +330,19 @@ export const cemeteryOrderItemSchema = z.object({
   lineTotal: z.number().min(0).max(1_000_000),
 });
 
+export const SCHEDULE_OCCASIONS = [
+  "death_anniversary",
+  "birthday",
+  "memorial_day",
+  "mothers_day",
+  "fathers_day",
+  "christmas",
+  "valentines",
+  "easter",
+  "custom",
+] as const;
+export type ScheduleOccasion = (typeof SCHEDULE_OCCASIONS)[number];
+
 // Public order-creation payload. Server recomputes lineTotal/subtotal/total
 // from authoritative product prices — never trusts the client's numbers.
 export const createCemeteryOrderSchema = z.object({
@@ -319,6 +350,39 @@ export const createCemeteryOrderSchema = z.object({
   customerEmail: z.email().max(200),
   customerPhone: z.string().max(60).nullable().optional(),
   customerNotes: z.string().max(2000).nullable().optional(),
+  // Optional delivery scheduling. `scheduledFor` is a calendar date the
+  // customer wants the order delivered on (today or future). `scheduleOccasion`
+  // is a short label so the operator immediately understands why the date
+  // matters (anniversary vs holiday vs free-pick). `recurringYearly` lets the
+  // customer opt in to repeat-every-year on the same date.
+  scheduledFor: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD")
+    .refine((s) => {
+      // Strict calendar validation. The regex accepts "2025-02-29" or
+      // "2026-04-31" syntactically; we re-parse and confirm the resulting
+      // Date round-trips to the same components. This stops impossible
+      // dates from reaching the Postgres `date` column (which would 500).
+      const [y, m, d] = s.split("-").map(Number);
+      const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1));
+      if (
+        dt.getUTCFullYear() !== y ||
+        dt.getUTCMonth() !== (m ?? 1) - 1 ||
+        dt.getUTCDate() !== d
+      ) {
+        return false;
+      }
+      // Reject obviously-past dates (more than 1 day in the past, to allow
+      // for time-zone slop on the client). Far-future dates we accept — the
+      // operator can always reach out to confirm.
+      const today = new Date();
+      const todayMidnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      return dt.getTime() >= todayMidnight - 24 * 60 * 60 * 1000;
+    }, "Delivery date is invalid or in the past")
+    .nullable()
+    .optional(),
+  scheduleOccasion: z.enum(SCHEDULE_OCCASIONS).nullable().optional(),
+  recurringYearly: z.boolean().optional(),
   // Optional QR memorial code linking this order to a specific burial. When
   // provided, the server resolves it to a burial within the same cemetery
   // and stores `burialId`. Treated as an opaque hint — invalid/foreign codes
@@ -339,6 +403,36 @@ export const createCemeteryOrderSchema = z.object({
     )
     .min(1)
     .max(50),
+}).superRefine((val, ctx) => {
+  // Cross-field invariants. We keep the shape lenient (each field is
+  // independently optional) so the client can submit minimal payloads,
+  // but we don't want incoherent combinations like a recurring schedule
+  // with no date, or an occasion label without a chosen date — those
+  // would silently disappear from the operator UI (which only renders
+  // the schedule block when `scheduledFor` is set).
+  const hasDate = val.scheduledFor != null && val.scheduledFor !== "";
+  const hasOccasion = val.scheduleOccasion != null;
+  if (hasOccasion && !hasDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["scheduledFor"],
+      message: "Delivery date is required when an occasion is selected",
+    });
+  }
+  if (hasDate && !hasOccasion) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["scheduleOccasion"],
+      message: "Occasion is required when a delivery date is set",
+    });
+  }
+  if (val.recurringYearly && !hasDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["recurringYearly"],
+      message: "Cannot repeat yearly without a delivery date",
+    });
+  }
 });
 export type CreateCemeteryOrder = z.infer<typeof createCemeteryOrderSchema>;
 export type CemeteryOrder = typeof cemeteryOrdersTable.$inferSelect;

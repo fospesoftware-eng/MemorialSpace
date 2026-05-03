@@ -199,6 +199,11 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
     // Pass the QR code so the cart can back-link the order to this burial
     // server-side — same code that resolves the memorial on this page.
     params.set("memorialCode", code);
+    // Carry the deceased's dates so the marketplace can offer
+    // "death anniversary" and "birthday" delivery options without an
+    // extra API round-trip on the cart page.
+    if (memorial.bornDate) params.set("bornDate", memorial.bornDate);
+    if (memorial.diedDate) params.set("diedDate", memorial.diedDate);
     return `/marketplace?${params.toString()}`;
   })();
 

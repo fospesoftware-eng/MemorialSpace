@@ -1,9 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
+import { ShoppingBag, Trash2, Plus, Minus, ArrowRight, Calendar, Repeat } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { useCart } from "./cart-store";
 import { useSubmitOrder, type PublicSite } from "./api";
+import { setOrderConfirmation } from "./success";
+import {
+  availableOccasions,
+  formatIsoDate,
+  OCCASION_LABELS,
+  resolveOccasion,
+  type ScheduleOccasion,
+} from "./schedule-helpers";
 
 type Props = { slug: string; site: PublicSite };
 
@@ -12,7 +20,15 @@ type Props = { slug: string; site: PublicSite };
 // which plot/loved-one this order is for.
 const ORDER_CONTEXT_KEY = (slug: string) => `cemetery-order-context:${slug}`;
 
-function readOrderContext(slug: string): { for?: string; plotRef?: string; memorialCode?: string } | null {
+type CartOrderContext = {
+  for?: string;
+  plotRef?: string;
+  memorialCode?: string;
+  bornDate?: string;
+  diedDate?: string;
+};
+
+function readOrderContext(slug: string): CartOrderContext | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(ORDER_CONTEXT_KEY(slug));
@@ -48,21 +64,61 @@ export function CemeterySiteCart({ slug, site }: Props) {
     customerNotes: "",
   });
 
+  // Schedule state. "asap" maps to "deliver now / no specific date" — we
+  // submit a null `scheduledFor`. Anything else resolves to a concrete
+  // future date. `customDate` is only meaningful when the user selects
+  // "custom"; otherwise the resolver computes the date for us.
+  const [scheduleChoice, setScheduleChoice] = useState<"asap" | ScheduleOccasion>("asap");
+  const [customDate, setCustomDate] = useState<string>("");
+  const [recurringYearly, setRecurringYearly] = useState(false);
+
+  // Read the order context once. Re-reading it on every render would be
+  // cheap but feels wasteful; the slug-keyed dependency is sufficient
+  // because deceased dates are immutable for the lifetime of this page.
+  const orderCtx = useMemo(() => readOrderContext(slug), [slug]);
+  const occasions = useMemo(
+    () => availableOccasions({ bornDate: orderCtx?.bornDate, diedDate: orderCtx?.diedDate }),
+    [orderCtx?.bornDate, orderCtx?.diedDate],
+  );
+
+  // Resolve the currently-selected occasion to its target ISO date so the
+  // UI can show a confirmation line ("Delivers on May 11, 2026") and the
+  // submit handler knows what to send. `null` means "no specific date".
+  const resolvedDate = useMemo<string | null>(() => {
+    if (scheduleChoice === "asap") return null;
+    if (scheduleChoice === "custom") {
+      // Trust the date input's own validation; we re-validate emptiness
+      // and past-dates in `handleSubmit` so the user can't accidentally
+      // submit "custom" without picking a date.
+      return customDate || null;
+    }
+    return resolveOccasion(scheduleChoice, {
+      bornDate: orderCtx?.bornDate,
+      diedDate: orderCtx?.diedDate,
+    })?.date ?? null;
+  }, [scheduleChoice, customDate, orderCtx?.bornDate, orderCtx?.diedDate]);
+
+  // Today as YYYY-MM-DD for the <input min="…">. Computed once per render.
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, []);
+
   // Prefill notes from the order context exactly once. Guarded by both
   // a ref-style flag and an emptiness check on the existing notes so
   // we never overwrite something the visitor already typed.
   const [hasPrefilled, setHasPrefilled] = useState(false);
   useEffect(() => {
     if (hasPrefilled) return;
-    const ctx = readOrderContext(slug);
-    const prefill = buildContextPrefill(ctx);
+    const prefill = buildContextPrefill(orderCtx);
     if (prefill) {
       setForm((f) =>
         f.customerNotes.trim().length === 0 ? { ...f, customerNotes: prefill } : f,
       );
     }
     setHasPrefilled(true);
-  }, [slug, hasPrefilled]);
+  }, [orderCtx, hasPrefilled]);
   const [error, setError] = useState<string | null>(null);
 
   const inputStyle: React.CSSProperties = {
@@ -82,6 +138,14 @@ export function CemeterySiteCart({ slug, site }: Props) {
     e.preventDefault();
     setError(null);
     if (!isValid) return;
+    // Custom-date sanity: make sure the user actually picked one if they
+    // chose "Custom date". For occasion choices we always have a resolved
+    // date, but the date input could legitimately be empty when the user
+    // clicked the radio without typing anything.
+    if (scheduleChoice === "custom" && !customDate) {
+      setError("Please pick a delivery date.");
+      return;
+    }
     // Pull the memorial code out of the persisted order context so the
     // server can back-link this order to the burial. We prefer the freshly
     // read value over a stale closure capture.
@@ -93,10 +157,20 @@ export function CemeterySiteCart({ slug, site }: Props) {
         customerPhone: form.customerPhone.trim() || null,
         customerNotes: form.customerNotes.trim() || null,
         memorialCode: ctx?.memorialCode ?? null,
+        scheduledFor: resolvedDate,
+        scheduleOccasion: scheduleChoice === "asap" ? null : scheduleChoice,
+        recurringYearly: scheduleChoice !== "asap" ? recurringYearly : false,
         items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       },
       {
         onSuccess: (data) => {
+          // Persist the confirmation so the success page can show the
+          // scheduled date even though the cart is cleared right after.
+          setOrderConfirmation(slug, data.orderNumber, {
+            scheduledFor: data.scheduledFor ?? null,
+            scheduleOccasion: data.scheduleOccasion ?? null,
+            recurringYearly: data.recurringYearly ?? false,
+          });
           clear();
           setLocation(`/order/${data.orderNumber}`);
         },
@@ -273,12 +347,131 @@ export function CemeterySiteCart({ slug, site }: Props) {
               style={inputStyle}
               rows={3}
               className="w-full px-3 py-2 outline-none"
-              placeholder="Plot ID, delivery date, special instructions…"
+              placeholder="Plot ID, special instructions…"
             />
           </div>
 
+          {/* Delivery scheduling. Defaults to ASAP; visitors who navigated
+              from a memorial page see anniversary/birthday options too. */}
           <div
-            className="pt-4 mt-4 space-y-2"
+            className="pt-4 mt-2 space-y-3"
+            style={{ borderTop: "1px solid hsl(var(--site-border))" }}
+            data-testid="schedule-section"
+          >
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" style={{ color: "hsl(var(--site-primary))" }} />
+              <span className="text-sm font-semibold">When to deliver</span>
+            </div>
+            <label
+              className="flex items-start gap-2 cursor-pointer text-sm"
+              data-testid="schedule-option-asap"
+            >
+              <input
+                type="radio"
+                name="schedule"
+                checked={scheduleChoice === "asap"}
+                onChange={() => setScheduleChoice("asap")}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-medium">As soon as possible</span>
+                <span
+                  className="block text-xs"
+                  style={{ color: "hsl(var(--site-muted-fg))" }}
+                >
+                  We'll fulfil this on the next available day.
+                </span>
+              </span>
+            </label>
+            {occasions.map((occ) => {
+              if (occ === "custom") return null;
+              const resolved = resolveOccasion(occ, {
+                bornDate: orderCtx?.bornDate,
+                diedDate: orderCtx?.diedDate,
+              });
+              if (!resolved) return null;
+              const id = `schedule-option-${occ}`;
+              return (
+                <label
+                  key={occ}
+                  className="flex items-start gap-2 cursor-pointer text-sm"
+                  data-testid={id}
+                >
+                  <input
+                    type="radio"
+                    name="schedule"
+                    checked={scheduleChoice === occ}
+                    onChange={() => setScheduleChoice(occ)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium">{OCCASION_LABELS[occ]}</span>
+                    <span
+                      className="block text-xs"
+                      style={{ color: "hsl(var(--site-muted-fg))" }}
+                    >
+                      Delivers on {formatIsoDate(resolved.date)}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+            <label
+              className="flex items-start gap-2 cursor-pointer text-sm"
+              data-testid="schedule-option-custom"
+            >
+              <input
+                type="radio"
+                name="schedule"
+                checked={scheduleChoice === "custom"}
+                onChange={() => setScheduleChoice("custom")}
+                className="mt-1"
+              />
+              <span className="flex-1 min-w-0">
+                <span className="font-medium">Custom date</span>
+                {scheduleChoice === "custom" ? (
+                  <input
+                    type="date"
+                    value={customDate}
+                    min={todayIso}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    style={inputStyle}
+                    className="block mt-2 w-full h-10 px-3 outline-none"
+                    data-testid="input-custom-date"
+                  />
+                ) : (
+                  <span
+                    className="block text-xs"
+                    style={{ color: "hsl(var(--site-muted-fg))" }}
+                  >
+                    Pick any future date.
+                  </span>
+                )}
+              </span>
+            </label>
+            {scheduleChoice !== "asap" ? (
+              <label
+                className="flex items-center gap-2 cursor-pointer text-sm pl-6 pt-1"
+                data-testid="schedule-recurring"
+              >
+                <input
+                  type="checkbox"
+                  checked={recurringYearly}
+                  onChange={(e) => setRecurringYearly(e.target.checked)}
+                />
+                <Repeat
+                  className="h-3.5 w-3.5"
+                  style={{ color: "hsl(var(--site-muted-fg))" }}
+                />
+                <span style={{ color: "hsl(var(--site-fg))" }}>
+                  Repeat every year on this date
+                </span>
+              </label>
+            ) : null}
+          </div>
+
+          <div
+            className="pt-4 mt-2 space-y-2"
             style={{ borderTop: "1px solid hsl(var(--site-border))" }}
           >
             <div className="flex justify-between text-sm">

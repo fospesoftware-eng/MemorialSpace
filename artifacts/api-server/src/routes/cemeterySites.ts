@@ -1239,6 +1239,9 @@ router.post("/c/:slug/orders", async (req, res) => {
           customerEmail: parsed.data.customerEmail,
           customerPhone: parsed.data.customerPhone ?? null,
           customerNotes: parsed.data.customerNotes ?? null,
+          scheduledFor: parsed.data.scheduledFor ?? null,
+          scheduleOccasion: parsed.data.scheduleOccasion ?? null,
+          recurringYearly: parsed.data.recurringYearly ?? false,
           items,
           subtotal,
           total,
@@ -1250,11 +1253,15 @@ router.post("/c/:slug/orders", async (req, res) => {
       return row;
     });
     // Public response is intentionally minimal — confirms the order
-    // exists and gives the customer a number to reference.
+    // exists and gives the customer a number to reference. We also echo
+    // the scheduling info so the success page can confirm the booked date.
     res.status(201).json({
       orderNumber: inserted.orderNumber,
       total: inserted.total,
       items: inserted.items,
+      scheduledFor: inserted.scheduledFor,
+      scheduleOccasion: inserted.scheduleOccasion,
+      recurringYearly: inserted.recurringYearly,
     });
   } catch (err) {
     // Rare: unique-index collision under extreme contention. Caller can retry.
