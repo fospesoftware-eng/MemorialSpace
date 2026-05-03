@@ -5,32 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { User, Calendar, Cross, FileText, ImageOff, MapPin } from "lucide-react";
-import { format } from "date-fns";
+import { Cross } from "lucide-react";
+import { BurialDetails } from "@/components/burial-details";
 
 const ORG_ID = 1;
-
-// Pretty-format an ISO date string (YYYY-MM-DD or full ISO). Returns null
-// for missing or unparseable values so callers can render an em-dash.
-function fmtDate(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const d = new Date(value);
-  if (isNaN(d.valueOf())) return null;
-  return format(d, "MMM d, yyyy");
-}
-
-// Years between dob and dod (or today if still present). Returns null when
-// inputs are missing or invalid, so we never display "NaN years".
-function calcAge(dob: string | null | undefined, dod: string | null | undefined): number | null {
-  if (!dob) return null;
-  const start = new Date(dob);
-  const end = dod ? new Date(dod) : new Date();
-  if (isNaN(start.valueOf()) || isNaN(end.valueOf())) return null;
-  let age = end.getFullYear() - start.getFullYear();
-  const m = end.getMonth() - start.getMonth();
-  if (m < 0 || (m === 0 && end.getDate() < start.getDate())) age--;
-  return age >= 0 && age < 200 ? age : null;
-}
 
 export default function MapPage() {
   const { data, isLoading } = useGetMapData(ORG_ID);
@@ -186,72 +164,25 @@ export default function MapPage() {
                       </p>
                     ) : (
                       <ul className="space-y-3" data-testid="burial-list">
-                        {burials.map((b) => {
-                          const dob = fmtDate(b.deceasedDob);
-                          const dod = fmtDate(b.deceasedDod);
-                          const buried = fmtDate(b.burialDate);
-                          const age = calcAge(b.deceasedDob, b.deceasedDod);
-                          return (
-                            <li
-                              key={b.id}
-                              data-testid={`burial-${b.id}`}
-                              className="rounded-lg border border-sidebar-border bg-sidebar-accent/30 overflow-hidden"
-                            >
-                              <div className="flex gap-3 p-3">
-                                {b.photoUrl ? (
-                                  <img
-                                    src={b.photoUrl}
-                                    alt={b.deceasedName}
-                                    className="h-16 w-16 rounded-md object-cover border border-sidebar-border shrink-0"
-                                  />
-                                ) : (
-                                  <div className="h-16 w-16 rounded-md flex items-center justify-center bg-sidebar-accent/60 border border-sidebar-border shrink-0">
-                                    <ImageOff className="h-5 w-5 text-sidebar-foreground/40" />
-                                  </div>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <User className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
-                                    <p className="font-semibold text-sm truncate">{b.deceasedName}</p>
-                                  </div>
-                                  <p className="text-[11px] text-sidebar-foreground/70 mt-0.5">
-                                    {dob ?? "—"} – {dod ?? "—"}
-                                    {age != null && <span className="ml-1.5 text-sidebar-foreground/50">· age {age}</span>}
-                                  </p>
-                                  {b.religion && (
-                                    <Badge variant="outline" className="mt-1.5 text-[10px] border-sidebar-border bg-transparent capitalize">
-                                      {b.religion}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              {(buried || b.notes) && (
-                                <div className="border-t border-sidebar-border/60 px-3 py-2 space-y-1.5 text-[11px]">
-                                  {buried && (
-                                    <div className="flex items-start gap-1.5">
-                                      <Calendar className="h-3 w-3 mt-0.5 text-sidebar-foreground/60 shrink-0" />
-                                      <span className="text-sidebar-foreground/80">
-                                        Interred <strong className="text-sidebar-foreground">{buried}</strong>
-                                      </span>
-                                    </div>
-                                  )}
-                                  {b.notes && (
-                                    <div className="flex items-start gap-1.5">
-                                      <FileText className="h-3 w-3 mt-0.5 text-sidebar-foreground/60 shrink-0" />
-                                      <p className="text-sidebar-foreground/80 whitespace-pre-line break-words">{b.notes}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              <div className="border-t border-sidebar-border/60 px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-sidebar-foreground/50">
-                                <MapPin className="h-2.5 w-2.5" />
-                                <span>Plot #{b.plotId}</span>
-                                <span className="mx-1">·</span>
-                                <span>Record #{b.id}</span>
-                              </div>
-                            </li>
-                          );
-                        })}
+                        {burials.map((b) => (
+                          <li key={b.id} data-testid={`burial-${b.id}`}>
+                            <BurialDetails
+                              variant="admin"
+                              burial={{
+                                name: b.deceasedName,
+                                dob: b.deceasedDob,
+                                dod: b.deceasedDod,
+                                burialDate: b.burialDate,
+                                religion: b.religion,
+                                photoUrl: b.photoUrl,
+                                notes: b.notes,
+                              }}
+                            />
+                            <div className="px-3 py-1.5 mt-px text-[10px] text-sidebar-foreground/50">
+                              Plot #{b.plotId} · Record #{b.id}
+                            </div>
+                          </li>
+                        ))}
                       </ul>
                     )}
                   </section>

@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { MapPin, X, ArrowRight, ImageOff, ScanLine } from "lucide-react";
+import { MapPin, X, ArrowRight, ScanLine } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMap, type PublicMapPlot, type PublicSite } from "./api";
+import { BurialDetails } from "@/components/burial-details";
 
 type Props = { slug: string; site: PublicSite };
 
@@ -308,67 +309,17 @@ export function CemeterySiteMap({ slug, site }: Props) {
               })()}
 
               {selected.burial ? (
-                <div
-                  style={{
-                    background: "hsl(var(--site-bg))",
-                    border: "1px solid hsl(var(--site-border))",
-                    borderRadius: "var(--site-radius)",
+                <BurialDetails
+                  variant="public"
+                  siteSlug={slug}
+                  burial={{
+                    name: selected.burial.name,
+                    dob: selected.burial.bornYear,
+                    dod: selected.burial.diedYear,
+                    photoUrl: selected.burial.photoUrl,
+                    memorialCode: selected.burial.memorialCode,
                   }}
-                  className="p-4"
-                >
-                  <div className="flex gap-3">
-                    {selected.burial.photoUrl ? (
-                      <img
-                        src={selected.burial.photoUrl}
-                        alt={selected.burial.name}
-                        style={{ borderRadius: "var(--site-radius)" }}
-                        className="h-16 w-16 object-cover shrink-0"
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          background: "hsl(var(--site-muted))",
-                          borderRadius: "var(--site-radius)",
-                          color: "hsl(var(--site-muted-fg))",
-                        }}
-                        className="h-16 w-16 flex items-center justify-center shrink-0"
-                      >
-                        <ImageOff className="h-5 w-5" />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div style={headingFont} className="font-semibold text-base truncate">
-                        {selected.burial.name}
-                      </div>
-                      <div className="text-sm" style={{ color: "hsl(var(--site-muted-fg))" }}>
-                        {selected.burial.bornYear ?? "—"} – {selected.burial.diedYear ?? "—"}
-                      </div>
-                    </div>
-                  </div>
-                  {selected.burial.memorialCode ? (
-                    <Link
-                      href={`/c/${slug}/memorial/${selected.burial.memorialCode}`}
-                      data-testid={`memorial-link-${selected.id}`}
-                      style={{
-                        background: "hsl(var(--site-primary))",
-                        color: "hsl(var(--site-primary-fg))",
-                        borderRadius: "var(--site-radius)",
-                      }}
-                      className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
-                    >
-                      <ScanLine className="h-4 w-4" />
-                      View memorial page
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <p
-                      className="mt-3 text-xs italic"
-                      style={{ color: "hsl(var(--site-muted-fg))" }}
-                    >
-                      No memorial page set up for this plot yet.
-                    </p>
-                  )}
-                </div>
+                />
               ) : (
                 <p
                   className="text-sm italic"
