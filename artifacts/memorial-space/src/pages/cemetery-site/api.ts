@@ -81,11 +81,16 @@ export type PublicMapData = {
   sections: string[];
 };
 
+export type MemorialVisibility = "open" | "basic" | "private";
 export type PublicMemorial = {
   code: string;
   memorialId: number | null;
-  title: string;
-  deceasedName: string;
+  visibility: MemorialVisibility;
+  // True when the visitor needs the PIN to see the rich content
+  // (`private` without unlock → everything; `basic` without unlock → bio + photos).
+  locked: boolean;
+  title: string | null;
+  deceasedName: string | null;
   bornDate: string | null;
   diedDate: string | null;
   burialDate: string | null;
@@ -183,15 +188,31 @@ export function usePublicMap(slug: string) {
   });
 }
 
-export function usePublicMemorial(slug: string, code: string) {
+export function usePublicMemorial(slug: string, code: string, pin?: string) {
+  // The unlock PIN doubles as the edit credential, so we deliberately keep
+  // it OUT of the URL/query string to avoid leaking it into server access
+  // logs, proxy logs, and observability traces. We send it via the
+  // `x-edit-pin` header instead. react-query keys on the PIN string so
+  // locked and unlocked responses don't share a cache slot.
   const qs = previewQS();
   return useQuery({
-    queryKey: ["public-memorial", slug, code, qs],
-    queryFn: () =>
-      get<PublicMemorial>(
-        `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}${qs}`,
-      ),
+    queryKey: ["public-memorial", slug, code, qs, pin ?? ""],
+    queryFn: async () => {
+      const url = `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}${qs}`;
+      const headers: Record<string, string> = {};
+      if (pin) headers["x-edit-pin"] = pin;
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const err = new Error(`${res.status} ${res.statusText} ${body}`.trim()) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
+      }
+      return res.json() as Promise<PublicMemorial>;
+    },
     enabled: !!code,
+    // 429 / 5xx — don't hammer the rate limiter further
+    retry: false,
   });
 }
 
@@ -200,6 +221,7 @@ export type UpdatePublicMemorialPayload = {
   title?: string;
   biography?: string | null;
   photos?: string[];
+  visibility?: MemorialVisibility;
 };
 
 export function useUpdatePublicMemorial(slug: string, code: string) {

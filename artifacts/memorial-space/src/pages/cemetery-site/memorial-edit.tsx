@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ImagePlus, Trash2, Save, CheckCircle2, KeyRound } from "lucide-react";
+import { ArrowLeft, ImagePlus, Trash2, Save, CheckCircle2, KeyRound, Globe, Eye, Lock } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
-import { usePublicMemorial, useUpdatePublicMemorial, type PublicSite } from "./api";
+import { usePublicMemorial, useUpdatePublicMemorial, type MemorialVisibility, type PublicSite } from "./api";
 
 type Props = { slug: string; site: PublicSite; code: string };
 
@@ -11,27 +11,36 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
   const theme = THEMES[themeKey];
   const headingFont = { fontFamily: theme.fontHeading };
 
-  const { data: memorial, isLoading, isError } = usePublicMemorial(slug, code);
+  const [editPin, setEditPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  // We thread the typed PIN into the GET so private/basic memorials can
+  // load their real content for editing. Without this, a family editing a
+  // private memorial would see an empty form because the API stripped the
+  // bio/photos to enforce the gate. The PIN goes via header (never URL).
+  const { data: memorial, isLoading, isError, error } = usePublicMemorial(slug, code, editPin.trim() || undefined);
+  const memorialErrStatus = (error as Error & { status?: number } | undefined)?.status;
   const update = useUpdatePublicMemorial(slug, code);
 
   const [title, setTitle] = useState("");
   const [biography, setBiography] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<MemorialVisibility>("open");
   const [photoInput, setPhotoInput] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  const [editPin, setEditPin] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
 
-  // Hydrate the form once the memorial data arrives. We deliberately only
-  // do this on the first load — once the user starts typing we don't want
-  // a refetch (e.g. tab focus) to clobber their unsaved edits.
+  // Hydrate the form once the memorial data arrives in an *unlocked* state.
+  // For a private memorial that means after the family types the PIN; for
+  // an open memorial the very first response is unlocked. We deliberately
+  // only hydrate once so a refetch (e.g. tab focus) doesn't clobber edits.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (memorial && !hydrated) {
-      setTitle(memorial.title ?? memorial.deceasedName);
+    if (memorial && !memorial.locked && !hydrated) {
+      setTitle(memorial.title ?? memorial.deceasedName ?? "");
       setBiography(memorial.biography ?? "");
       setPhotos(memorial.photos ?? []);
+      setVisibility(memorial.visibility);
       setHydrated(true);
     }
   }, [memorial, hydrated]);
@@ -45,9 +54,17 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
   }
 
   if (isError || !memorial) {
+    const tooMany = memorialErrStatus === 429;
     return (
       <div className="container mx-auto max-w-2xl px-4 sm:px-6 py-20 text-center">
-        <h1 style={headingFont} className="text-3xl font-semibold mb-3">Memorial not found</h1>
+        <h1 style={headingFont} className="text-3xl font-semibold mb-3">
+          {tooMany ? "Too many PIN attempts" : "Memorial not found"}
+        </h1>
+        {tooMany ? (
+          <p className="text-sm mb-6" style={{ color: "hsl(var(--site-muted-fg))" }}>
+            We've paused PIN attempts on this memorial for a few minutes. Please try again shortly.
+          </p>
+        ) : null}
         <Link
           href={`/c/${slug}/find-grave`}
           style={{ color: "hsl(var(--site-primary))" }}
@@ -58,6 +75,14 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
       </div>
     );
   }
+
+  // The form needs the real memorial content to hydrate safely. While the
+  // memorial is still locked (private memorial without a correct PIN, or
+  // a basic memorial whose family wants to edit the gated bio), only show
+  // the PIN entry — saving an empty form would otherwise nuke the bio and
+  // photos. Once the PIN is correct the GET refetches with `locked: false`
+  // and the full form renders below.
+  const stillLocked = memorial.locked;
 
   const addPhoto = () => {
     setPhotoError(null);
@@ -96,9 +121,10 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
     try {
       await update.mutateAsync({
         editPin: editPin.trim(),
-        title: title.trim() || memorial.deceasedName,
+        title: title.trim() || memorial.deceasedName || "Memorial",
         biography: biography.trim() || null,
         photos,
+        visibility,
       });
       setSavedAt(Date.now());
     } catch (err) {
@@ -128,7 +154,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
         Edit memorial
       </h1>
       <p style={{ color: "hsl(var(--site-muted-fg))" }} className="text-sm mb-8">
-        You're editing the public memorial page for <span style={{ color: "hsl(var(--site-fg))" }} className="font-medium">{memorial.deceasedName}</span>. Anyone scanning the QR plaque can see your changes once you save.
+        You're editing the public memorial page for <span style={{ color: "hsl(var(--site-fg))" }} className="font-medium">{memorial.deceasedName ?? "this memorial"}</span>. Anyone scanning the QR plaque can see your changes once you save.
       </p>
 
       <div className="space-y-6">
@@ -172,6 +198,89 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
           <p className="text-xs mt-2" style={{ color: "hsl(var(--site-muted-fg))" }}>
             Ask {memorial.cemeteryName ?? "the cemetery"} for the PIN issued with your QR plaque. Without it your changes won't save, but the memorial stays viewable.
           </p>
+          {stillLocked ? (
+            <p
+              className="text-xs mt-3 p-3"
+              data-testid="edit-locked-notice"
+              style={{
+                background: "hsl(var(--site-muted))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "var(--site-radius)",
+                color: "hsl(var(--site-fg))",
+              }}
+            >
+              This memorial is set to <strong>{memorial.visibility === "private" ? "Private" : "Basic"}</strong>. Enter the PIN above to load the existing biography, photos, and current settings.
+            </p>
+          ) : null}
+        </div>
+
+        {/* The rest of the form (privacy, title, bio, photos, save) is
+            only shown once the memorial is unlocked — otherwise the
+            empty defaults would clobber real content on save. */}
+        {stillLocked ? null : <>
+
+        {/* Privacy — three-way radio. Stored on the memorial row and
+            enforced on every public GET. Families pick the level that
+            matches how comfortable they are sharing online. */}
+        <div
+          style={{
+            background: "hsl(var(--site-card))",
+            border: "1px solid hsl(var(--site-border))",
+            borderRadius: "var(--site-radius)",
+          }}
+          className="p-4"
+          data-testid="edit-privacy"
+        >
+          <div
+            className="text-xs uppercase tracking-widest font-semibold mb-3"
+            style={{ color: "hsl(var(--site-primary))" }}
+          >
+            Privacy
+          </div>
+          <div className="space-y-2">
+            {([
+              { value: "open", icon: Globe, title: "Public",
+                desc: "Anyone with the QR sees the full memorial — name, dates, plot, biography, photos." },
+              { value: "basic", icon: Eye, title: "Basic info only",
+                desc: "Visitors see name, dates, and plot location. Biography and photo gallery require the PIN." },
+              { value: "private", icon: Lock, title: "Private",
+                desc: "The whole memorial is hidden behind the PIN. Visitors must enter it to see anything." },
+            ] as const).map(({ value, icon: Icon, title: optTitle, desc }) => {
+              const checked = visibility === value;
+              return (
+                <label
+                  key={value}
+                  data-testid={`edit-privacy-${value}`}
+                  style={{
+                    background: checked ? "hsl(var(--site-muted))" : "transparent",
+                    border: checked
+                      ? "1px solid hsl(var(--site-primary))"
+                      : "1px solid hsl(var(--site-border))",
+                    borderRadius: "var(--site-radius)",
+                  }}
+                  className="flex items-start gap-3 p-3 cursor-pointer hover:opacity-90"
+                >
+                  <input
+                    type="radio"
+                    name="memorial-visibility"
+                    value={value}
+                    checked={checked}
+                    onChange={() => setVisibility(value)}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold mb-0.5">
+                      <Icon className="h-3.5 w-3.5" style={{ color: "hsl(var(--site-primary))" }} />
+                      {optTitle}
+                    </div>
+                    <div className="text-xs" style={{ color: "hsl(var(--site-muted-fg))" }}>
+                      {desc}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
         </div>
 
         {/* Title */}
@@ -345,6 +454,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
             {update.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
+        </>}
       </div>
     </div>
   );

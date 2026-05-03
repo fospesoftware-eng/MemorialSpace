@@ -715,6 +715,14 @@ router.get("/c/:slug/map", async (req, res) => {
 // — operators can hide a memorial without deleting the QR. We update the
 // scan/view counters in the background; failures don't break the page.
 router.get("/c/:slug/memorial/:code", async (req, res) => {
+  // Memorial GET responses vary by the unlock PIN supplied via header, and
+  // returning a stale "unlocked" payload to a later anonymous visitor would
+  // be a privacy regression. Disable shared/private caching unconditionally
+  // and declare Vary so any well-behaved cache that does honor it keys per
+  // PIN. We never want this endpoint cached across visitors.
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Vary", "x-edit-pin");
+
   const ctx = await resolvePublicSite(req, res);
   if (!ctx) return;
   const code = String(req.params.code ?? "").toUpperCase();
@@ -764,6 +772,76 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
   // by toggling the memorial back to public.
   if (memorial && memorial.isPublic === false) {
     res.status(404).json({ error: "Memorial not found" });
+    return;
+  }
+
+  // Privacy mode — derived from the memorial row (defaults to "open" when
+  // the memorial doesn't exist yet, since there's nothing private to hide).
+  const visibility: "open" | "basic" | "private" =
+    memorial?.visibility === "basic" || memorial?.visibility === "private"
+      ? memorial.visibility
+      : "open";
+
+  // Optional unlock PIN — only accepted via the `x-edit-pin` header so the
+  // secret never appears in URLs, server access logs, proxy logs, or
+  // observability traces. (We deliberately removed query-string support;
+  // since this PIN doubles as the edit credential, leaking it via a logged
+  // URL would also enable memorial vandalism.)
+  const submittedReadPin =
+    typeof req.headers["x-edit-pin"] === "string"
+      ? String(req.headers["x-edit-pin"])
+      : "";
+  let pinUnlocked = false;
+  if (submittedReadPin && qr.editPin) {
+    // Share the bucket with PATCH (`${ip}:${code}`) so wrong-PIN attempts
+    // across read+edit consume one combined 5-per-15min budget. A separate
+    // `:read` bucket would have doubled the attacker's effective budget.
+    const rlKey = `${req.ip ?? "unknown"}:${code}`;
+    if (submittedReadPin.trim() === qr.editPin) {
+      pinUnlocked = true;
+      resetEditPinRateLimit(rlKey);
+    } else {
+      // Wrong PIN — count and enforce. The PIN keyspace is 6 digits (10^6)
+      // so without throttling the QR alone would let an attacker brute the
+      // edit credential in seconds. We allow 5 attempts per 15min per
+      // (ip + code) and otherwise 429 with Retry-After. This is the same
+      // budget as the PATCH so an attacker can't spend two pools.
+      const rl = checkEditPinRateLimit(rlKey);
+      if (!rl.ok) {
+        // `retryAfter` is already in seconds (see checkEditPinRateLimit).
+        res.setHeader("Retry-After", String(rl.retryAfter));
+        res.status(429).json({ error: "Too many PIN attempts. Please try again later." });
+        return;
+      }
+    }
+  }
+
+  // Hard private gate — return a minimal payload so the frontend can render
+  // an unlock prompt. We deliberately respond 200 (not 401) so the page
+  // still renders shell + form without the query erroring out.
+  if (visibility === "private" && !pinUnlocked) {
+    res.json({
+      code: qr.code,
+      memorialId: memorial?.id ?? null,
+      visibility,
+      locked: true,
+      title: null,
+      deceasedName: null,
+      bornDate: null,
+      diedDate: null,
+      burialDate: null,
+      religion: null,
+      biography: null,
+      photos: [],
+      plotLabel: null,
+      plotSection: null,
+      plotRow: null,
+      plotLatitude: null,
+      plotLongitude: null,
+      cemeteryName: ctx.org.name,
+      cemeteryAddress: null,
+      canEdit: true,
+    });
     return;
   }
 
@@ -823,17 +901,27 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
     .from(cemeterySitesTable)
     .where(eq(cemeterySitesTable.organizationId, ctx.org.id));
 
+  // "basic" visibility hides the rich content (bio + extra photos) unless
+  // the visitor proves they have the PIN. We still expose name/dates/plot
+  // because that's the headstone-equivalent info families typically want
+  // public for visitors who walked up to the gravesite.
+  const showRich = visibility === "open" || pinUnlocked;
+  const richBiography = showRich ? memorial?.biography ?? null : null;
+  const richPhotos = showRich ? photos : [];
+
   res.json({
     code: qr.code,
     memorialId: memorial?.id ?? null,
+    visibility,
+    locked: !showRich,
     title: memorial?.title ?? burial.deceasedName,
     deceasedName: burial.deceasedName,
     bornDate: burial.deceasedDob,
     diedDate: burial.deceasedDod,
     burialDate: burial.burialDate,
     religion: burial.religion,
-    biography: memorial?.biography ?? null,
-    photos,
+    biography: richBiography,
+    photos: richPhotos,
     plotLabel: plot?.plotNumber ?? null,
     plotSection: plot?.section ?? null,
     plotRow: plot?.row ?? null,
@@ -891,6 +979,9 @@ const PublicMemorialEditSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   biography: z.string().max(20000).nullable().optional(),
   photos: z.array(z.string().url().max(1000)).max(20).optional(),
+  // Privacy mode the family wants to apply. Accepts the three modes the
+  // GET handler understands; anything else is rejected by Zod.
+  visibility: z.enum(["open", "basic", "private"]).optional(),
 });
 router.patch("/c/:slug/memorial/:code/edit", async (req, res) => {
   const ctx = await resolvePublicSite(req, res);
@@ -1005,6 +1096,7 @@ router.patch("/c/:slug/memorial/:code/edit", async (req, res) => {
   if (parsed.data.title !== undefined) patch.title = parsed.data.title;
   if (parsed.data.biography !== undefined) patch.biography = parsed.data.biography;
   if (parsed.data.photos !== undefined) patch.photos = JSON.stringify(parsed.data.photos);
+  if (parsed.data.visibility !== undefined) patch.visibility = parsed.data.visibility;
 
   if (Object.keys(patch).length === 0) {
     res.status(400).json({ error: "Nothing to update" });
