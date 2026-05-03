@@ -16,8 +16,31 @@
  * variables; admin uses the regular sidebar/foreground tokens.
  */
 import { Link } from "wouter";
-import { ArrowRight, Calendar, FileText, ImageOff, MapPin, ScanLine } from "lucide-react";
+import { ArrowRight, Calendar, FileText, ImageOff, KeyRound, MapPin, QrCode, ScanLine } from "lucide-react";
 import { SPOT_ICONS, FALLBACK_SPOT_TYPE, DEFAULT_SPOT_TYPES, type SpotType } from "@/lib/cemetery-config";
+
+/**
+ * Build the public qrserver.com image URL for a memorial page. We mirror
+ * the server-side encoding (`/api/qr-codes` route) so admin lookups that
+ * have a memorial code but no `qrImageUrl` cached on the QR row still
+ * render a scannable code.
+ */
+export function buildMemorialQrImageUrl(memorialUrl: string, size = 240): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(
+    memorialUrl,
+  )}`;
+}
+
+export function buildMemorialUrl(opts: {
+  origin?: string;
+  siteSlug?: string | null;
+  memorialCode: string;
+}): string {
+  const origin = opts.origin ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return opts.siteSlug
+    ? `${origin}/c/${opts.siteSlug}/memorial/${opts.memorialCode}`
+    : `${origin}/memorial/${opts.memorialCode}`;
+}
 
 export type BurialDetailsData = {
   /** Full name of the deceased. */
@@ -36,8 +59,15 @@ export type BurialDetailsData = {
   notes?: string | null;
   lat?: number | null;
   lon?: number | null;
-  /** Public memorial page code (public variant only). */
+  /** Public memorial page code. Used to build the QR + open-link in both variants. */
   memorialCode?: string | null;
+  /**
+   * Pre-rendered QR PNG URL (e.g. from the QR codes table). When omitted,
+   * the component falls back to building one from `memorialCode + siteSlug`.
+   */
+  qrImageUrl?: string | null;
+  /** Edit PIN for the memorial (admin variant only — operator-visible). */
+  editPin?: string | null;
 };
 
 export type BurialDetailsProps = {
@@ -91,6 +121,18 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
     : burial.photoUrl
       ? [burial.photoUrl]
       : [];
+
+  // Memorial / QR derivations. We accept either a pre-built `qrImageUrl`
+  // (canonical, from the qr_codes row) or a `memorialCode` to construct
+  // one client-side. Either way we also need the open-link target.
+  const memorialUrl = burial.memorialCode
+    ? buildMemorialUrl({ siteSlug: siteSlug ?? null, memorialCode: burial.memorialCode })
+    : null;
+  const qrImg = burial.qrImageUrl
+    ?? (memorialUrl ? buildMemorialQrImageUrl(memorialUrl) : null);
+  const memorialHref = burial.memorialCode
+    ? (siteSlug ? `/c/${siteSlug}/memorial/${burial.memorialCode}` : `/memorial/${burial.memorialCode}`)
+    : null;
 
   const adminCardStyle =
     "rounded-lg border border-sidebar-border bg-sidebar-accent/30 overflow-hidden";
@@ -205,6 +247,89 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
         )}
       </div>
 
+      {/* ----- Memorial QR (both variants when a code exists) ----- */}
+      {qrImg && (
+        <div
+          className={isPublic ? "px-4 pb-4" : "border-t border-sidebar-border/60 px-3 py-3"}
+          data-testid="memorial-qr"
+        >
+          <div
+            className={`text-[10px] uppercase tracking-wider mb-2 font-semibold flex items-center gap-1 ${
+              isPublic ? "" : "text-sidebar-foreground/50"
+            }`}
+            style={isPublic ? { color: "hsl(var(--site-muted-fg))" } : undefined}
+          >
+            <QrCode className="h-3 w-3" />
+            Memorial page QR
+          </div>
+          <div className="flex items-start gap-3">
+            {memorialHref ? (
+              <Link
+                href={memorialHref}
+                data-testid="memorial-qr-link"
+                aria-label={`Open memorial page for ${burial.name}`}
+                className="shrink-0 rounded-md bg-white p-1.5 border hover:opacity-90 transition-opacity"
+                style={
+                  isPublic
+                    ? { borderColor: "hsl(var(--site-border))" }
+                    : { borderColor: "hsl(var(--sidebar-border))" }
+                }
+              >
+                <img
+                  src={qrImg}
+                  alt={`QR code linking to ${burial.name}'s memorial page`}
+                  className="h-20 w-20 block"
+                  loading="lazy"
+                />
+              </Link>
+            ) : (
+              <div
+                className="shrink-0 rounded-md bg-white p-1.5 border"
+                style={
+                  isPublic
+                    ? { borderColor: "hsl(var(--site-border))" }
+                    : { borderColor: "hsl(var(--sidebar-border))" }
+                }
+              >
+                <img
+                  src={qrImg}
+                  alt={`QR code linking to ${burial.name}'s memorial page`}
+                  className="h-20 w-20 block"
+                  loading="lazy"
+                />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              <div
+                className="text-[11px] font-mono truncate"
+                style={isPublic ? { color: "hsl(var(--site-fg))" } : undefined}
+                data-testid="memorial-code"
+                title={burial.memorialCode ?? undefined}
+              >
+                {burial.memorialCode}
+              </div>
+              <div
+                className="text-[10px] leading-snug"
+                style={isPublic ? { color: "hsl(var(--site-muted-fg))" } : undefined}
+              >
+                <span className={isPublic ? "" : "text-sidebar-foreground/60"}>
+                  Scan with a phone camera to open the memorial page.
+                </span>
+              </div>
+              {!isPublic && burial.editPin && (
+                <div
+                  className="text-[10px] flex items-center gap-1 text-sidebar-foreground/70"
+                  data-testid="memorial-edit-pin"
+                >
+                  <KeyRound className="h-2.5 w-2.5" />
+                  Edit PIN: <span className="font-mono font-semibold tracking-wider">{burial.editPin}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ----- Admin-only: religion / burial date / lat-lon / notes ----- */}
       {!isPublic && (
         <>
@@ -244,9 +369,9 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
       {/* ----- Public-only: memorial page link ----- */}
       {isPublic && (
         <div className="px-4 pb-4">
-          {burial.memorialCode && siteSlug ? (
+          {memorialHref ? (
             <Link
-              href={`/c/${siteSlug}/memorial/${burial.memorialCode}`}
+              href={memorialHref}
               data-testid="memorial-link"
               style={{
                 background: "hsl(var(--site-primary))",
@@ -267,6 +392,21 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
               No memorial page set up for this plot yet.
             </p>
           )}
+        </div>
+      )}
+
+      {/* ----- Admin-only: open memorial page CTA ----- */}
+      {!isPublic && memorialHref && (
+        <div className="border-t border-sidebar-border/60 px-3 py-2.5">
+          <Link
+            href={memorialHref}
+            data-testid="memorial-link"
+            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-md bg-sidebar-accent/40 hover:bg-sidebar-accent text-sidebar-foreground transition-colors"
+          >
+            <ScanLine className="h-3.5 w-3.5" />
+            Open memorial page
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       )}
     </div>

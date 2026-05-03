@@ -3,7 +3,15 @@
  * `pages/b2b/map.tsx`, extracted so the Plots list, Burials list, and
  * Cemetery Map all open the *same* drawer when a row/cell is clicked.
  */
-import { useListPlots, useListBurials, getListBurialsQueryKey } from "@workspace/api-client-react";
+import { useMemo } from "react";
+import {
+  useListPlots,
+  useListBurials,
+  useListQrCodes,
+  useGetOrganization,
+  getListBurialsQueryKey,
+} from "@workspace/api-client-react";
+import type { QrCode } from "@workspace/api-client-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +21,20 @@ import { Cross } from "lucide-react";
 import { BurialDetails } from "@/components/burial-details";
 
 const ORG_ID = 1;
+
+/**
+ * Build a `burialId → QrCode` lookup. When multiple QR rows exist for the
+ * same burial (legacy data) we keep the first; the bulk-generate endpoint
+ * is idempotent so this is rare in practice.
+ */
+function buildQrByBurialMap(rows: QrCode[] | undefined): Map<number, QrCode> {
+  const map = new Map<number, QrCode>();
+  if (!rows) return map;
+  for (const r of rows) {
+    if (r.burialId != null && !map.has(r.burialId)) map.set(r.burialId, r);
+  }
+  return map;
+}
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -47,6 +69,11 @@ export function PlotDetailSheet({ plotId, onOpenChange }: PlotDetailSheetProps) 
       },
     },
   );
+
+  // QR codes + org slug for the per-burial memorial QR panel.
+  const { data: qrCodes } = useListQrCodes({ organizationId: ORG_ID });
+  const { data: org } = useGetOrganization(ORG_ID);
+  const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
 
   return (
     <Sheet open={plotId != null} onOpenChange={onOpenChange}>
@@ -129,25 +156,32 @@ export function PlotDetailSheet({ plotId, onOpenChange }: PlotDetailSheetProps) 
                     </p>
                   ) : (
                     <ul className="space-y-3" data-testid="burial-list">
-                      {burials.map((b) => (
-                        <li key={b.id} data-testid={`burial-${b.id}`}>
-                          <BurialDetails
-                            variant="admin"
-                            burial={{
-                              name: b.deceasedName,
-                              dob: b.deceasedDob,
-                              dod: b.deceasedDod,
-                              burialDate: b.burialDate,
-                              religion: b.religion,
-                              photoUrl: b.photoUrl,
-                              notes: b.notes,
-                            }}
-                          />
-                          <div className="px-3 py-1.5 mt-px text-[10px] text-sidebar-foreground/50">
-                            Plot #{b.plotId} · Record #{b.id}
-                          </div>
-                        </li>
-                      ))}
+                      {burials.map((b) => {
+                        const qr = qrByBurial.get(b.id);
+                        return (
+                          <li key={b.id} data-testid={`burial-${b.id}`}>
+                            <BurialDetails
+                              variant="admin"
+                              siteSlug={org?.slug}
+                              burial={{
+                                name: b.deceasedName,
+                                dob: b.deceasedDob,
+                                dod: b.deceasedDod,
+                                burialDate: b.burialDate,
+                                religion: b.religion,
+                                photoUrl: b.photoUrl,
+                                notes: b.notes,
+                                memorialCode: qr?.code ?? null,
+                                qrImageUrl: qr?.qrImageUrl ?? null,
+                                editPin: qr?.editPin ?? null,
+                              }}
+                            />
+                            <div className="px-3 py-1.5 mt-px text-[10px] text-sidebar-foreground/50">
+                              Plot #{b.plotId} · Record #{b.id}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </section>
@@ -186,6 +220,11 @@ export function BurialDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { data: qrCodes } = useListQrCodes({ organizationId: ORG_ID });
+  const { data: org } = useGetOrganization(ORG_ID);
+  const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
+  const qr = burial ? qrByBurial.get(burial.id) : undefined;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="bg-sidebar border-sidebar-border text-sidebar-foreground w-full sm:max-w-md p-0">
@@ -204,6 +243,7 @@ export function BurialDetailSheet({
               <div className="mt-8" data-testid="burial-detail">
                 <BurialDetails
                   variant="admin"
+                  siteSlug={org?.slug}
                   burial={{
                     name: burial.deceasedName,
                     dob: burial.deceasedDob,
@@ -212,6 +252,9 @@ export function BurialDetailSheet({
                     religion: burial.religion,
                     photoUrl: burial.photoUrl,
                     notes: burial.notes,
+                    memorialCode: qr?.code ?? null,
+                    qrImageUrl: qr?.qrImageUrl ?? null,
+                    editPin: qr?.editPin ?? null,
                   }}
                 />
               </div>
