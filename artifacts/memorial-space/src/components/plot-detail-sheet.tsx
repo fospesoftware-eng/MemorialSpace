@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Cross } from "lucide-react";
 import { BurialDetails } from "@/components/burial-details";
+import { BurialFamilyLinks } from "@/components/burial-family-links";
 
 const ORG_ID = 1;
 
@@ -176,6 +177,7 @@ export function PlotDetailSheet({ plotId, onOpenChange }: PlotDetailSheetProps) 
                                 editPin: qr?.editPin ?? null,
                               }}
                             />
+                            <BurialFamilyLinks burialId={b.id} />
                             <div className="px-3 py-1.5 mt-px text-[10px] text-sidebar-foreground/50">
                               Plot #{b.plotId} · Record #{b.id}
                             </div>
@@ -257,6 +259,7 @@ export function BurialDetailSheet({
                     editPin: qr?.editPin ?? null,
                   }}
                 />
+                <BurialFamilyLinks burialId={burial.id} />
               </div>
             )}
           </div>

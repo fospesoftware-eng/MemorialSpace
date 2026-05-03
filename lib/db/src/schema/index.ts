@@ -2,6 +2,7 @@ export * from "./organizations";
 export * from "./users";
 export * from "./plots";
 export * from "./burials";
+export * from "./burialFamilyLinks";
 export * from "./bookings";
 export * from "./memorials";
 export * from "./workOrders";
