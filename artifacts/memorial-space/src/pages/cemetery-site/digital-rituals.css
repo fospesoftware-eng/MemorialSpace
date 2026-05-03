@@ -141,6 +141,55 @@
   z-index: 3;
 }
 
+/* Spark starburst — only painted on a freshly-lit (highlight) candle.
+ * Uses a single element with eight radiating rays drawn via conic-gradient
+ * + a bright centre, then animated as a one-shot pop. Sits on top of the
+ * flame, fades out as the flame settles into its idle flicker. */
+.candle-highlight .flame::before {
+  content: "";
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 30%) scale(0);
+  background:
+    radial-gradient(circle at 50% 50%, #fff8d6 0%, rgba(255, 230, 140, 0.9) 25%, transparent 55%),
+    conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      #fff2b0 8deg, transparent 16deg,
+      transparent 30deg,
+      #ffd060 38deg, transparent 46deg,
+      transparent 60deg,
+      #fff2b0 68deg, transparent 76deg,
+      transparent 90deg,
+      #ffd060 98deg, transparent 106deg,
+      transparent 120deg,
+      #fff2b0 128deg, transparent 136deg,
+      transparent 150deg,
+      #ffd060 158deg, transparent 166deg,
+      transparent 180deg,
+      #fff2b0 188deg, transparent 196deg,
+      transparent 210deg,
+      #ffd060 218deg, transparent 226deg,
+      transparent 240deg,
+      #fff2b0 248deg, transparent 256deg,
+      transparent 270deg,
+      #ffd060 278deg, transparent 286deg,
+      transparent 300deg,
+      #fff2b0 308deg, transparent 316deg,
+      transparent 330deg,
+      #ffd060 338deg, transparent 346deg,
+      transparent 360deg
+    );
+  filter: blur(0.6px) drop-shadow(0 0 6px #ffd76b);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: spark-burst 900ms cubic-bezier(0.2, 0.9, 0.3, 1) 1;
+  pointer-events: none;
+}
+
 /* Outer envelope — the larger soft glow body of the flame. */
 .flame-outer {
   position: absolute;
@@ -245,6 +294,30 @@
     candle-celebrate 1800ms ease-out 1;
 }
 
+/* Ignition: when a candle is freshly lit, prepend a one-shot grow-from-zero
+ * to the flame layers so it looks like a match strike — the flame swells
+ * from a tiny dot, overshoots, then settles into its idle flicker. The
+ * regular flicker/sway loops continue underneath because they're listed
+ * after the ignite keyframe. */
+.candle-highlight .flame-outer {
+  animation:
+    flame-ignite 800ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 1,
+    flame-flicker 180ms ease-in-out 800ms infinite alternate,
+    flame-sway 2400ms ease-in-out 800ms infinite;
+}
+.candle-highlight .flame-core {
+  animation:
+    flame-ignite 700ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 60ms 1,
+    flame-core-flicker 140ms ease-in-out 760ms infinite alternate,
+    flame-sway 2400ms ease-in-out 760ms infinite;
+}
+/* Halo bursts outward then settles into its breathing pulse. */
+.candle-highlight .flame-glow {
+  animation:
+    flame-burst 1100ms cubic-bezier(0.2, 0.9, 0.3, 1) 1,
+    flame-glow 2500ms ease-in-out 1100ms infinite;
+}
+
 @keyframes candle-rise {
   0% { opacity: 0; transform: translateY(14px) scale(0.9); }
   60% { opacity: 1; transform: translateY(-2px) scale(1.02); }
@@ -282,6 +355,31 @@
   0% { transform: scale(1) translateY(0); }
   30% { transform: scale(1.18) translateY(-4px); }
   100% { transform: scale(1) translateY(0); }
+}
+
+/* Match-strike ignition — flame grows from a pinpoint, overshoots, settles. */
+@keyframes flame-ignite {
+  0%   { opacity: 0; transform: scale(0, 0.2) translateY(8px); filter: brightness(2.2) blur(0.4px); }
+  20%  { opacity: 1; transform: scale(0.6, 0.4) translateY(4px); filter: brightness(2) blur(0.4px); }
+  55%  { opacity: 1; transform: scale(1.25, 1.35) translateY(-1px); filter: brightness(1.6) blur(0.4px); }
+  80%  { transform: scale(0.92, 0.94); filter: brightness(1.15) blur(0.4px); }
+  100% { opacity: 1; transform: scale(1, 1); filter: brightness(1) blur(0.4px); }
+}
+
+/* Halo erupts outward like a flash of light, then fades to idle pulse. */
+@keyframes flame-burst {
+  0%   { opacity: 0;    transform: scale(0.2); }
+  25%  { opacity: 1;    transform: scale(1.6); }
+  60%  { opacity: 0.7;  transform: scale(1.2); }
+  100% { opacity: 0.5;  transform: scale(0.94); }
+}
+
+/* Spark starburst — pinpoint flash that expands and fades. */
+@keyframes spark-burst {
+  0%   { opacity: 0;   transform: translate(-50%, 30%) scale(0)   rotate(0deg); }
+  25%  { opacity: 1;   transform: translate(-50%, 10%) scale(1)   rotate(20deg); }
+  60%  { opacity: 0.6; transform: translate(-50%, 0%)  scale(1.4) rotate(45deg); }
+  100% { opacity: 0;   transform: translate(-50%, -10%) scale(1.8) rotate(60deg); }
 }
 
 @keyframes candle-drip {
@@ -684,6 +782,10 @@
   .candle-smoke,
   .candle-ember,
   .candle-body::after,
+  .candle-highlight .flame::before,
+  .candle-highlight .flame-outer,
+  .candle-highlight .flame-core,
+  .candle-highlight .flame-glow,
   .flower-svg,
   .flower-petal,
   .flower-petal-inner,
