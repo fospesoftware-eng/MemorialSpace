@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListQrCodes, useCreateQrCode, useListBurials, useListPlots, useListMemorials, getListQrCodesQueryKey } from "@workspace/api-client-react";
+import { useListQrCodes, useCreateQrCode, useListBurials, useListPlots, useListMemorials, useGetOrganization, getListQrCodesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ export default function QrCodes() {
   const { data: burials } = useListBurials({ organizationId: ORG_ID });
   const { data: plots } = useListPlots({ organizationId: ORG_ID });
   const { data: memorials } = useListMemorials({ organizationId: ORG_ID });
+  const { data: org } = useGetOrganization(ORG_ID);
   const createQrCode = useCreateQrCode();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ burialId: "", plotId: "", memorialId: "" });
@@ -80,7 +81,18 @@ export default function QrCodes() {
   };
 
   const copyCode = (code: string) => {
-    navigator.clipboard.writeText(`https://memorialspace.app/memorial/${code}`);
+    // Build the public memorial URL from the *current* origin and the org's
+    // slug — never a hardcoded production domain. The previous version
+    // copied `https://memorialspace.app/memorial/${code}` which (a) points
+    // at a domain that may not exist in dev/preview, and (b) is missing
+    // the `/c/:slug/` org prefix so even on the right host it would fall
+    // through to a non-existent route. Mirror the same shape the API
+    // encodes into the QR image itself (`/c/:slug/memorial/:code`).
+    const slug = org?.slug;
+    const url = slug
+      ? `${window.location.origin}/c/${slug}/memorial/${code}`
+      : `${window.location.origin}/c/_/memorial/${code}`;
+    navigator.clipboard.writeText(url);
     toast({ title: "Copied!", description: "Memorial URL copied to clipboard." });
   };
 
