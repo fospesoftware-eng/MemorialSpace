@@ -706,7 +706,6 @@ function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolea
         background: `linear-gradient(165deg, ${color.bgFrom} 0%, ${color.bgTo} 100%)`,
         border: `1px solid ${color.bgTo}`,
         borderRadius: "var(--site-radius)",
-        padding: "1.25rem 0.75rem 1rem",
         boxShadow: "0 6px 18px rgba(0, 0, 0, 0.28)",
         ["--candle-card-halo" as string]: color.halo,
       }}
@@ -763,12 +762,14 @@ function Candle({ ritual, highlight }: { ritual: PublicRitual; highlight: boolea
 function CandleWall({ rituals, highlightId }: { rituals: PublicRitual[]; highlightId: number | null }) {
   return (
     <div
-      className="candle-wall grid gap-x-4 gap-y-6 justify-items-center"
+      className="candle-wall grid gap-x-2 gap-y-4 sm:gap-x-4 sm:gap-y-6 justify-items-stretch"
       style={{
-        gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+        // Tight 2-up on phones, growing to ~auto-fill on tablet+. Items
+        // stretch so each shrine card has equal width per row. Padding
+        // is owned by the .candle-wall CSS rule (mobile-first breakpoints).
+        gridTemplateColumns: "repeat(auto-fill, minmax(min(140px, 100%), 1fr))",
         background: "linear-gradient(180deg, transparent 0%, hsl(var(--site-card) / 0.4) 100%)",
         borderRadius: "var(--site-radius)",
-        padding: "2.5rem 1.5rem 2rem",
       }}
       data-testid="candle-wall"
     >
@@ -824,7 +825,7 @@ function FlowerGarden({ rituals, highlightId }: { rituals: PublicRitual[]; highl
   return (
     <div
       className="flower-garden grid gap-3"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))" }}
       data-testid="flower-garden"
     >
       {rituals.map((r) => (
