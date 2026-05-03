@@ -24,6 +24,17 @@ import SignInHub from "@/pages/auth/sign-in-hub";
 import SignInCemetery from "@/pages/auth/sign-in-cemetery";
 import SignInFamily from "@/pages/auth/sign-in-family";
 import SignInAdmin from "@/pages/auth/sign-in-admin";
+import SignInVendor from "@/pages/auth/sign-in-vendor";
+
+// Vendor (marketplace)
+import VendorSignup from "@/pages/vendor/signup";
+import VendorDashboard from "@/pages/vendor/dashboard";
+import VendorProfile from "@/pages/vendor/profile";
+import VendorServices from "@/pages/vendor/services";
+import VendorRequests from "@/pages/vendor/requests";
+import { VendorLayout } from "@/components/layout/vendor-layout";
+import VendorsDirectory from "@/pages/public/vendors-directory";
+import VendorDetail from "@/pages/public/vendor-detail";
 
 // B2B (cemetery client)
 import Dashboard from "@/pages/b2b/dashboard";
@@ -159,6 +170,21 @@ function CustomerRoutes() {
   );
 }
 
+function VendorRoutes() {
+  return (
+    <VendorLayout>
+      <Switch>
+        <Route path="/" component={VendorDashboard} />
+        <Route path="/dashboard" component={VendorDashboard} />
+        <Route path="/profile" component={VendorProfile} />
+        <Route path="/services" component={VendorServices} />
+        <Route path="/requests" component={VendorRequests} />
+        <Route component={NotFound} />
+      </Switch>
+    </VendorLayout>
+  );
+}
+
 function AdminRoutes() {
   return (
     <AdminLayout>
@@ -186,6 +212,21 @@ function Router() {
       <Route path="/sign-in/cemetery" component={SignInCemetery} />
       <Route path="/sign-in/family" component={SignInFamily} />
       <Route path="/sign-in/admin" component={SignInAdmin} />
+      <Route path="/sign-in/vendor" component={SignInVendor} />
+      <Route path="/vendor/signup" component={VendorSignup} />
+
+      {/* Public marketplace directory — anyone can browse vendors. */}
+      <Route path="/vendors" component={VendorsDirectory} />
+      <Route path="/vendors/:slug">
+        {(params) => <VendorDetail slug={String(params.slug)} />}
+      </Route>
+
+      {/* Vendor-authed dashboard. Mounted under /vendor (parallel to /app, /account). */}
+      <Route path="/vendor" nest>
+        <RequireAuth kinds={["vendor"]} signInPath="/sign-in/vendor">
+          <VendorRoutes />
+        </RequireAuth>
+      </Route>
 
       <Route path="/find" nest><PublicRoutes /></Route>
       <Route path="/c/:slug" nest>

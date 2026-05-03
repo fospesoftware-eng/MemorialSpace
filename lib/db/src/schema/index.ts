@@ -19,3 +19,4 @@ export * from "./cemeterySites";
 export * from "./saasBilling";
 export * from "./platformAdmins";
 export * from "./sessions";
+export * from "./vendors";

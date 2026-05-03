@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import {
   usersTable,
   platformAdminsTable,
+  marketplaceVendorsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
@@ -55,7 +56,7 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200),
   // Determines which sign-in tier the credentials must satisfy. The frontend
   // sends this from the route the user is on (cemetery / family / admin).
-  kind: z.enum(["cemetery", "family", "admin"]),
+  kind: z.enum(["cemetery", "family", "admin", "vendor"]),
 });
 
 router.post("/auth/login", authLimiter, async (req, res, next) => {
@@ -67,6 +68,43 @@ router.post("/auth/login", authLimiter, async (req, res, next) => {
       return;
     }
     const { email, password, kind } = parsed.data;
+
+    if (kind === "vendor") {
+      // Marketplace vendors live in their own table and never share an
+      // organization with a cemetery operator. Their session is a separate
+      // tier on the same cookie, and `requireVendor` middleware gates the
+      // vendor-only route surface.
+      const normalized = email.trim().toLowerCase();
+      const [vendor] = await db
+        .select()
+        .from(marketplaceVendorsTable)
+        .where(eq(marketplaceVendorsTable.email, normalized))
+        .limit(1);
+      if (!vendor || vendor.status === "suspended") {
+        res.status(401).json({ error: "Invalid email or password" });
+        return;
+      }
+      const ok = await verifyPassword(password, vendor.passwordHash);
+      if (!ok) {
+        res.status(401).json({ error: "Invalid email or password" });
+        return;
+      }
+      await db
+        .update(marketplaceVendorsTable)
+        .set({ lastActiveAt: new Date() })
+        .where(eq(marketplaceVendorsTable.id, vendor.id));
+      const sessionUser: SessionUser = {
+        kind: "vendor",
+        vendorId: vendor.id,
+        email: vendor.email,
+        name: vendor.businessName,
+        role: "vendor",
+      };
+      await regenerateSession(req);
+      req.session.user = sessionUser;
+      res.json({ user: sessionUser, redirectTo: "/vendor" });
+      return;
+    }
 
     if (kind === "admin") {
       const admin = await findPlatformAdminByEmail(email);

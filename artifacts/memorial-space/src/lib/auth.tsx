@@ -10,12 +10,13 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
-export type SessionKind = "cemetery" | "family" | "admin";
+export type SessionKind = "cemetery" | "family" | "admin" | "vendor";
 
 export interface SessionUser {
   kind: SessionKind;
   userId?: number;
   adminId?: number;
+  vendorId?: number;
   organizationId?: number;
   email: string;
   name: string;

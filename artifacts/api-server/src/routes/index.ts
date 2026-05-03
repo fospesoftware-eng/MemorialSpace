@@ -23,7 +23,8 @@ import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
 import adminRouter from "./admin";
-import { requireAuth, requireOrgUser } from "../lib/auth";
+import { vendorPublicRouter, vendorAuthedRouter } from "./vendors";
+import { requireAuth, requireOrgUser, requireVendor } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -37,6 +38,18 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(publicApiRouter);
 router.use(cemeterySitesRouter);
+// Public marketplace-vendor surface: signup, directory, public detail,
+// and family request submission. The vendor-authed endpoints sit on a
+// separate router gated by `requireVendor` further down.
+router.use(vendorPublicRouter);
+
+// --- Vendor-authenticated surface --------------------------------------------
+// Path-scoped to `/vendor/*` so `requireVendor` ONLY fires for vendor-tier
+// endpoints. Mounting the middleware at root would 403 every other request
+// from cemetery/admin/anonymous users before they reach their proper router.
+// (Public `/vendor/signup` is defined inside `vendorPublicRouter` mounted
+// above, so Express matches it first and never reaches this gate.)
+router.use("/vendor", requireVendor, vendorAuthedRouter);
 
 // --- Platform admin surface ---------------------------------------------------
 // adminRouter mounts its own `requirePlatformAdmin` middleware internally, so

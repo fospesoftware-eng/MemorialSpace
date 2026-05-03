@@ -19,12 +19,16 @@ import { eq } from "drizzle-orm";
  * - For platform admins, `adminId` is set; `organizationId` is unset.
  */
 export interface SessionUser {
-  kind: "cemetery" | "family" | "admin";
+  kind: "cemetery" | "family" | "admin" | "vendor";
   userId?: number; // usersTable.id
   adminId?: number; // platformAdminsTable.id
+  vendorId?: number; // marketplaceVendorsTable.id
   organizationId?: number;
   email: string;
   name: string;
+  // For tier-`vendor` sessions this carries the role string `"vendor"`
+  // (vendors don't have multi-role permissions in v1) — kept on the union
+  // so the frontend can render a generic "Signed in as <role>" affordance.
   role: string;
 }
 
@@ -133,6 +137,16 @@ export const requirePlatformAdmin: RequestHandler = (req, res, next) => {
   const u = req.session?.user;
   if (!u || u.kind !== "admin" || !u.adminId) {
     res.status(403).json({ error: "Platform admin required" });
+    return;
+  }
+  next();
+};
+
+/** Express middleware: must be a marketplace vendor session. */
+export const requireVendor: RequestHandler = (req, res, next) => {
+  const u = req.session?.user;
+  if (!u || u.kind !== "vendor" || !u.vendorId) {
+    res.status(403).json({ error: "Vendor sign-in required" });
     return;
   }
   next();
