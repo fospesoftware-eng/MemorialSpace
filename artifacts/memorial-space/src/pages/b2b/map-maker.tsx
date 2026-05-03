@@ -5,7 +5,7 @@ import {
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
-  Spline, Circle as CircleIcon, Hexagon,
+  Spline, Circle as CircleIcon, Hexagon, SquareDashed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,14 @@ import {
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "draw" | "circle" | "polygon" | "path" | "spot" | "pan";
+type Tool = "select" | "draw" | "rect-outline" | "circle" | "polygon" | "polygon-outline" | "path" | "spot" | "pan";
+
+/** Tools that produce an axis-aligned rectangle (drag-to-draw). */
+const isRectTool = (t: Tool): t is "draw" | "rect-outline" => t === "draw" || t === "rect-outline";
+/** Tools that produce a closed polygon (click-to-place vertices). */
+const isPolygonTool = (t: Tool): t is "polygon" | "polygon-outline" => t === "polygon" || t === "polygon-outline";
+/** True for the outline-only variants (no fill, just a stroked boundary). */
+const isOutlineTool = (t: Tool) => t === "rect-outline" || t === "polygon-outline";
 
 /** Map a plot type's `defaultShape` to the canvas tool that draws it. */
 function shapeToTool(shape: PlotShape | undefined): Extract<Tool, "draw" | "circle" | "polygon" | "path"> {
@@ -77,6 +84,13 @@ interface Plot {
    * select / move handles still work.
    */
   circle?: { cx: number; cy: number; r: number };
+  /**
+   * When true, render this plot as an outline only (no fill) — used to mark
+   * boundaries for family graves, sections, or other groupings that contain
+   * smaller plots inside without obscuring them. Applies to rect and polygon
+   * shapes; ignored for paths (already stroke-only) and circles.
+   */
+  outline?: boolean;
 }
 
 interface MapDoc {
@@ -159,6 +173,7 @@ function migrateDoc(raw: unknown): MapDoc {
       // (2..60) so a poisoned saved doc can't load with a runaway / negative
       // stroke that paints over the rest of the map. Falls back to the
       // default when the field is missing or non-finite.
+      const outline = (p as LegacyPlot & { outline?: unknown }).outline === true ? true : undefined;
       const pathWidth = pathPoints
         ? Math.max(2, Math.min(60, safeOptNum((p as LegacyPlot & { pathWidth?: unknown }).pathWidth) ?? DEFAULT_PATH_WIDTH))
         : undefined;
@@ -188,6 +203,7 @@ function migrateDoc(raw: unknown): MapDoc {
         pathPoints,
         pathWidth,
         circle,
+        outline,
       };
     }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
@@ -269,7 +285,7 @@ export default function MapMaker() {
   // the live preview is rendered. The ref is the source of truth (committed
   // during synchronous handlers); the state mirror exists purely to trigger
   // re-renders so the live preview updates.
-  type DraftPath = { typeId: string; pathWidth: number; points: [number, number][]; closed: boolean };
+  type DraftPath = { typeId: string; pathWidth: number; points: [number, number][]; closed: boolean; outline?: boolean };
   const draftPathRef = useRef<DraftPath | null>(null);
   const [draftPath, setDraftPath] = useState<DraftPath | null>(null);
   // Latest pointer position (SVG units) while the Path / Polygon tool is
@@ -456,12 +472,13 @@ export default function MapMaker() {
       return;
     }
 
-    if (tool === "draw" && !isPlotEl && !isResizeEl && !isSpotEl) {
+    if (isRectTool(tool) && !isPlotEl && !isResizeEl && !isSpotEl) {
       if (!activePlotTypeId) return;
       const id = newId("p");
       const draft: Plot = {
         id, typeId: activePlotTypeId, label: "", status: "available",
         x, y, w: 0, h: 0,
+        ...(tool === "rect-outline" ? { outline: true } : {}),
       };
       draftRectRef.current = draft;
       setDraftRect(draft);
@@ -495,12 +512,13 @@ export default function MapMaker() {
     // pass over a plot without flipping selection mid-draw. We also do NOT
     // capture the pointer — both tools rely on discrete clicks, not drags.
     // The `closed` flag picks polygon (filled) vs polyline (stroked).
-    if (tool === "path" || tool === "polygon") {
+    if (tool === "path" || isPolygonTool(tool)) {
       if (!activePlotTypeId) return;
-      const closed = tool === "polygon";
+      const closed = isPolygonTool(tool);
+      const outline = tool === "polygon-outline";
       const cur = draftPathRef.current;
       if (!cur) {
-        const next: DraftPath = { typeId: activePlotTypeId, pathWidth: DEFAULT_PATH_WIDTH, points: [[x, y] as [number, number]], closed };
+        const next: DraftPath = { typeId: activePlotTypeId, pathWidth: DEFAULT_PATH_WIDTH, points: [[x, y] as [number, number]], closed, outline };
         draftPathRef.current = next;
         setDraftPath(next);
       } else if (cur.points.length < MAX_PATH_VERTICES) {
@@ -567,7 +585,7 @@ export default function MapMaker() {
     // preview from the last placed vertex to the pointer (and, for polygons,
     // the closing edge back to the first vertex). Runs even when no drag is
     // active — both tools are click-based, not drag-based.
-    if ((tool === "path" || tool === "polygon") && draftPathRef.current) {
+    if ((tool === "path" || isPolygonTool(tool)) && draftPathRef.current) {
       const { x, y } = toSvgPoint(e);
       setPathCursor({ x, y });
       return;
@@ -773,6 +791,7 @@ export default function MapMaker() {
         status: "available",
         x: bx, y: by, w: bw, h: bh,
         points: pts,
+        ...(cur.outline ? { outline: true } : {}),
       };
     } else {
       // Open polyline — bbox includes a half-stroke padding so the visible
@@ -817,11 +836,28 @@ export default function MapMaker() {
   useEffect(() => {
     const cur = draftPathRef.current;
     if (!cur) return;
+    // Switching between fill ↔ outline variants of the same closed-polygon
+    // family is fine — the outline flag is a render-time decision, not a
+    // geometry one — so we only force a commit when the user crosses the
+    // open/closed boundary (path ↔ polygon).
     const stillSameMode =
-      (tool === "path"    && !cur.closed) ||
-      (tool === "polygon" &&  cur.closed);
+      (tool === "path"            && !cur.closed) ||
+      (isPolygonTool(tool)        &&  cur.closed);
     if (!stillSameMode) {
       commitDraftPath({ switchToSelect: false });
+      return;
+    }
+    // Sync the active draft's outline flag when toggling between
+    // `polygon` and `polygon-outline` mid-draw, so the live preview and
+    // eventual commit honour whichever variant the user has selected
+    // *now*, not whichever one started the draft.
+    if (cur.closed) {
+      const wantOutline = tool === "polygon-outline";
+      if ((cur.outline ?? false) !== wantOutline) {
+        const next: DraftPath = { ...cur, outline: wantOutline };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      }
     }
   }, [tool, commitDraftPath]);
 
@@ -829,7 +865,7 @@ export default function MapMaker() {
   // Wired on the SVG element so the user can dblclick anywhere — including
   // on the last vertex they just placed — to signal "done".
   const onCanvasDoubleClick = () => {
-    if ((tool === "path" || tool === "polygon") && draftPathRef.current) commitDraftPath();
+    if ((tool === "path" || isPolygonTool(tool)) && draftPathRef.current) commitDraftPath();
   };
 
   // ----- Keyboard shortcuts -----
@@ -870,9 +906,9 @@ export default function MapMaker() {
       if (e.key === "Escape") setSelection(null);
       const k = e.key.toLowerCase();
       if (k === "v") setTool("select");
-      if (k === "r") setTool("draw");
+      if (k === "r") setTool(e.shiftKey ? "rect-outline" : "draw");
       if (k === "c") setTool("circle");
-      if (k === "g") setTool("polygon");
+      if (k === "g") setTool(e.shiftKey ? "polygon-outline" : "polygon");
       if (k === "p") setTool("path");
       if (k === "s") setTool("spot");
       if (k === "h") setTool("pan");
@@ -1151,9 +1187,9 @@ export default function MapMaker() {
   }, [doc.plots, doc.spots]);
 
   const cursorClass =
-    tool === "draw"    ? "cursor-crosshair" :
+    isRectTool(tool)   ? "cursor-crosshair" :
     tool === "circle"  ? "cursor-crosshair" :
-    tool === "polygon" ? "cursor-crosshair" :
+    isPolygonTool(tool) ? "cursor-crosshair" :
     tool === "path"    ? "cursor-crosshair" :
     tool === "spot"    ? "cursor-cell" :
     tool === "pan"     ? "cursor-grab active:cursor-grabbing" :
@@ -1320,8 +1356,10 @@ export default function MapMaker() {
           <aside className="w-12 shrink-0 border-r border-border bg-card flex flex-col items-center py-2 gap-1">
             <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
             <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
+            <ToolButton active={tool === "rect-outline"} onClick={() => setTool("rect-outline")} icon={SquareDashed} label="Rect outline" testId="tool-rect-outline-mini" iconOnly />
             <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle"  testId="tool-circle-mini" iconOnly />
             <ToolButton active={tool === "polygon"}onClick={() => setTool("polygon")}icon={Hexagon}       label="Polygon" testId="tool-polygon-mini" iconOnly />
+            <ToolButton active={tool === "polygon-outline"} onClick={() => setTool("polygon-outline")} icon={Hexagon} label="Polygon outline" testId="tool-polygon-outline-mini" iconOnly />
             <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path-mini" iconOnly />
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
             <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
@@ -1347,14 +1385,18 @@ export default function MapMaker() {
               <div className="grid grid-cols-2 gap-1">
                 <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select" />
                 <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw" />
+                <ToolButton active={tool === "rect-outline"} onClick={() => setTool("rect-outline")} icon={SquareDashed} label="Rect outline" testId="tool-rect-outline" />
                 <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle"  testId="tool-circle" />
                 <ToolButton active={tool === "polygon"}onClick={() => setTool("polygon")}icon={Hexagon}       label="Polygon" testId="tool-polygon" />
+                <ToolButton active={tool === "polygon-outline"} onClick={() => setTool("polygon-outline")} icon={Hexagon} label="Polygon outline" testId="tool-polygon-outline" />
                 <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path" />
                 <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot" />
                 <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan" />
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 {tool === "draw"   && "Drag on the canvas to place a plot."}
+                {tool === "rect-outline" && "Drag to draw an outline-only rectangle (e.g. a family-grave boundary that contains plots inside)."}
+                {tool === "polygon-outline" && "Click to place vertices for an outline-only polygon (e.g. a family-grave boundary or section). Double-click to finish."}
                 {tool === "circle" && "Drag from the center outward to define the radius."}
                 {tool === "polygon"&& "Click to place vertices for a closed shape (need at least 3). Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
                 {tool === "path"   && "Click to place points along a path or road. Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
@@ -1578,6 +1620,10 @@ export default function MapMaker() {
 
                   {/* 3D plot shadows */}
                   {view === "3d" && doc.plots.map((p) => {
+                    // Outline-only boundaries don't have a body to cast a
+                    // shadow — skip them so the 3D view doesn't paint a
+                    // filled silhouette underneath what should look hollow.
+                    if (p.outline) return null;
                     if (p.pathPoints && p.pathPoints.length >= 2) {
                       return (
                         <polyline
@@ -1699,10 +1745,11 @@ export default function MapMaker() {
                             data-plot-id={p.id}
                             data-testid={`plot-${p.id}`}
                             points={p.points!.map(([px, py]) => `${px},${py}`).join(" ")}
-                            fill={meta.fill}
-                            fillOpacity={doc.image ? 0.85 : 1}
-                            stroke={isSel ? "#0ea5e9" : meta.stroke}
-                            strokeWidth={isSel ? 2.5 : 1}
+                            fill={p.outline ? "none" : meta.fill}
+                            fillOpacity={p.outline ? undefined : (doc.image ? 0.85 : 1)}
+                            stroke={isSel ? "#0ea5e9" : (p.outline ? meta.fill : meta.stroke)}
+                            strokeWidth={isSel ? 2.5 : (p.outline ? 2.5 : 1)}
+                            strokeDasharray={p.outline && !isSel ? "8 4" : undefined}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
                             onPointerEnter={onPlotEnter}
                             onPointerLeave={onPlotLeave}
@@ -1714,10 +1761,11 @@ export default function MapMaker() {
                             data-testid={`plot-${p.id}`}
                             x={p.x} y={p.y}
                             width={p.w} height={p.h}
-                            fill={meta.fill}
-                            fillOpacity={doc.image ? 0.85 : 1}
-                            stroke={isSel ? "#0ea5e9" : meta.stroke}
-                            strokeWidth={isSel ? 2.5 : 1}
+                            fill={p.outline ? "none" : meta.fill}
+                            fillOpacity={p.outline ? undefined : (doc.image ? 0.85 : 1)}
+                            stroke={isSel ? "#0ea5e9" : (p.outline ? meta.fill : meta.stroke)}
+                            strokeWidth={isSel ? 2.5 : (p.outline ? 2.5 : 1)}
+                            strokeDasharray={p.outline && !isSel ? "8 4" : undefined}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
                             rx={2}
                             onPointerEnter={onPlotEnter}
@@ -1846,11 +1894,11 @@ export default function MapMaker() {
                     <rect
                       x={draftRect.x} y={draftRect.y}
                       width={draftRect.w} height={draftRect.h}
-                      fill={getPlotType(draftRect.typeId).fill}
-                      fillOpacity={0.5}
-                      stroke={getPlotType(draftRect.typeId).stroke}
-                      strokeDasharray="4 3"
-                      strokeWidth={1.5}
+                      fill={draftRect.outline ? "none" : getPlotType(draftRect.typeId).fill}
+                      fillOpacity={draftRect.outline ? undefined : 0.5}
+                      stroke={draftRect.outline ? getPlotType(draftRect.typeId).fill : getPlotType(draftRect.typeId).stroke}
+                      strokeDasharray={draftRect.outline ? "8 4" : "4 3"}
+                      strokeWidth={draftRect.outline ? 2.5 : 1.5}
                       pointerEvents="none"
                     />
                   ))}
@@ -1871,12 +1919,14 @@ export default function MapMaker() {
                     if (draftPath.closed) {
                       // Polygon preview — fill the area defined by the placed
                       // vertices (plus the cursor when we have one) so the
-                      // user sees the shape, not just an outline.
+                      // user sees the shape, not just an outline. For the
+                      // outline-only variant we skip the fill entirely so the
+                      // boundary preview matches the committed render.
                       const previewPoints = pathCursor ? [...placed, [pathCursor.x, pathCursor.y] as [number, number]] : placed;
                       const previewStr = previewPoints.map(([px, py]) => `${px},${py}`).join(" ");
                       return (
                         <g pointerEvents="none">
-                          {previewPoints.length >= 3 && (
+                          {previewPoints.length >= 3 && !draftPath.outline && (
                             <polygon
                               points={previewStr}
                               fill={meta.fill}

@@ -34,6 +34,7 @@ A full-screen editor (`/app/map-maker`) for cemetery operators to create and man
 - **Path Tool:** Click-to-place polyline with width adjustment.
 - **Circle Tool:** Drag-to-draw radial plots with radius adjustment.
 - **Polygon Tool:** Click-to-place vertices for closed, irregular filled shapes.
+- **Outline-only Shapes (Rect Outline + Polygon Outline):** Two boundary-marker tools that draw the same geometry as their filled counterparts but render with `fill="none"` and a dashed stroke. Used to mark family-grave or section boundaries that contain individual plots inside without obscuring them. Persisted via a `Plot.outline` flag and survives save/load through `migrateDoc()`. Keyboard: Shift+R / Shift+G.
 - **Per-type default shape:** `PlotType` carries an optional `defaultShape` to auto-switch canvas tools.
 - **Layout:** Editor uses full viewport with collapsible panels and top toolbar for navigation, zoom, and display options.
 - **Backgrounds:** Supports image uploads (downscaled to 1600px webp), drag-and-drop, and selection from a library.
