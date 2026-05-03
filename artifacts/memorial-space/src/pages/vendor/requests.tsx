@@ -8,10 +8,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
-  Inbox, Mail, Phone, MapPin, Heart, MessageSquare, CheckCircle2, XCircle, Clock, Sparkles, Loader2, AlertCircle, Save,
+  Inbox, Mail, Phone, MapPin, Heart, MessageSquare, CheckCircle2, XCircle, Clock, Sparkles, Loader2, AlertCircle, Save, DollarSign, CalendarClock, Repeat,
 } from "lucide-react";
-import { useVendorRequests, useUpdateRequest, type VendorRequestStatus, type VendorRequestRow } from "./api";
+import { useVendorRequests, useUpdateRequest, type VendorRequestStatus, type VendorRequestRow, type VendorPaymentStatus, type VendorRequestPatch } from "./api";
+
+const PAYMENT_BADGE: Record<VendorPaymentStatus, { label: string; cls: string }> = {
+  unpaid:    { label: "Unpaid",    cls: "border-amber-400/40 text-amber-300 bg-amber-400/5" },
+  invoiced:  { label: "Invoiced",  cls: "border-sky-400/40 text-sky-300 bg-sky-400/5" },
+  paid:      { label: "Paid",      cls: "border-emerald-400/40 text-emerald-300 bg-emerald-400/5" },
+  refunded:  { label: "Refunded",  cls: "border-rose-400/40 text-rose-300 bg-rose-400/5" },
+};
 
 const STATUS_TABS: { key: VendorRequestStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -37,6 +47,11 @@ export default function VendorRequests() {
   const update = useUpdateRequest();
   const [focusId, setFocusId] = useState<number | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
+  const [quotedDraft, setQuotedDraft] = useState("");
+  const [paidDraft, setPaidDraft] = useState("");
+  const [paymentDraft, setPaymentDraft] = useState<VendorPaymentStatus>("unpaid");
+  const [scheduledDraft, setScheduledDraft] = useState("");
+  const [recurringDraft, setRecurringDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Auto-focus a request via `?focus=ID` (deep-linked from dashboard).
@@ -50,22 +65,40 @@ export default function VendorRequests() {
   const requests = data?.requests ?? [];
   const focused = useMemo(() => requests.find((r) => r.id === focusId) ?? null, [requests, focusId]);
 
-  // Hydrate notes when focus changes.
+  // Hydrate drafts when focus changes.
   useEffect(() => {
     setNotesDraft(focused?.vendorNotes ?? "");
+    setQuotedDraft(focused?.quotedAmount?.toString() ?? "");
+    setPaidDraft(focused?.paidAmount?.toString() ?? "");
+    setPaymentDraft(focused?.paymentStatus ?? "unpaid");
+    setScheduledDraft(focused?.scheduledFor ? focused.scheduledFor.slice(0, 10) : "");
+    setRecurringDraft(focused?.isRecurring ?? false);
     setError(null);
   }, [focused?.id]);
 
+  const buildDraftPatch = (): VendorRequestPatch => {
+    const quoted = quotedDraft.trim() === "" ? null : Number(quotedDraft);
+    const paid = paidDraft.trim() === "" ? null : Number(paidDraft);
+    return {
+      vendorNotes: notesDraft.trim() || null,
+      quotedAmount: quoted,
+      paidAmount: paid,
+      paymentStatus: paymentDraft,
+      scheduledFor: scheduledDraft ? new Date(scheduledDraft).toISOString() : null,
+      isRecurring: recurringDraft,
+    };
+  };
+
   const setStatus = async (r: VendorRequestRow, status: VendorRequestStatus) => {
     setError(null);
-    try { await update.mutateAsync({ id: r.id, patch: { status, vendorNotes: notesDraft.trim() || null } }); }
+    try { await update.mutateAsync({ id: r.id, patch: { ...buildDraftPatch(), status } }); }
     catch (e) { setError(e instanceof Error ? e.message : "Update failed"); }
   };
 
-  const saveNotes = async () => {
+  const saveDetails = async () => {
     if (!focused) return;
     setError(null);
-    try { await update.mutateAsync({ id: focused.id, patch: { vendorNotes: notesDraft.trim() || null } }); }
+    try { await update.mutateAsync({ id: focused.id, patch: buildDraftPatch() }); }
     catch (e) { setError(e instanceof Error ? e.message : "Save failed"); }
   };
 
@@ -185,6 +218,51 @@ export default function VendorRequests() {
                   <p className="text-sm whitespace-pre-line bg-card border border-border/40 rounded-md p-4">{focused.message}</p>
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-border/40 bg-card/50 p-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><DollarSign className="h-3 w-3" />Quoted ($)</Label>
+                    <Input type="number" min={0} value={quotedDraft} onChange={(e) => setQuotedDraft(e.target.value)} placeholder="0" data-testid="input-quoted" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><DollarSign className="h-3 w-3" />Paid ($)</Label>
+                    <Input type="number" min={0} value={paidDraft} onChange={(e) => setPaidDraft(e.target.value)} placeholder="0" data-testid="input-paid" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">Payment status</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {(["unpaid", "invoiced", "paid", "refunded"] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setPaymentDraft(s)}
+                          data-testid={`payment-${s}`}
+                          className={`px-2.5 py-1 text-[11px] rounded-md border transition-colors ${
+                            paymentDraft === s
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border/60 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {PAYMENT_BADGE[s].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><CalendarClock className="h-3 w-3" />Scheduled for</Label>
+                    <Input type="date" value={scheduledDraft} onChange={(e) => setScheduledDraft(e.target.value)} data-testid="input-scheduled" />
+                  </div>
+                  <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border/40 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="h-4 w-4 text-violet-300" />
+                      <div>
+                        <p className="text-sm font-medium">Recurring subscription</p>
+                        <p className="text-[11px] text-muted-foreground">Mark on for monthly grave care, annual remembrance, etc.</p>
+                      </div>
+                    </div>
+                    <Switch checked={recurringDraft} onCheckedChange={setRecurringDraft} data-testid="switch-recurring" />
+                  </div>
+                </div>
+
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Private vendor notes</p>
                   <Textarea
@@ -229,9 +307,9 @@ export default function VendorRequests() {
                       <Sparkles className="h-4 w-4 mr-1.5" />Mark complete
                     </Button>
                   </div>
-                  <Button variant="ghost" onClick={saveNotes} disabled={update.isPending} data-testid="button-save-notes">
+                  <Button variant="ghost" onClick={saveDetails} disabled={update.isPending} data-testid="button-save-notes">
                     {update.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
-                    Save notes
+                    Save details
                   </Button>
                 </div>
               </CardContent>

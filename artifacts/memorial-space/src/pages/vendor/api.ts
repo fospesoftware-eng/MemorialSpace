@@ -40,13 +40,20 @@ export interface PublicVendorListItem {
   websiteUrl: string | null;
 }
 
+export type PricingModel = "fixed" | "range" | "subscription" | "quote";
+export type BillingCadence = "one-time" | "monthly" | "quarterly" | "yearly";
+export type VendorPaymentStatus = "unpaid" | "invoiced" | "paid" | "refunded";
+
 export interface VendorService {
   id: number;
   vendorId: number;
   name: string;
   description: string | null;
+  pricingModel: PricingModel;
   priceFrom: number | null;
   priceTo: number | null;
+  priceAmount: number | null;
+  billingCadence: BillingCadence;
   category: string | null;
   photos: string[];
   isPublished: boolean;
@@ -67,9 +74,42 @@ export interface VendorRequestRow {
   message: string;
   status: VendorRequestStatus;
   vendorNotes: string | null;
+  quotedAmount: number | null;
+  paidAmount: number | null;
+  paymentStatus: VendorPaymentStatus;
+  scheduledFor: string | null;
+  isRecurring: boolean;
   respondedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface VendorOrderRow {
+  id: number;
+  customerName: string;
+  customerEmail: string;
+  deceasedName: string | null;
+  serviceLocation: string | null;
+  status: VendorRequestStatus;
+  quotedAmount: number | null;
+  paidAmount: number | null;
+  paymentStatus: VendorPaymentStatus;
+  scheduledFor: string | null;
+  isRecurring: boolean;
+  respondedAt: string | null;
+  createdAt: string;
+  serviceId: number | null;
+  serviceName: string | null;
+}
+
+export interface VendorCustomerRow {
+  customerEmail: string;
+  customerName: string;
+  customerPhone: string | null;
+  requestCount: number;
+  totalSpent: number;
+  lastContactAt: string;
+  firstContactAt: string;
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -158,14 +198,26 @@ export function useVendorRequests(status?: VendorRequestStatus) {
   });
 }
 
+export interface VendorRequestPatch {
+  status?: VendorRequestStatus;
+  vendorNotes?: string | null;
+  quotedAmount?: number | null;
+  paidAmount?: number | null;
+  paymentStatus?: VendorPaymentStatus;
+  scheduledFor?: string | null;
+  isRecurring?: boolean;
+}
+
 export function useUpdateRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: { status?: VendorRequestStatus; vendorNotes?: string | null } }) =>
+    mutationFn: ({ id, patch }: { id: number; patch: VendorRequestPatch }) =>
       api<{ request: VendorRequestRow }>(`/vendor/requests/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["vendor-requests"] });
       void qc.invalidateQueries({ queryKey: ["vendor-metrics"] });
+      void qc.invalidateQueries({ queryKey: ["vendor-orders"] });
+      void qc.invalidateQueries({ queryKey: ["vendor-customers"] });
     },
   });
 }
@@ -174,6 +226,11 @@ export interface VendorMetrics {
   requestCounts: Record<VendorRequestStatus, number>;
   total: number;
   servicesCount: number;
+  totalRevenue: number;
+  monthRevenue: number;
+  customerCount: number;
+  monthlyTrend: { bucket: string; revenue: number; orders: number }[];
+  topServices: { serviceId: number | null; serviceName: string; revenue: number; orders: number }[];
   recentRequests: VendorRequestRow[];
 }
 
@@ -181,6 +238,20 @@ export function useVendorMetrics() {
   return useQuery<VendorMetrics>({
     queryKey: ["vendor-metrics"],
     queryFn: () => api("/vendor/metrics"),
+  });
+}
+
+export function useVendorOrders() {
+  return useQuery<{ orders: VendorOrderRow[] }>({
+    queryKey: ["vendor-orders"],
+    queryFn: () => api("/vendor/orders"),
+  });
+}
+
+export function useVendorCustomers() {
+  return useQuery<{ customers: VendorCustomerRow[] }>({
+    queryKey: ["vendor-customers"],
+    queryFn: () => api("/vendor/customers"),
   });
 }
 

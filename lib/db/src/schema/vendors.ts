@@ -38,6 +38,43 @@ export const VENDOR_REQUEST_STATUSES = [
 ] as const;
 export type VendorRequestStatus = (typeof VENDOR_REQUEST_STATUSES)[number];
 
+/**
+ * Five-category funeral lifecycle taxonomy. Used both for vendor profile
+ * categories and per-service category. Stored as plain text (not a pg enum)
+ * so we can extend without a destructive migration; the FE/BE just validate
+ * against this list.
+ */
+export const FUNERAL_CATEGORIES = [
+  "funeral-services",
+  "religious",
+  "maintenance",
+  "headstone",
+  "remembrance",
+] as const;
+export type FuneralCategory = (typeof FUNERAL_CATEGORIES)[number];
+
+export const FUNERAL_CATEGORY_LABELS: Record<FuneralCategory, string> = {
+  "funeral-services": "Funeral services",
+  religious: "Priest & religious services",
+  maintenance: "Grave maintenance",
+  headstone: "Headstones & monuments",
+  remembrance: "Annual remembrance",
+};
+
+/** Pricing model determines which price columns are meaningful. */
+export const PRICING_MODELS = ["fixed", "range", "subscription", "quote"] as const;
+export type PricingModel = (typeof PRICING_MODELS)[number];
+
+/** Cadence for subscription services (or "one-time" for everything else). */
+export const BILLING_CADENCES = ["one-time", "monthly", "quarterly", "yearly"] as const;
+export type BillingCadence = (typeof BILLING_CADENCES)[number];
+
+/** Payment lifecycle for an accepted request / order.
+ *  Renamed from `PAYMENT_STATUSES` to avoid collision with the
+ *  cemetery-sites payment status enum. */
+export const VENDOR_PAYMENT_STATUSES = ["unpaid", "invoiced", "paid", "refunded"] as const;
+export type VendorPaymentStatus = (typeof VENDOR_PAYMENT_STATUSES)[number];
+
 export const marketplaceVendorsTable = pgTable(
   "marketplace_vendors",
   {
@@ -79,9 +116,16 @@ export const vendorServicesTable = pgTable(
       .references(() => marketplaceVendorsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
-    // Loose price band for the public listing — not a checkout price.
+    // Pricing model decides which price columns matter:
+    //   "fixed"        → priceAmount
+    //   "range"        → priceFrom + priceTo (legacy default)
+    //   "subscription" → priceAmount + billingCadence (recurring)
+    //   "quote"        → none of the above; vendor quotes per-request
+    pricingModel: text("pricing_model").notNull().default("range"),
     priceFrom: real("price_from"),
     priceTo: real("price_to"),
+    priceAmount: real("price_amount"),
+    billingCadence: text("billing_cadence").notNull().default("one-time"),
     category: text("category"),
     photos: jsonb("photos").$type<string[]>().notNull().default([]),
     isPublished: boolean("is_published").notNull().default(true),
@@ -114,6 +158,13 @@ export const vendorRequestsTable = pgTable(
     message: text("message").notNull(),
     status: text("status").notNull().default("pending"),
     vendorNotes: text("vendor_notes"),
+    // Order/payment lifecycle once the vendor accepts. Lets us drive the
+    // dashboard's revenue / orders / customer rollups without a second table.
+    quotedAmount: real("quoted_amount"),
+    paidAmount: real("paid_amount"),
+    paymentStatus: text("payment_status").notNull().default("unpaid"),
+    scheduledFor: timestamp("scheduled_for"),
+    isRecurring: boolean("is_recurring").notNull().default(false),
     respondedAt: timestamp("responded_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -32,6 +32,8 @@ import VendorDashboard from "@/pages/vendor/dashboard";
 import VendorProfile from "@/pages/vendor/profile";
 import VendorServices from "@/pages/vendor/services";
 import VendorRequests from "@/pages/vendor/requests";
+import VendorOrders from "@/pages/vendor/orders";
+import VendorCustomers from "@/pages/vendor/customers";
 import { VendorLayout } from "@/components/layout/vendor-layout";
 import VendorsDirectory from "@/pages/public/vendors-directory";
 import VendorDetail from "@/pages/public/vendor-detail";
@@ -179,6 +181,8 @@ function VendorRoutes() {
         <Route path="/profile" component={VendorProfile} />
         <Route path="/services" component={VendorServices} />
         <Route path="/requests" component={VendorRequests} />
+        <Route path="/orders" component={VendorOrders} />
+        <Route path="/customers" component={VendorCustomers} />
         <Route component={NotFound} />
       </Switch>
     </VendorLayout>

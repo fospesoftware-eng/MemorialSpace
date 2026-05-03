@@ -4,7 +4,7 @@
  * tiers — only the nav items and badge color differ.
  */
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Inbox, Wrench, Building2, LogOut, Store, Sparkles, Globe2, EyeOff } from "lucide-react";
+import { LayoutDashboard, Inbox, Wrench, Building2, LogOut, Store, Sparkles, Globe2, EyeOff, Receipt, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 const nav = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, key: "dashboard" },
   { name: "Requests", href: "/requests", icon: Inbox, key: "requests" },
+  { name: "Orders", href: "/orders", icon: Receipt, key: "orders" },
+  { name: "Customers", href: "/customers", icon: Users, key: "customers" },
   { name: "Services", href: "/services", icon: Wrench, key: "services" },
   { name: "Business profile", href: "/profile", icon: Building2, key: "profile" },
 ];

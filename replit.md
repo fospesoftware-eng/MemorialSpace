@@ -98,6 +98,22 @@ Platform-operator console (`/admin/*`) for managing organizations and SaaS billi
 - **DB:** `saasBilling.ts` schema includes `subscription_plans`, `subscriptions`, `platform_invoices`, `platform_payments`, `audit_log`. `organizationsTable` extended with `status` and suspension details.
 - **Frontend:** Dashboard with KPIs, plans/subscriptions/invoices management, analytics (charts for revenue, signups, plan distribution), live audit log, and cross-org user search.
 
+### Marketplace (Vendor Lifecycle SaaS)
+End-to-end vendor surface that turns the marketplace into a full funeral
+lifecycle SaaS rather than a simple request board.
+- **Five canonical categories:** `funeral-services`, `religious`, `maintenance` (subscription grave care), `headstone`, `remembrance` (annual remembrance). Defined once in `lib/db/src/marketplace.ts` (`FUNERAL_CATEGORIES`) and re-exported to clients via `GET /api/marketplace/categories`.
+- **Schema (additive on `vendor_services` + `vendor_requests`):**
+    - `vendor_services.pricing_model` (`fixed | range | subscription | quote`), `price_amount`, `billing_cadence` (`monthly | quarterly | annually`).
+    - `vendor_requests.quoted_amount`, `paid_amount`, `payment_status` (`unpaid | invoiced | paid | refunded`), `scheduled_for`, `is_recurring`.
+- **Vendor APIs (`/api/vendor/*`, gated by `requireVendor`):**
+    - `GET /metrics` — request counts, services count, **totalRevenue**, **monthRevenue**, **customerCount**, **monthlyTrend** (last 6 months), **topServices** (revenue + orders), recent requests.
+    - `GET /orders` — accepted/completed requests with joined service rows.
+    - `GET /customers` — distinct CRM rollup (totals, last order, status mix) keyed by lower-cased email.
+    - `PATCH /requests/:id` accepts `quotedAmount`, `paidAmount`, `paymentStatus`, `scheduledFor`, `isRecurring` alongside the existing status workflow.
+- **Public marketplace:** `GET /api/vendors?category=…` filters by canonical key. `vendors-directory` page is a hero category grid (5 cards with Lucide icons + accent gradients) plus chip filter, replacing the old text-input category search.
+- **Vendor dashboard frontend:** revenue / monthly / customers / services KPI cards, 6-month area chart (recharts), top-services table, recurring badges. New `/vendor/orders` (revenue table) and `/vendor/customers` (CRM list with totals + status mix). Sidebar exposes Orders + Customers.
+- **Seed:** `pnpm --filter @workspace/scripts run seed-vendors` provisions 5 vendors (Solace Funeral, Father Aldridge, Evergreen Memorial Care, Heritage Stoneworks, Everbloom Florals) — one per category, each with 4 services (mix of fixed + subscription + quote) and 5–9 historical requests carrying paid amounts spread across the last 0–5 months. Password: `Vendor2026!`. Idempotent: re-runs upsert by email and remove stale slug collisions.
+
 ### Authentication & Security
 Implemented end-to-end real authentication.
 - **Backend:** `POST /api/auth/login` supports `cemetery`, `family`, `admin` kinds, using bcrypt for password hashing. `POST /api/auth/logout` destroys sessions. `GET /api/auth/me` returns current `SessionUser`. Cookie-backed sessions (14-day rolling) stored in Postgres. Middleware includes `requireAuth`, `requirePlatformAdmin`, `requireOrgUser`, `enforceOrgScope`. Tier verification derived from `usersTable.role`. Session fixation defense via `req.session.regenerate()`. Rate limiting (20 req / 15 min) on login. `helmet` for security headers.

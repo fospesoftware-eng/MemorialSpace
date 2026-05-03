@@ -24,13 +24,17 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod/v4";
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, countDistinct, desc, eq, ilike, inArray, or, sql, sum } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   marketplaceVendorsTable,
   vendorServicesTable,
   vendorRequestsTable,
   VENDOR_REQUEST_STATUSES,
+  PRICING_MODELS,
+  BILLING_CADENCES,
+  VENDOR_PAYMENT_STATUSES,
+  FUNERAL_CATEGORIES,
 } from "@workspace/db";
 import { hashPassword, type SessionUser } from "../lib/auth";
 
@@ -76,6 +80,11 @@ const stringArray = z
   .max(40)
   .default([]);
 
+/** Categories must be drawn from the canonical funeral-lifecycle taxonomy so
+ * the public marketplace's hero category grid can reach every published
+ * vendor. Free-form tags would silently fall outside the 5 known buckets. */
+const categoryArray = z.array(z.enum(FUNERAL_CATEGORIES)).max(5).default([]);
+
 // ---------------------------------------------------------------------------
 // Public routes
 // ---------------------------------------------------------------------------
@@ -101,7 +110,7 @@ const signupSchema = z.object({
   contactName: z.string().trim().max(120).optional(),
   contactPhone: z.string().trim().max(40).optional(),
   description: z.string().trim().max(2000).optional(),
-  categories: stringArray.optional(),
+  categories: categoryArray.optional(),
   serviceAreas: stringArray.optional(),
 });
 
@@ -373,7 +382,7 @@ const profileSchema = z.object({
   contactName: z.string().trim().max(120).nullish(),
   contactPhone: z.string().trim().max(40).nullish(),
   websiteUrl: z.string().url().max(2048).nullish(),
-  categories: stringArray.optional(),
+  categories: categoryArray.optional(),
   serviceAreas: stringArray.optional(),
   isPublished: z.boolean().optional(),
 });
@@ -427,9 +436,12 @@ vendorRouter.get("/services", async (req, res, next) => {
 const serviceSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(4000).nullish(),
+  pricingModel: z.enum(PRICING_MODELS).default("range"),
   priceFrom: z.number().nonnegative().nullish(),
   priceTo: z.number().nonnegative().nullish(),
-  category: z.string().trim().max(80).nullish(),
+  priceAmount: z.number().nonnegative().nullish(),
+  billingCadence: z.enum(BILLING_CADENCES).default("one-time"),
+  category: z.enum(FUNERAL_CATEGORIES).nullish(),
   photos: z.array(z.string().url().max(2048)).max(20).default([]),
   isPublished: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
@@ -453,8 +465,11 @@ vendorRouter.post("/services", async (req, res, next) => {
         vendorId: vendorId(req),
         name: d.name,
         description: d.description ?? null,
+        pricingModel: d.pricingModel,
         priceFrom: d.priceFrom ?? null,
         priceTo: d.priceTo ?? null,
+        priceAmount: d.priceAmount ?? null,
+        billingCadence: d.billingCadence,
         category: d.category ?? null,
         photos: d.photos,
         isPublished: d.isPublished,
@@ -482,8 +497,11 @@ vendorRouter.patch("/services/:id", async (req, res, next) => {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (d.name !== undefined) patch.name = d.name;
     if (d.description !== undefined) patch.description = d.description ?? null;
+    if (d.pricingModel !== undefined) patch.pricingModel = d.pricingModel;
     if (d.priceFrom !== undefined) patch.priceFrom = d.priceFrom ?? null;
     if (d.priceTo !== undefined) patch.priceTo = d.priceTo ?? null;
+    if (d.priceAmount !== undefined) patch.priceAmount = d.priceAmount ?? null;
+    if (d.billingCadence !== undefined) patch.billingCadence = d.billingCadence;
     if (d.category !== undefined) patch.category = d.category ?? null;
     if (d.photos !== undefined) patch.photos = d.photos;
     if (d.isPublished !== undefined) patch.isPublished = d.isPublished;
@@ -549,6 +567,13 @@ vendorRouter.get("/requests", async (req, res, next) => {
 const requestPatchSchema = z.object({
   status: z.enum(VENDOR_REQUEST_STATUSES).optional(),
   vendorNotes: z.string().trim().max(4000).nullish(),
+  quotedAmount: z.number().nonnegative().nullish(),
+  paidAmount: z.number().nonnegative().nullish(),
+  paymentStatus: z.enum(VENDOR_PAYMENT_STATUSES).optional(),
+  // ISO date string. We coerce to a Date below so Drizzle's pg type-binding
+  // accepts it without a type mismatch.
+  scheduledFor: z.string().datetime().nullish(),
+  isRecurring: z.boolean().optional(),
 });
 
 vendorRouter.patch("/requests/:id", async (req, res, next) => {
@@ -561,14 +586,23 @@ vendorRouter.patch("/requests/:id", async (req, res, next) => {
       return;
     }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    const { status, vendorNotes } = parsed.data;
+    const { status, vendorNotes, quotedAmount, paidAmount, paymentStatus, scheduledFor, isRecurring } = parsed.data;
     if (status !== undefined) {
       patch.status = status;
       // Stamp respondedAt the first time the vendor moves the request out of
-      // pending — so the dashboard can show a true response time.
-      if (status !== "pending") patch.respondedAt = new Date();
+      // pending. COALESCE preserves any prior timestamp so historical revenue
+      // buckets (which group by respondedAt) stay anchored — re-saving a
+      // completed order must not rebase its month.
+      if (status !== "pending") {
+        patch.respondedAt = sql`COALESCE(${vendorRequestsTable.respondedAt}, NOW())`;
+      }
     }
     if (vendorNotes !== undefined) patch.vendorNotes = vendorNotes ?? null;
+    if (quotedAmount !== undefined) patch.quotedAmount = quotedAmount ?? null;
+    if (paidAmount !== undefined) patch.paidAmount = paidAmount ?? null;
+    if (paymentStatus !== undefined) patch.paymentStatus = paymentStatus;
+    if (scheduledFor !== undefined) patch.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+    if (isRecurring !== undefined) patch.isRecurring = isRecurring;
 
     const [updated] = await db
       .update(vendorRequestsTable)
@@ -608,6 +642,83 @@ vendorRouter.get("/metrics", async (req, res, next) => {
       .from(vendorServicesTable)
       .where(eq(vendorServicesTable.vendorId, vid));
 
+    // Revenue rollups. We only count paid amounts on requests the vendor has
+    // actually accepted or completed — pending/declined/cancelled rows with a
+    // stale paidAmount must never inflate KPIs. customerCount mirrors the
+    // same filter so the "customers" tile matches the CRM page.
+    const realisedRevenueFilter = sql`${vendorRequestsTable.status} IN ('accepted', 'completed') AND ${vendorRequestsTable.paidAmount} IS NOT NULL`;
+
+    const [revRow] = await db
+      .select({
+        totalRevenue: sum(vendorRequestsTable.paidAmount),
+        customerCount: countDistinct(vendorRequestsTable.customerEmail),
+      })
+      .from(vendorRequestsTable)
+      .where(and(eq(vendorRequestsTable.vendorId, vid), realisedRevenueFilter));
+
+    const [monthRow] = await db
+      .select({ monthRevenue: sum(vendorRequestsTable.paidAmount) })
+      .from(vendorRequestsTable)
+      .where(
+        and(
+          eq(vendorRequestsTable.vendorId, vid),
+          realisedRevenueFilter,
+          sql`${vendorRequestsTable.respondedAt} >= date_trunc('month', now())`,
+        ),
+      );
+
+    // Last 6 calendar months of revenue, ordered oldest→newest. Empty months
+    // are filled in JS so the chart doesn't have gaps.
+    const monthlyRows = await db
+      .select({
+        bucket: sql<string>`to_char(date_trunc('month', ${vendorRequestsTable.respondedAt}), 'YYYY-MM')`,
+        revenue: sum(vendorRequestsTable.paidAmount),
+        orders: count(vendorRequestsTable.id),
+      })
+      .from(vendorRequestsTable)
+      .where(
+        and(
+          eq(vendorRequestsTable.vendorId, vid),
+          realisedRevenueFilter,
+          sql`${vendorRequestsTable.respondedAt} >= (date_trunc('month', now()) - interval '5 months')`,
+        ),
+      )
+      .groupBy(sql`date_trunc('month', ${vendorRequestsTable.respondedAt})`)
+      .orderBy(sql`date_trunc('month', ${vendorRequestsTable.respondedAt})`);
+
+    const monthlyMap = new Map(monthlyRows.map((r) => [r.bucket, r]));
+    const monthlyTrend: { bucket: string; revenue: number; orders: number }[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const bucket = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const hit = monthlyMap.get(bucket);
+      monthlyTrend.push({
+        bucket,
+        revenue: Number(hit?.revenue ?? 0),
+        orders: Number(hit?.orders ?? 0),
+      });
+    }
+
+    // Top services by revenue (paid only, accepted/completed) — for the
+    // dashboard "what's selling" widget.
+    const topServices = await db
+      .select({
+        serviceId: vendorRequestsTable.serviceId,
+        serviceName: vendorServicesTable.name,
+        revenue: sum(vendorRequestsTable.paidAmount),
+        orders: count(vendorRequestsTable.id),
+      })
+      .from(vendorRequestsTable)
+      .leftJoin(
+        vendorServicesTable,
+        eq(vendorRequestsTable.serviceId, vendorServicesTable.id),
+      )
+      .where(and(eq(vendorRequestsTable.vendorId, vid), realisedRevenueFilter))
+      .groupBy(vendorRequestsTable.serviceId, vendorServicesTable.name)
+      .orderBy(desc(sum(vendorRequestsTable.paidAmount)))
+      .limit(5);
+
     const recent = await db
       .select()
       .from(vendorRequestsTable)
@@ -619,11 +730,104 @@ vendorRouter.get("/metrics", async (req, res, next) => {
       requestCounts: counts,
       total: byStatus.reduce((a, r) => a + Number(r.count), 0),
       servicesCount: Number(servicesCount),
+      totalRevenue: Number(revRow?.totalRevenue ?? 0),
+      monthRevenue: Number(monthRow?.monthRevenue ?? 0),
+      customerCount: Number(revRow?.customerCount ?? 0),
+      monthlyTrend,
+      topServices: topServices.map((t) => ({
+        serviceId: t.serviceId,
+        serviceName: t.serviceName ?? "Unattached",
+        revenue: Number(t.revenue ?? 0),
+        orders: Number(t.orders),
+      })),
       recentRequests: recent,
     });
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * Vendor orders — every accepted/completed request, joined with the service
+ * name. This is the "real revenue" view powering /orders and the orders
+ * widget on the dashboard.
+ */
+vendorRouter.get("/orders", async (req, res, next) => {
+  try {
+    const vid = vendorId(req);
+    const rows = await db
+      .select({
+        id: vendorRequestsTable.id,
+        customerName: vendorRequestsTable.customerName,
+        customerEmail: vendorRequestsTable.customerEmail,
+        deceasedName: vendorRequestsTable.deceasedName,
+        serviceLocation: vendorRequestsTable.serviceLocation,
+        status: vendorRequestsTable.status,
+        quotedAmount: vendorRequestsTable.quotedAmount,
+        paidAmount: vendorRequestsTable.paidAmount,
+        paymentStatus: vendorRequestsTable.paymentStatus,
+        scheduledFor: vendorRequestsTable.scheduledFor,
+        isRecurring: vendorRequestsTable.isRecurring,
+        respondedAt: vendorRequestsTable.respondedAt,
+        createdAt: vendorRequestsTable.createdAt,
+        serviceId: vendorRequestsTable.serviceId,
+        serviceName: vendorServicesTable.name,
+      })
+      .from(vendorRequestsTable)
+      .leftJoin(vendorServicesTable, eq(vendorRequestsTable.serviceId, vendorServicesTable.id))
+      .where(
+        and(
+          eq(vendorRequestsTable.vendorId, vid),
+          inArray(vendorRequestsTable.status, ["accepted", "completed"]),
+        ),
+      )
+      .orderBy(desc(vendorRequestsTable.respondedAt), desc(vendorRequestsTable.createdAt))
+      .limit(500);
+    res.json({ orders: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Customer CRM rollup — distinct customers (by email) with per-customer
+ * aggregates. Powers /customers and the dashboard "customer count" KPI.
+ */
+vendorRouter.get("/customers", async (req, res, next) => {
+  try {
+    const vid = vendorId(req);
+    const rows = await db
+      .select({
+        customerEmail: vendorRequestsTable.customerEmail,
+        customerName: sql<string>`max(${vendorRequestsTable.customerName})`,
+        customerPhone: sql<string | null>`max(${vendorRequestsTable.customerPhone})`,
+        requestCount: count(vendorRequestsTable.id),
+        totalSpent: sum(vendorRequestsTable.paidAmount),
+        lastContactAt: sql<Date>`max(${vendorRequestsTable.createdAt})`,
+        firstContactAt: sql<Date>`min(${vendorRequestsTable.createdAt})`,
+      })
+      .from(vendorRequestsTable)
+      .where(eq(vendorRequestsTable.vendorId, vid))
+      .groupBy(vendorRequestsTable.customerEmail)
+      .orderBy(desc(sql`max(${vendorRequestsTable.createdAt})`))
+      .limit(500);
+    res.json({
+      customers: rows.map((r) => ({
+        ...r,
+        totalSpent: Number(r.totalSpent ?? 0),
+        requestCount: Number(r.requestCount),
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Public list of canonical funeral-lifecycle categories. Used by the
+ *  marketplace landing to render category tiles without coupling the FE
+ *  build-time bundle to the DB schema. */
+publicRouter.get("/marketplace/categories", (_req, res) => {
+  res.json({ categories: FUNERAL_CATEGORIES });
 });
 
 // ---------------------------------------------------------------------------
