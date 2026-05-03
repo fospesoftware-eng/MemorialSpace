@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { useVendorMe } from "@/pages/vendor/api";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -98,6 +99,10 @@ export function VendorLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-sidebar-border px-4 py-3 space-y-1">
+          <div className="flex items-center justify-between px-3 py-1">
+            <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50 font-semibold">Appearance</span>
+            <ThemeToggle variant="sidebar" />
+          </div>
           {vendor ? (
             <a
               href={`~/vendors/${vendor.slug}`}
