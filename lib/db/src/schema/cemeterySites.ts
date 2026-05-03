@@ -35,7 +35,13 @@ import { burialsTable } from "./burials";
 // stay untouched.
 // ---------------------------------------------------------------------------
 
-export const CEMETERY_THEMES = ["classic-marble", "modern-minimal", "heritage-garden"] as const;
+export const CEMETERY_THEMES = [
+  "classic-marble",
+  "modern-minimal",
+  "heritage-garden",
+  "celestial-night",
+  "japanese-zen",
+] as const;
 export type CemeteryTheme = (typeof CEMETERY_THEMES)[number];
 
 // One row per organization (1:1) — the "site config".

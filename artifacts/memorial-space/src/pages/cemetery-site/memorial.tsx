@@ -7,6 +7,7 @@ import {
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMemorial, type PublicSite } from "./api";
 import { DigitalRituals } from "./digital-rituals";
+import { parseYouTubeId, youtubeEmbedUrl } from "./video-helpers";
 
 type Props = { slug: string; site: PublicSite; code: string };
 
@@ -551,6 +552,48 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
           </div>
         )}
       </section>
+
+      {/* Video gallery — only rendered when the visitor is allowed to see
+          rich content (mirrors the bio + photo gating logic). Each video
+          gets its own iframe so visitors can play any tribute in place
+          without leaving the memorial page. */}
+      {!richLocked && memorial.videos.length > 0 ? (
+        <section
+          className="container mx-auto max-w-5xl px-4 sm:px-6 pb-10 md:pb-12"
+          data-testid="memorial-video-gallery"
+        >
+          <h2 style={headingFont} className="text-2xl md:text-3xl font-semibold mb-5 text-center">
+            Tribute videos
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {memorial.videos
+              .map((url) => ({ url, id: parseYouTubeId(url) }))
+              .filter((v): v is { url: string; id: string } => v.id !== null)
+              .map(({ url, id }, i) => (
+                <div
+                  key={`${url}-${i}`}
+                  data-testid={`memorial-video-${i}`}
+                  style={{
+                    background: "hsl(var(--site-card))",
+                    border: "1px solid hsl(var(--site-border))",
+                    borderRadius: "var(--site-radius)",
+                    aspectRatio: "16 / 9",
+                    overflow: "hidden",
+                  }}
+                >
+                  <iframe
+                    src={youtubeEmbedUrl(id)}
+                    title={`Tribute video ${i + 1} for ${memorial.deceasedName ?? "memorial"}`}
+                    loading="lazy"
+                    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{ width: "100%", height: "100%", border: 0, display: "block" }}
+                  />
+                </div>
+              ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Gamified digital rituals — candles, flowers, voice prayers. We
           deliberately gate on `!memorial.locked`: rituals appear only when

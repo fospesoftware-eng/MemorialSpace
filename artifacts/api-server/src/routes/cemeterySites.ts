@@ -833,6 +833,7 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
       religion: null,
       biography: null,
       photos: [],
+      videos: [],
       plotLabel: null,
       plotSection: null,
       plotRow: null,
@@ -893,6 +894,21 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
     photos = [burial.photoUrl, ...photos];
   }
 
+  // memorials.videos mirrors the photos column shape — JSON-stringified
+  // array of URLs, parsed defensively so a malformed row never 500s the
+  // public memorial page.
+  let videos: string[] = [];
+  if (memorial?.videos) {
+    try {
+      const parsed = JSON.parse(memorial.videos);
+      if (Array.isArray(parsed)) {
+        videos = parsed.filter((v): v is string => typeof v === "string");
+      }
+    } catch {
+      // ignore — leave videos empty
+    }
+  }
+
   // Pull the cemetery address so the public memorial page can offer
   // "Get directions" even for plots that don't have their own lat/lng
   // mapped yet — visitors are dropped at the cemetery gate and walk in.
@@ -908,6 +924,7 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
   const showRich = visibility === "open" || pinUnlocked;
   const richBiography = showRich ? memorial?.biography ?? null : null;
   const richPhotos = showRich ? photos : [];
+  const richVideos = showRich ? videos : [];
 
   res.json({
     code: qr.code,
@@ -922,6 +939,7 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
     religion: burial.religion,
     biography: richBiography,
     photos: richPhotos,
+    videos: richVideos,
     plotLabel: plot?.plotNumber ?? null,
     plotSection: plot?.section ?? null,
     plotRow: plot?.row ?? null,
@@ -979,6 +997,40 @@ const PublicMemorialEditSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   biography: z.string().max(20000).nullable().optional(),
   photos: z.array(z.string().url().max(1000)).max(20).optional(),
+  // YouTube video URLs. We deliberately enforce YouTube-only at the API
+  // boundary because that's the only provider the renderer can actually
+  // embed today — accepting a generic URL would let families save links
+  // that silently disappear from the public memorial. When we add Vimeo
+  // etc. we extend the regex here and the renderer in lockstep.
+  videos: z
+    .array(
+      z
+        .string()
+        .url()
+        .max(500)
+        .refine((s) => {
+          // Accept the common YouTube URL shapes: youtu.be/<id>,
+          // youtube.com/watch?v=<id>, /embed/<id>, /shorts/<id>,
+          // /v/<id>, /live/<id>. The video ID is always 11 chars from
+          // [A-Za-z0-9_-]. Anything else is rejected with a clear 400.
+          let url: URL;
+          try { url = new URL(s); } catch { return false; }
+          if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+          const host = url.hostname.replace(/^www\./, "").toLowerCase();
+          if (host === "youtu.be") {
+            const id = url.pathname.slice(1).split("/")[0] ?? "";
+            return /^[A-Za-z0-9_-]{11}$/.test(id);
+          }
+          if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+            const v = url.searchParams.get("v");
+            if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return true;
+            return /^\/(?:embed|shorts|v|live)\/[A-Za-z0-9_-]{11}/.test(url.pathname);
+          }
+          return false;
+        }, "Only YouTube video links are supported"),
+    )
+    .max(10)
+    .optional(),
   // Privacy mode the family wants to apply. Accepts the three modes the
   // GET handler understands; anything else is rejected by Zod.
   visibility: z.enum(["open", "basic", "private"]).optional(),
@@ -1096,6 +1148,7 @@ router.patch("/c/:slug/memorial/:code/edit", async (req, res) => {
   if (parsed.data.title !== undefined) patch.title = parsed.data.title;
   if (parsed.data.biography !== undefined) patch.biography = parsed.data.biography;
   if (parsed.data.photos !== undefined) patch.photos = JSON.stringify(parsed.data.photos);
+  if (parsed.data.videos !== undefined) patch.videos = JSON.stringify(parsed.data.videos);
   if (parsed.data.visibility !== undefined) patch.visibility = parsed.data.visibility;
 
   if (Object.keys(patch).length === 0) {

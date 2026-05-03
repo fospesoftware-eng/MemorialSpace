@@ -1,4 +1,9 @@
-export type ThemeKey = "classic-marble" | "modern-minimal" | "heritage-garden";
+export type ThemeKey =
+  | "classic-marble"
+  | "modern-minimal"
+  | "heritage-garden"
+  | "celestial-night"
+  | "japanese-zen";
 
 export type ThemeDef = {
   key: ThemeKey;
@@ -87,6 +92,62 @@ export const THEMES: Record<ThemeKey, ThemeDef> = {
     },
     swatch: { primary: "hsl(350 55% 30%)", background: "hsl(40 35% 94%)" },
     heroOverlay: "linear-gradient(180deg, hsla(350,30%,12%,0.45), hsla(350,30%,12%,0.7))",
+  },
+  // Dark, ethereal theme — deep indigo background with warm gold accents
+  // and a soft cream foreground. Designed for night-watch / starlit-vigil
+  // feel; pairs especially well with portraits set against dark backdrops.
+  "celestial-night": {
+    key: "celestial-night",
+    label: "Celestial Night",
+    description: "Dark and ethereal — indigo, gold, and soft starlight type.",
+    vars: {
+      "--site-bg": "232 38% 10%",
+      "--site-fg": "42 35% 92%",
+      "--site-muted": "232 30% 16%",
+      "--site-muted-fg": "42 18% 70%",
+      "--site-card": "232 32% 14%",
+      "--site-border": "232 25% 24%",
+      "--site-primary": "42 75% 62%",
+      "--site-primary-fg": "232 38% 10%",
+      "--site-accent": "270 55% 70%",
+      "--site-radius": "0.5rem",
+    },
+    fontHeading: "'Cinzel', 'Playfair Display', serif",
+    fontBody: "'Cormorant Garamond', Georgia, serif",
+    fontStack: {
+      heading: "Cinzel:wght@500;600;700",
+      body: "Cormorant+Garamond:wght@400;500;600",
+    },
+    swatch: { primary: "hsl(42 75% 62%)", background: "hsl(232 38% 10%)" },
+    heroOverlay: "linear-gradient(180deg, hsla(232,40%,6%,0.55), hsla(232,40%,6%,0.85))",
+  },
+  // Calm, contemplative theme inspired by sumi-e ink and washi paper —
+  // warm beige paper background, deep ink foreground, and a single
+  // cherry-blossom accent. Calligraphic display type echoes the feel.
+  "japanese-zen": {
+    key: "japanese-zen",
+    label: "Japanese Zen",
+    description: "Calm and contemplative — washi paper, sumi ink, and a quiet sakura accent.",
+    vars: {
+      "--site-bg": "36 32% 92%",
+      "--site-fg": "20 12% 14%",
+      "--site-muted": "36 22% 86%",
+      "--site-muted-fg": "20 8% 38%",
+      "--site-card": "36 38% 96%",
+      "--site-border": "30 14% 78%",
+      "--site-primary": "20 12% 14%",
+      "--site-primary-fg": "36 32% 95%",
+      "--site-accent": "350 55% 72%",
+      "--site-radius": "0rem",
+    },
+    fontHeading: "'Shippori Mincho', 'Noto Serif JP', serif",
+    fontBody: "'Noto Serif JP', Georgia, serif",
+    fontStack: {
+      heading: "Shippori+Mincho:wght@500;600;700",
+      body: "Noto+Serif+JP:wght@400;500",
+    },
+    swatch: { primary: "hsl(20 12% 14%)", background: "hsl(36 32% 92%)" },
+    heroOverlay: "linear-gradient(180deg, hsla(20,15%,8%,0.4), hsla(20,15%,8%,0.7))",
   },
 };
 

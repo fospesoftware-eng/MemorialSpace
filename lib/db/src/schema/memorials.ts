@@ -11,6 +11,11 @@ export const memorialsTable = pgTable("memorials", {
   title: text("title").notNull(),
   biography: text("biography"),
   photos: text("photos"),
+  // JSON-stringified array of video URLs (currently YouTube only). Stored
+  // as `text` to mirror `photos` — keeps the column shape uniform and
+  // avoids a migration to `jsonb` that would force every existing row
+  // through a cast. Parsed defensively on read.
+  videos: text("videos"),
   isPublic: boolean("is_public").default(true),
   // Privacy mode controls what an anonymous visitor sees on the public
   // memorial page. The QR code in the URL is the read credential, but the

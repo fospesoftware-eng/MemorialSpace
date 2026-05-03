@@ -97,6 +97,9 @@ export type PublicMemorial = {
   religion: string | null;
   biography: string | null;
   photos: string[];
+  // YouTube video URLs the family has added. Stripped (empty array) for
+  // PIN-locked memorials in the same way `photos` and `biography` are.
+  videos: string[];
   plotLabel: string | null;
   plotSection: string | null;
   plotRow: string | null;
@@ -221,6 +224,9 @@ export type UpdatePublicMemorialPayload = {
   title?: string;
   biography?: string | null;
   photos?: string[];
+  // YouTube video URLs the family wants on the memorial. Server validates
+  // the format; client also pre-validates so we never POST a bad URL.
+  videos?: string[];
   visibility?: MemorialVisibility;
 };
 

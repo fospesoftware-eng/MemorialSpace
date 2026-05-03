@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ImagePlus, Trash2, Save, CheckCircle2, KeyRound, Globe, Eye, Lock } from "lucide-react";
+import { ArrowLeft, ImagePlus, Trash2, Save, CheckCircle2, KeyRound, Globe, Eye, Lock, Video } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMemorial, useUpdatePublicMemorial, type MemorialVisibility, type PublicSite } from "./api";
+import { parseYouTubeId, youtubeThumbnailUrl } from "./video-helpers";
 
 type Props = { slug: string; site: PublicSite; code: string };
 
@@ -25,10 +26,13 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
   const [title, setTitle] = useState("");
   const [biography, setBiography] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [videos, setVideos] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<MemorialVisibility>("open");
   const [photoInput, setPhotoInput] = useState("");
+  const [videoInput, setVideoInput] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   // Hydrate the form once the memorial data arrives in an *unlocked* state.
   // For a private memorial that means after the family types the PIN; for
@@ -40,6 +44,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
       setTitle(memorial.title ?? memorial.deceasedName ?? "");
       setBiography(memorial.biography ?? "");
       setPhotos(memorial.photos ?? []);
+      setVideos(memorial.videos ?? []);
       setVisibility(memorial.visibility);
       setHydrated(true);
     }
@@ -111,6 +116,37 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
     setPhotos(photos.filter((_, i) => i !== idx));
   };
 
+  // Add a YouTube video. We validate up-front (rather than relying on the
+  // server's generic URL check) so families get an immediate, specific
+  // error instead of a confusing 400 after submit. We also de-dupe by
+  // YouTube video ID, so pasting the same video as both `youtu.be/X` and
+  // `youtube.com/watch?v=X` doesn't create two cards.
+  const addVideo = () => {
+    setVideoError(null);
+    const trimmed = videoInput.trim();
+    if (!trimmed) return;
+    const id = parseYouTubeId(trimmed);
+    if (!id) {
+      setVideoError("Please paste a YouTube video link (e.g. https://youtu.be/… or youtube.com/watch?v=…).");
+      return;
+    }
+    const already = videos.some((u) => parseYouTubeId(u) === id);
+    if (already) {
+      setVideoError("That video is already in the gallery.");
+      return;
+    }
+    if (videos.length >= 10) {
+      setVideoError("You can include up to 10 videos per memorial.");
+      return;
+    }
+    setVideos([...videos, trimmed]);
+    setVideoInput("");
+  };
+
+  const removeVideo = (idx: number) => {
+    setVideos(videos.filter((_, i) => i !== idx));
+  };
+
   const handleSave = async () => {
     setSavedAt(null);
     setPinError(null);
@@ -124,6 +160,7 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
         title: title.trim() || memorial.deceasedName || "Memorial",
         biography: biography.trim() || null,
         photos,
+        videos,
         visibility,
       });
       setSavedAt(Date.now());
@@ -410,6 +447,94 @@ export function CemeterySiteMemorialEdit({ slug, site, code }: Props) {
                   </button>
                 </div>
               ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Videos — YouTube only for now. Renders as a thumbnail grid with
+            remove buttons so the editor mirrors the photo gallery UX. */}
+        <div data-testid="edit-videos-section">
+          <label
+            className="block text-xs uppercase tracking-widest font-semibold mb-2"
+            style={{ color: "hsl(var(--site-primary))" }}
+          >
+            Video gallery
+          </label>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="url"
+              value={videoInput}
+              onChange={(e) => setVideoInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVideo(); } }}
+              placeholder="https://youtu.be/… or https://youtube.com/watch?v=…"
+              data-testid="edit-video-input"
+              style={{
+                background: "hsl(var(--site-card))",
+                border: "1px solid hsl(var(--site-border))",
+                borderRadius: "var(--site-radius)",
+                color: "hsl(var(--site-fg))",
+              }}
+              className="flex-1 px-4 py-2.5 text-sm"
+            />
+            <button
+              type="button"
+              onClick={addVideo}
+              data-testid="edit-video-add"
+              style={{
+                background: "hsl(var(--site-primary))",
+                color: "hsl(var(--site-primary-fg))",
+                borderRadius: "var(--site-radius)",
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold"
+            >
+              <Video className="h-4 w-4" />
+              Add video
+            </button>
+          </div>
+          {videoError ? (
+            <p className="text-xs mb-3" style={{ color: "#c0392b" }} data-testid="edit-video-error">{videoError}</p>
+          ) : (
+            <p className="text-xs mb-3" style={{ color: "hsl(var(--site-muted-fg))" }}>
+              Paste up to 10 YouTube links — eulogies, slideshows, home movies. Visitors watch them embedded on the memorial page.
+            </p>
+          )}
+
+          {videos.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {videos.map((url, i) => {
+                const id = parseYouTubeId(url);
+                return (
+                  <div
+                    key={`${url}-${i}`}
+                    className="relative group"
+                    style={{
+                      background: id
+                        ? `url(${youtubeThumbnailUrl(id)}) center/cover, hsl(var(--site-muted))`
+                        : "hsl(var(--site-muted))",
+                      border: "1px solid hsl(var(--site-border))",
+                      borderRadius: "var(--site-radius)",
+                      aspectRatio: "16 / 9",
+                    }}
+                    data-testid={`edit-video-${i}`}
+                  >
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.4))" }}
+                    >
+                      <Video className="h-6 w-6 text-white drop-shadow" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(i)}
+                      aria-label={`Remove video ${i + 1}`}
+                      data-testid={`edit-video-remove-${i}`}
+                      className="absolute top-1.5 right-1.5 h-7 w-7 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : null}
         </div>
