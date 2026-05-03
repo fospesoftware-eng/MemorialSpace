@@ -72,6 +72,7 @@ import Organizations from "@/pages/settings/organizations";
 import TeamPage from "@/pages/team";
 import TeamRolesPage from "@/pages/team/roles";
 import Settings from "@/pages/settings/general";
+import OrgPaymentGateway from "@/pages/settings/payment-gateway";
 import CemeteryTypes from "@/pages/settings/cemetery-types";
 
 // B2C public marketing
@@ -93,6 +94,7 @@ import AdminDashboard from "@/pages/admin/dashboard";
 import AdminOrganizations from "@/pages/admin/organizations";
 import AdminUsers from "@/pages/admin/users";
 import AdminBilling from "@/pages/admin/billing";
+import AdminPaymentGateway from "@/pages/admin/payment-gateway";
 import AdminAnalytics from "@/pages/admin/analytics";
 import AdminSupport from "@/pages/admin/support";
 
@@ -145,6 +147,7 @@ function B2BRoutes() {
         <Route path="/team/roles" component={TeamRolesPage} />
         <Route path="/users" component={TeamPage} />
         <Route path="/settings" component={Settings} />
+        <Route path="/settings/payment-gateway" component={OrgPaymentGateway} />
         <Route path="/cemetery-setup" component={CemeteryTypes} />
         <Route component={NotFound} />
       </Switch>
@@ -207,6 +210,7 @@ function AdminRoutes() {
         <Route path="/organizations" component={AdminOrganizations} />
         <Route path="/users" component={AdminUsers} />
         <Route path="/billing" component={AdminBilling} />
+        <Route path="/payment-gateway" component={AdminPaymentGateway} />
         <Route path="/analytics" component={AdminAnalytics} />
         <Route path="/support" component={AdminSupport} />
         <Route component={NotFound} />

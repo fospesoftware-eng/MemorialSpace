@@ -31,6 +31,7 @@ import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
 import memorialRitualsRouter from "./memorialRituals";
 import adminRouter from "./admin";
+import paymentGatewayRouter from "./paymentGateway";
 import { vendorPublicRouter, vendorAuthedRouter } from "./vendors";
 import { requireAuth, requireOrgUser, requireVendor } from "../lib/auth";
 
@@ -65,6 +66,12 @@ router.use("/vendor", requireVendor, vendorAuthedRouter);
 // adminRouter mounts its own `requirePlatformAdmin` middleware internally, so
 // no extra guard is needed here.
 router.use(adminRouter);
+
+// --- Payment gateway (Stripe) -------------------------------------------------
+// Hosts both `/admin/payment-gateway/*` (super admin) and
+// `/orgs/me/payment-gateway/*` (cemetery owner) — each route gates itself
+// with the appropriate middleware internally.
+router.use(paymentGatewayRouter);
 
 // --- B2B cemetery operator surface -------------------------------------------
 // Everything below requires a signed-in cemetery user with an organizationId.

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote } from "lucide-react";
+import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote, CreditCard } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -72,6 +72,7 @@ const navigation = [
       { name: "Organizations", href: "/organizations", icon: Building },
       { name: "Cemetery Setup", href: "/cemetery-setup", icon: Sliders },
       { name: "General Settings", href: "/settings", icon: Settings },
+      { name: "Payment Gateway", href: "/settings/payment-gateway", icon: CreditCard },
     ],
   },
 ];

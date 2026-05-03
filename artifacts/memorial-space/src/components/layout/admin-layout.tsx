@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Shield, Menu, LogOut } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Shield, Menu, LogOut, Banknote } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ const nav = [
   { name: "Organizations", href: "/organizations", key: "organizations", icon: Building2 },
   { name: "Users", href: "/users", key: "users", icon: Users },
   { name: "Billing & MRR", href: "/billing", key: "billing", icon: CreditCard },
+  { name: "Payment Gateway", href: "/payment-gateway", key: "payment-gateway", icon: Banknote },
   { name: "Analytics", href: "/analytics", key: "analytics", icon: BarChart3 },
   { name: "Support Tickets", href: "/support", key: "support", icon: LifeBuoy },
 ];
