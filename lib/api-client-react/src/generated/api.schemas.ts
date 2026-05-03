@@ -373,16 +373,32 @@ export const WorkOrderPriority = {
 export interface WorkOrder {
   id: number;
   organizationId: number;
-  plotId?: number;
-  assignedTo?: number;
+  /** @nullable */
+  plotId?: number | null;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  assignedTo?: number | null;
   title: string;
-  description?: string;
+  /** @nullable */
+  description?: string | null;
   type: WorkOrderType;
   status: WorkOrderStatus;
   priority: WorkOrderPriority;
-  dueDate?: string;
-  completedAt?: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  laborHours?: string | null;
+  /** @nullable */
+  laborCost?: string | null;
+  /** @nullable */
+  materialsCost?: string | null;
+  /** @nullable */
+  completionNotes?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export type CreateWorkOrderBodyType =
@@ -418,14 +434,311 @@ export const CreateWorkOrderBodyPriority = {
 
 export interface CreateWorkOrderBody {
   organizationId: number;
-  plotId?: number;
-  assignedTo?: number;
+  /** @nullable */
+  plotId?: number | null;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  assignedTo?: number | null;
   title: string;
-  description?: string;
+  /** @nullable */
+  description?: string | null;
   type: CreateWorkOrderBodyType;
   status: CreateWorkOrderBodyStatus;
   priority: CreateWorkOrderBodyPriority;
-  dueDate?: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  laborHours?: string | null;
+  /** @nullable */
+  laborCost?: string | null;
+  /** @nullable */
+  materialsCost?: string | null;
+  /** @nullable */
+  completionNotes?: string | null;
+}
+
+export interface WorkOrderComment {
+  id: number;
+  workOrderId: number;
+  /** @nullable */
+  userId?: number | null;
+  /** @nullable */
+  authorName?: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateWorkOrderCommentBody {
+  /** @nullable */
+  authorName?: string | null;
+  body: string;
+}
+
+export type AssetType = (typeof AssetType)[keyof typeof AssetType];
+
+export const AssetType = {
+  equipment: "equipment",
+  vehicle: "vehicle",
+  area: "area",
+  building: "building",
+  tool: "tool",
+  other: "other",
+} as const;
+
+export type AssetStatus = (typeof AssetStatus)[keyof typeof AssetStatus];
+
+export const AssetStatus = {
+  active: "active",
+  maintenance: "maintenance",
+  retired: "retired",
+} as const;
+
+export interface Asset {
+  id: number;
+  organizationId: number;
+  name: string;
+  type: AssetType;
+  /** @nullable */
+  location?: string | null;
+  /** @nullable */
+  serialNumber?: string | null;
+  /** @nullable */
+  purchaseDate?: string | null;
+  status: AssetStatus;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateAssetBodyType =
+  (typeof CreateAssetBodyType)[keyof typeof CreateAssetBodyType];
+
+export const CreateAssetBodyType = {
+  equipment: "equipment",
+  vehicle: "vehicle",
+  area: "area",
+  building: "building",
+  tool: "tool",
+  other: "other",
+} as const;
+
+export type CreateAssetBodyStatus =
+  (typeof CreateAssetBodyStatus)[keyof typeof CreateAssetBodyStatus];
+
+export const CreateAssetBodyStatus = {
+  active: "active",
+  maintenance: "maintenance",
+  retired: "retired",
+} as const;
+
+export interface CreateAssetBody {
+  organizationId: number;
+  name: string;
+  type: CreateAssetBodyType;
+  /** @nullable */
+  location?: string | null;
+  /** @nullable */
+  serialNumber?: string | null;
+  /** @nullable */
+  purchaseDate?: string | null;
+  status?: CreateAssetBodyStatus;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type MaintenanceScheduleFrequency =
+  (typeof MaintenanceScheduleFrequency)[keyof typeof MaintenanceScheduleFrequency];
+
+export const MaintenanceScheduleFrequency = {
+  daily: "daily",
+  weekly: "weekly",
+  monthly: "monthly",
+  quarterly: "quarterly",
+  yearly: "yearly",
+  custom: "custom",
+} as const;
+
+export type MaintenanceSchedulePriority =
+  (typeof MaintenanceSchedulePriority)[keyof typeof MaintenanceSchedulePriority];
+
+export const MaintenanceSchedulePriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export interface MaintenanceSchedule {
+  id: number;
+  organizationId: number;
+  /** @nullable */
+  assetId?: number | null;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  frequency: MaintenanceScheduleFrequency;
+  intervalDays: number;
+  /** @nullable */
+  lastPerformedAt?: string | null;
+  /** @nullable */
+  nextDueAt?: string | null;
+  /** @nullable */
+  assignedTo?: number | null;
+  priority: MaintenanceSchedulePriority;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateMaintenanceScheduleBodyFrequency =
+  (typeof CreateMaintenanceScheduleBodyFrequency)[keyof typeof CreateMaintenanceScheduleBodyFrequency];
+
+export const CreateMaintenanceScheduleBodyFrequency = {
+  daily: "daily",
+  weekly: "weekly",
+  monthly: "monthly",
+  quarterly: "quarterly",
+  yearly: "yearly",
+  custom: "custom",
+} as const;
+
+export type CreateMaintenanceScheduleBodyPriority =
+  (typeof CreateMaintenanceScheduleBodyPriority)[keyof typeof CreateMaintenanceScheduleBodyPriority];
+
+export const CreateMaintenanceScheduleBodyPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export interface CreateMaintenanceScheduleBody {
+  organizationId: number;
+  /** @nullable */
+  assetId?: number | null;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  frequency: CreateMaintenanceScheduleBodyFrequency;
+  intervalDays: number;
+  /** @nullable */
+  lastPerformedAt?: string | null;
+  /** @nullable */
+  nextDueAt?: string | null;
+  /** @nullable */
+  assignedTo?: number | null;
+  priority?: CreateMaintenanceScheduleBodyPriority;
+  isActive?: boolean;
+}
+
+export interface ExpenseCategory {
+  id: number;
+  organizationId: number;
+  name: string;
+  color: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateExpenseCategoryBody {
+  organizationId: number;
+  name: string;
+  color?: string;
+  isActive?: boolean;
+}
+
+export type ExpensePaymentMethod =
+  (typeof ExpensePaymentMethod)[keyof typeof ExpensePaymentMethod];
+
+export const ExpensePaymentMethod = {
+  cash: "cash",
+  card: "card",
+  check: "check",
+  transfer: "transfer",
+  other: "other",
+} as const;
+
+export type ExpenseStatus = (typeof ExpenseStatus)[keyof typeof ExpenseStatus];
+
+export const ExpenseStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+  paid: "paid",
+} as const;
+
+export interface Expense {
+  id: number;
+  organizationId: number;
+  /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
+  workOrderId?: number | null;
+  /** @nullable */
+  vendorName?: string | null;
+  description: string;
+  amount: string;
+  expenseDate: string;
+  paymentMethod: ExpensePaymentMethod;
+  /** @nullable */
+  receiptUrl?: string | null;
+  status: ExpenseStatus;
+  /** @nullable */
+  submittedBy?: number | null;
+  /** @nullable */
+  approvedBy?: number | null;
+  /** @nullable */
+  approvedAt?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateExpenseBodyPaymentMethod =
+  (typeof CreateExpenseBodyPaymentMethod)[keyof typeof CreateExpenseBodyPaymentMethod];
+
+export const CreateExpenseBodyPaymentMethod = {
+  cash: "cash",
+  card: "card",
+  check: "check",
+  transfer: "transfer",
+  other: "other",
+} as const;
+
+export type CreateExpenseBodyStatus =
+  (typeof CreateExpenseBodyStatus)[keyof typeof CreateExpenseBodyStatus];
+
+export const CreateExpenseBodyStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+  paid: "paid",
+} as const;
+
+export interface CreateExpenseBody {
+  organizationId: number;
+  /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
+  workOrderId?: number | null;
+  /** @nullable */
+  vendorName?: string | null;
+  description: string;
+  amount: string;
+  expenseDate: string;
+  paymentMethod: CreateExpenseBodyPaymentMethod;
+  /** @nullable */
+  receiptUrl?: string | null;
+  status?: CreateExpenseBodyStatus;
+  /** @nullable */
+  submittedBy?: number | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface QrCode {
@@ -985,4 +1298,80 @@ export type PublicGraveSearchParams = {
 
 export type ListPublicObituariesParams = {
   organizationId?: number;
+};
+
+export type ListAssetsParams = {
+  organizationId?: number;
+  status?: string;
+  type?: string;
+};
+
+export type GetAssetParams = {
+  organizationId: number;
+};
+
+export type DeleteAssetParams = {
+  organizationId: number;
+};
+
+export type ListMaintenanceSchedulesParams = {
+  organizationId?: number;
+  assetId?: number;
+  isActive?: boolean;
+};
+
+export type GetMaintenanceScheduleParams = {
+  organizationId: number;
+};
+
+export type DeleteMaintenanceScheduleParams = {
+  organizationId: number;
+};
+
+export type GenerateMaintenanceWorkOrderBody = {
+  organizationId: number;
+};
+
+export type ListWorkOrderCommentsParams = {
+  organizationId: number;
+};
+
+export type ListExpenseCategoriesParams = {
+  organizationId?: number;
+};
+
+export type DeleteExpenseCategoryParams = {
+  organizationId: number;
+};
+
+export type ListExpensesParams = {
+  organizationId?: number;
+  status?: string;
+  categoryId?: number;
+};
+
+export type GetExpenseParams = {
+  organizationId: number;
+};
+
+export type DeleteExpenseParams = {
+  organizationId: number;
+};
+
+export type ApproveExpenseBody = {
+  organizationId: number;
+  /** @nullable */
+  approvedBy?: number | null;
+};
+
+export type RejectExpenseBody = {
+  organizationId: number;
+  /** @nullable */
+  approvedBy?: number | null;
+  /** @nullable */
+  notes?: string | null;
+};
+
+export type MarkExpensePaidBody = {
+  organizationId: number;
 };

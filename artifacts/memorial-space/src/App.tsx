@@ -49,6 +49,9 @@ import Mausoleum from "@/pages/b2b/mausoleum";
 import Burials from "@/pages/b2b/burials";
 import Bookings from "@/pages/b2b/bookings";
 import WorkOrders from "@/pages/b2b/work-orders";
+import Assets from "@/pages/b2b/assets";
+import Maintenance from "@/pages/b2b/maintenance";
+import Expenses from "@/pages/b2b/expenses";
 import Memorials from "@/pages/b2b/memorials";
 import Obituaries from "@/pages/b2b/obituaries";
 import QrCodes from "@/pages/b2b/qr-codes";
@@ -112,6 +115,9 @@ function B2BRoutes() {
         <Route path="/burials" component={Burials} />
         <Route path="/bookings" component={Bookings} />
         <Route path="/work-orders" component={WorkOrders} />
+        <Route path="/assets" component={Assets} />
+        <Route path="/maintenance" component={Maintenance} />
+        <Route path="/expenses" component={Expenses} />
         <Route path="/memorials" component={Memorials} />
         <Route path="/obituaries" component={Obituaries} />
         <Route path="/qr-codes" component={QrCodes} />

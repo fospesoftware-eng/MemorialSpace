@@ -44,6 +44,12 @@ tags:
     description: Payments recorded against invoices
   - name: accounting
     description: Accounts-receivable summary and reports
+  - name: assets
+    description: Cemetery assets, equipment, and facilities
+  - name: maintenance
+    description: Recurring maintenance schedules
+  - name: expenses
+    description: Operating expenses, categories, and approvals
 
 paths:
   /healthz:
@@ -1643,6 +1649,430 @@ paths:
                 items:
                   $ref: "#/components/schemas/Obituary"
 
+  # ─── ASSETS ──────────────────────────────────────────────────────────────────
+
+  /assets:
+    get:
+      operationId: listAssets
+      tags: [assets]
+      summary: List assets
+      parameters:
+        - { name: organizationId, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Asset" }
+    post:
+      operationId: createAsset
+      tags: [assets]
+      summary: Create an asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAssetBody" }
+      responses:
+        "201":
+          description: Created asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+
+  /assets/{id}:
+    get:
+      operationId: getAsset
+      tags: [assets]
+      summary: Get asset by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+    put:
+      operationId: updateAsset
+      tags: [assets]
+      summary: Update an asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAssetBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+    delete:
+      operationId: deleteAsset
+      tags: [assets]
+      summary: Delete an asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── MAINTENANCE SCHEDULES ───────────────────────────────────────────────────
+
+  /maintenance-schedules:
+    get:
+      operationId: listMaintenanceSchedules
+      tags: [maintenance]
+      summary: List maintenance schedules
+      parameters:
+        - { name: organizationId, in: query, schema: { type: integer } }
+        - { name: assetId, in: query, schema: { type: integer } }
+        - { name: isActive, in: query, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MaintenanceSchedule" }
+    post:
+      operationId: createMaintenanceSchedule
+      tags: [maintenance]
+      summary: Create a maintenance schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMaintenanceScheduleBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceSchedule" }
+
+  /maintenance-schedules/{id}:
+    get:
+      operationId: getMaintenanceSchedule
+      tags: [maintenance]
+      summary: Get a maintenance schedule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceSchedule" }
+    put:
+      operationId: updateMaintenanceSchedule
+      tags: [maintenance]
+      summary: Update a maintenance schedule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMaintenanceScheduleBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceSchedule" }
+    delete:
+      operationId: deleteMaintenanceSchedule
+      tags: [maintenance]
+      summary: Delete a maintenance schedule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  /maintenance-schedules/{id}/generate:
+    post:
+      operationId: generateMaintenanceWorkOrder
+      tags: [maintenance]
+      summary: Generate a work order from a schedule and advance its next-due date
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                organizationId: { type: integer }
+              required: [organizationId]
+      responses:
+        "201":
+          description: Generated work order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrder" }
+
+  # ─── WORK ORDER COMMENTS ─────────────────────────────────────────────────────
+
+  /work-orders/{id}/comments:
+    get:
+      operationId: listWorkOrderComments
+      tags: [work-orders]
+      summary: List comments for a work order
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkOrderComment" }
+    post:
+      operationId: createWorkOrderComment
+      tags: [work-orders]
+      summary: Add a comment to a work order
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWorkOrderCommentBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrderComment" }
+
+  # ─── EXPENSE CATEGORIES ──────────────────────────────────────────────────────
+
+  /expense-categories:
+    get:
+      operationId: listExpenseCategories
+      tags: [expenses]
+      summary: List expense categories
+      parameters:
+        - { name: organizationId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExpenseCategory" }
+    post:
+      operationId: createExpenseCategory
+      tags: [expenses]
+      summary: Create an expense category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExpenseCategoryBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExpenseCategory" }
+
+  /expense-categories/{id}:
+    put:
+      operationId: updateExpenseCategory
+      tags: [expenses]
+      summary: Update an expense category
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExpenseCategoryBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExpenseCategory" }
+    delete:
+      operationId: deleteExpenseCategory
+      tags: [expenses]
+      summary: Delete an expense category
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── EXPENSES ────────────────────────────────────────────────────────────────
+
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List expenses
+      parameters:
+        - { name: organizationId, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: categoryId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Expense" }
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExpenseBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+
+  /expenses/{id}:
+    get:
+      operationId: getExpense
+      tags: [expenses]
+      summary: Get an expense
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Expense
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+    put:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExpenseBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: organizationId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  /expenses/{id}/approve:
+    post:
+      operationId: approveExpense
+      tags: [expenses]
+      summary: Approve an expense
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                organizationId: { type: integer }
+                approvedBy: { type: ["integer", "null"] }
+              required: [organizationId]
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+
+  /expenses/{id}/reject:
+    post:
+      operationId: rejectExpense
+      tags: [expenses]
+      summary: Reject an expense
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                organizationId: { type: integer }
+                approvedBy: { type: ["integer", "null"] }
+                notes: { type: ["string", "null"] }
+              required: [organizationId]
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+
+  /expenses/{id}/mark-paid:
+    post:
+      operationId: markExpensePaid
+      tags: [expenses]
+      summary: Mark an expense as paid
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                organizationId: { type: integer }
+              required: [organizationId]
+      responses:
+        "200":
+          description: Paid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+
 components:
   schemas:
     HealthStatus:
@@ -2132,13 +2562,15 @@ components:
         organizationId:
           type: integer
         plotId:
-          type: integer
+          type: ["integer", "null"]
+        assetId:
+          type: ["integer", "null"]
         assignedTo:
-          type: integer
+          type: ["integer", "null"]
         title:
           type: string
         description:
-          type: string
+          type: ["string", "null"]
         type:
           type: string
           enum: [maintenance, burial, cleaning, inspection, other]
@@ -2149,12 +2581,23 @@ components:
           type: string
           enum: [low, medium, high, urgent]
         dueDate:
-          type: string
+          type: ["string", "null"]
           format: date
         completedAt:
+          type: ["string", "null"]
+          format: date-time
+        laborHours:
+          type: ["string", "null"]
+        laborCost:
+          type: ["string", "null"]
+        materialsCost:
+          type: ["string", "null"]
+        completionNotes:
+          type: ["string", "null"]
+        createdAt:
           type: string
           format: date-time
-        createdAt:
+        updatedAt:
           type: string
           format: date-time
       required:
@@ -2165,6 +2608,7 @@ components:
         - status
         - priority
         - createdAt
+        - updatedAt
 
     CreateWorkOrderBody:
       type: object
@@ -2172,13 +2616,15 @@ components:
         organizationId:
           type: integer
         plotId:
-          type: integer
+          type: ["integer", "null"]
+        assetId:
+          type: ["integer", "null"]
         assignedTo:
-          type: integer
+          type: ["integer", "null"]
         title:
           type: string
         description:
-          type: string
+          type: ["string", "null"]
         type:
           type: string
           enum: [maintenance, burial, cleaning, inspection, other]
@@ -2189,14 +2635,286 @@ components:
           type: string
           enum: [low, medium, high, urgent]
         dueDate:
-          type: string
+          type: ["string", "null"]
           format: date
+        laborHours:
+          type: ["string", "null"]
+        laborCost:
+          type: ["string", "null"]
+        materialsCost:
+          type: ["string", "null"]
+        completionNotes:
+          type: ["string", "null"]
       required:
         - organizationId
         - title
         - type
         - status
         - priority
+
+    WorkOrderComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderId:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        authorName:
+          type: ["string", "null"]
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, workOrderId, body, createdAt]
+
+    CreateWorkOrderCommentBody:
+      type: object
+      properties:
+        authorName:
+          type: ["string", "null"]
+        body:
+          type: string
+      required: [body]
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [equipment, vehicle, area, building, tool, other]
+        location:
+          type: ["string", "null"]
+        serialNumber:
+          type: ["string", "null"]
+        purchaseDate:
+          type: ["string", "null"]
+          format: date
+        status:
+          type: string
+          enum: [active, maintenance, retired]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, organizationId, name, type, status, createdAt, updatedAt]
+
+    CreateAssetBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [equipment, vehicle, area, building, tool, other]
+        location:
+          type: ["string", "null"]
+        serialNumber:
+          type: ["string", "null"]
+        purchaseDate:
+          type: ["string", "null"]
+          format: date
+        status:
+          type: string
+          enum: [active, maintenance, retired]
+        notes:
+          type: ["string", "null"]
+      required: [organizationId, name, type]
+
+    MaintenanceSchedule:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        assetId:
+          type: ["integer", "null"]
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly, quarterly, yearly, custom]
+        intervalDays:
+          type: integer
+        lastPerformedAt:
+          type: ["string", "null"]
+          format: date
+        nextDueAt:
+          type: ["string", "null"]
+          format: date
+        assignedTo:
+          type: ["integer", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, organizationId, title, frequency, intervalDays, priority, isActive, createdAt, updatedAt]
+
+    CreateMaintenanceScheduleBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        assetId:
+          type: ["integer", "null"]
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly, quarterly, yearly, custom]
+        intervalDays:
+          type: integer
+        lastPerformedAt:
+          type: ["string", "null"]
+          format: date
+        nextDueAt:
+          type: ["string", "null"]
+          format: date
+        assignedTo:
+          type: ["integer", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        isActive:
+          type: boolean
+      required: [organizationId, title, frequency, intervalDays]
+
+    ExpenseCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, organizationId, name, color, isActive, createdAt]
+
+    CreateExpenseCategoryBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        isActive:
+          type: boolean
+      required: [organizationId, name]
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: integer
+        organizationId:
+          type: integer
+        categoryId:
+          type: ["integer", "null"]
+        workOrderId:
+          type: ["integer", "null"]
+        vendorName:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+        expenseDate:
+          type: string
+          format: date
+        paymentMethod:
+          type: string
+          enum: [cash, card, check, transfer, other]
+        receiptUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected, paid]
+        submittedBy:
+          type: ["integer", "null"]
+        approvedBy:
+          type: ["integer", "null"]
+        approvedAt:
+          type: ["string", "null"]
+          format: date-time
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, organizationId, description, amount, expenseDate, paymentMethod, status, createdAt, updatedAt]
+
+    CreateExpenseBody:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+        categoryId:
+          type: ["integer", "null"]
+        workOrderId:
+          type: ["integer", "null"]
+        vendorName:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+        expenseDate:
+          type: string
+          format: date
+        paymentMethod:
+          type: string
+          enum: [cash, card, check, transfer, other]
+        receiptUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected, paid]
+        submittedBy:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [organizationId, description, amount, expenseDate, paymentMethod]
 
     QrCode:
       type: object
