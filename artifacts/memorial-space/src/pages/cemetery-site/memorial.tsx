@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMemorial, type PublicSite } from "./api";
+import { DigitalRituals } from "./digital-rituals";
 
 type Props = { slug: string; site: PublicSite; code: string };
 
@@ -542,6 +543,16 @@ export function CemeterySiteMemorial({ slug, site, code }: Props) {
           </div>
         )}
       </section>
+
+      {/* Gamified digital rituals — candles, flowers, voice prayers. We
+          deliberately gate on `!memorial.locked`: rituals appear only when
+          the visitor has been granted view access to the memorial content
+          (visibility "open", or "basic"/"private" with the PIN unlocked).
+          A locked memorial never reveals any tribute wall, so PIN-gated
+          memorials remain truly private. */}
+      {!memorial.locked ? (
+        <DigitalRituals slug={slug} code={code} deceasedName={memorial.deceasedName} />
+      ) : null}
 
       {/* Visit / location card */}
       {(memorial.cemeteryAddress || (memorial.plotLatitude && memorial.plotLongitude)) ? (

@@ -5,6 +5,7 @@ export * from "./burials";
 export * from "./burialFamilyLinks";
 export * from "./bookings";
 export * from "./memorials";
+export * from "./memorialRituals";
 export * from "./workOrders";
 export * from "./qrCodes";
 export * from "./obituaries";

@@ -23,6 +23,7 @@ import invoicesRouter from "./invoices";
 import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
+import memorialRitualsRouter from "./memorialRituals";
 import adminRouter from "./admin";
 import { vendorPublicRouter, vendorAuthedRouter } from "./vendors";
 import { requireAuth, requireOrgUser, requireVendor } from "../lib/auth";
@@ -39,6 +40,7 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(publicApiRouter);
 router.use(cemeterySitesRouter);
+router.use(memorialRitualsRouter);
 // Public marketplace-vendor surface: signup, directory, public detail,
 // and family request submission. The vendor-authed endpoints sit on a
 // separate router gated by `requireVendor` further down.

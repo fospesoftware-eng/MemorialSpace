@@ -253,6 +253,79 @@ export function useUpdatePublicMemorial(slug: string, code: string) {
   });
 }
 
+// --- Digital rituals (gamified memory experience) -------------------------
+export type RitualType = "candle" | "flower" | "prayer";
+
+export type PublicRitual = {
+  id: number;
+  type: RitualType;
+  variant: string | null;
+  visitorName: string | null;
+  message: string | null;
+  audioDataUrl: string | null;
+  audioDurationMs: number | null;
+  createdAt: string;
+  expiresAt: string;
+  isActive: boolean;
+};
+
+export type RitualTotals = Record<RitualType, { active: number; total: number }>;
+
+export type RitualsResponse = {
+  rituals: PublicRitual[];
+  totals: RitualTotals;
+  types: readonly RitualType[];
+};
+
+export function useMemorialRituals(slug: string, code: string) {
+  return useQuery({
+    queryKey: ["memorial-rituals", slug, code],
+    queryFn: () =>
+      get<RitualsResponse>(
+        `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}/rituals`,
+      ),
+    enabled: !!slug && !!code,
+    // Live wall — refetch periodically so visitors see candles as they're lit.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export type CreateRitualPayload = {
+  type: RitualType;
+  variant?: string | null;
+  visitorName?: string | null;
+  message?: string | null;
+  audioDataUrl?: string | null;
+  audioDurationMs?: number | null;
+};
+
+export function useCreateRitual(slug: string, code: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateRitualPayload) => {
+      const res = await fetch(
+        `${BASE}/api/c/${encodeURIComponent(slug)}/memorial/${encodeURIComponent(code)}/rituals`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const err = new Error(body || `${res.status}`) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
+      }
+      return res.json() as Promise<{ ritual: PublicRitual }>;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["memorial-rituals", slug, code] });
+    },
+  });
+}
+
 export type SubmitOrderPayload = {
   customerName: string;
   customerEmail: string;

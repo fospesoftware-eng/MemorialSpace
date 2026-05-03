@@ -1,0 +1,295 @@
+/* Digital Rituals — animated styles for the gamified memorial wall.
+ * All colours are pulled from theme variables so light/dark themes work.
+ * Animations are paused under prefers-reduced-motion. */
+
+.rituals-root {
+  --candle-body: #f3ead4;
+  --candle-shadow: rgba(255, 167, 56, 0.45);
+}
+
+/* --- candle wall ---------------------------------------------------------- */
+.candle-wall {
+  position: relative;
+  overflow: hidden;
+}
+
+.candle-cell {
+  animation: candle-rise 600ms ease-out backwards;
+}
+
+.candle-stage {
+  position: relative;
+  width: 56px;
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  filter: drop-shadow(0 6px 16px var(--candle-shadow));
+  animation: candle-bob 4500ms ease-in-out infinite;
+}
+
+.candle-body {
+  width: 22px;
+  height: 56px;
+  background: linear-gradient(180deg, #fff8ea 0%, var(--candle-body) 50%, #d6c8a0 100%);
+  border-radius: 4px 4px 2px 2px;
+  position: relative;
+  box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.08), inset 2px 0 4px rgba(255, 255, 255, 0.6);
+}
+
+.candle-base {
+  width: 36px;
+  height: 6px;
+  margin-top: -2px;
+  background: linear-gradient(180deg, #c2b48a 0%, #8e7f5a 100%);
+  border-radius: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.wick {
+  width: 2px;
+  height: 6px;
+  background: #2a1f12;
+  margin-bottom: -2px;
+  position: relative;
+  z-index: 2;
+}
+
+.flame {
+  position: absolute;
+  bottom: 60px; /* sits above the wick */
+  width: 16px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.flame-core {
+  position: absolute;
+  width: 10px;
+  height: 18px;
+  background: radial-gradient(
+    ellipse at 50% 75%,
+    #fff7c0 0%,
+    var(--flame-color, #ffcf6b) 45%,
+    #ff8a3d 80%,
+    rgba(255, 90, 30, 0) 100%
+  );
+  border-radius: 50% 50% 35% 35% / 60% 60% 40% 40%;
+  filter: blur(0.4px);
+  transform-origin: center bottom;
+  animation: flame-flicker 220ms ease-in-out infinite alternate,
+    flame-sway 2300ms ease-in-out infinite;
+}
+
+.flame-glow {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 200, 90, 0.55) 0%,
+    rgba(255, 200, 90, 0.18) 40%,
+    transparent 70%
+  );
+  filter: blur(4px);
+  animation: flame-glow 2500ms ease-in-out infinite;
+}
+
+/* Highlight the just-added candle for a few seconds */
+.candle-highlight .candle-stage {
+  animation: candle-bob 4500ms ease-in-out infinite,
+    candle-celebrate 1800ms ease-out 1;
+}
+
+@keyframes candle-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes candle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes flame-flicker {
+  0% { transform: scale(0.95, 1.02) translateX(-0.3px); opacity: 0.92; }
+  100% { transform: scale(1.05, 0.95) translateX(0.5px); opacity: 1; }
+}
+
+@keyframes flame-sway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+
+@keyframes flame-glow {
+  0%, 100% { opacity: 0.55; transform: scale(0.95); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+
+@keyframes candle-celebrate {
+  0% { transform: scale(1) translateY(0); }
+  30% { transform: scale(1.18) translateY(-4px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+/* --- flower garden -------------------------------------------------------- */
+.flower-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  position: relative;
+  overflow: hidden;
+  animation: flower-bloom 700ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transition: transform 250ms ease;
+}
+
+.flower-cell:hover {
+  transform: translateY(-2px);
+}
+
+.flower-emoji {
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+  animation: flower-sway 5000ms ease-in-out infinite;
+}
+
+.flower-highlight {
+  animation: flower-bloom 700ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    flower-celebrate 1800ms ease-out 1;
+}
+
+@keyframes flower-bloom {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes flower-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+@keyframes flower-celebrate {
+  0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.55); }
+  100% { box-shadow: 0 0 0 16px rgba(236, 72, 153, 0); }
+}
+
+/* --- prayer wall ---------------------------------------------------------- */
+.prayer-card {
+  padding: 1rem 1.1rem;
+  animation: prayer-fade 500ms ease-out backwards;
+}
+
+.prayer-highlight {
+  animation: prayer-fade 500ms ease-out, prayer-celebrate 2000ms ease-out 1;
+}
+
+.prayer-avatar {
+  height: 36px;
+  width: 36px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+@keyframes prayer-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes prayer-celebrate {
+  0% { box-shadow: 0 0 0 0 hsla(var(--site-primary, 0 0% 50%), 0.45); }
+  100% { box-shadow: 0 0 0 14px hsla(var(--site-primary, 0 0% 50%), 0); }
+}
+
+/* Animated waveform — bars dance while the audio is playing. */
+.prayer-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  flex: 1;
+  overflow: hidden;
+}
+.prayer-waveform .bar {
+  width: 3px;
+  background: hsl(var(--site-primary));
+  border-radius: 2px;
+  height: 30%;
+  opacity: 0.55;
+  transition: height 200ms ease;
+}
+.prayer-waveform .bar.bar-active {
+  animation: wave-pulse 800ms ease-in-out infinite;
+}
+
+@keyframes wave-pulse {
+  0%, 100% { height: 25%; opacity: 0.55; }
+  50% { height: 95%; opacity: 1; }
+}
+
+/* --- compose dialog ------------------------------------------------------- */
+.ritual-compose-card {
+  animation: compose-slide-up 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes compose-slide-up {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- recorder dot --------------------------------------------------------- */
+.record-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #c0392b;
+  box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.7);
+  animation: record-pulse 1100ms ease-out infinite;
+}
+@keyframes record-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.7); }
+  100% { box-shadow: 0 0 0 12px rgba(192, 57, 43, 0); }
+}
+
+/* --- CTA glow ------------------------------------------------------------- */
+.ritual-cta-glow {
+  position: relative;
+}
+.ritual-cta-glow::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: radial-gradient(circle, hsla(var(--site-primary), 0.35) 0%, transparent 70%);
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0.7;
+  animation: cta-pulse 3000ms ease-in-out infinite;
+}
+@keyframes cta-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+/* --- reduced motion ------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .candle-stage,
+  .flame-core,
+  .flame-glow,
+  .flower-emoji,
+  .prayer-waveform .bar.bar-active,
+  .record-dot,
+  .ritual-cta-glow::after {
+    animation: none !important;
+  }
+}
