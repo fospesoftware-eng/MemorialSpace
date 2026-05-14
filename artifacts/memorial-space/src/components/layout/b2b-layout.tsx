@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import logoDark from "@assets/ChatGPT_Image_May_14,_2026,_02_00_07_PM_(1)_(1)_1778747500894.png";
 import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote, CreditCard } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -83,9 +84,13 @@ function SidebarContent() {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-        <a href="/" className="flex items-center gap-2 text-primary">
-          <Award className="h-6 w-6" />
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">MemorialSpace</span>
+        <a href="/" className="flex items-center">
+          <img
+            src={logoDark}
+            alt="MemorialSpace"
+            className="h-9 w-auto select-none"
+            draggable={false}
+          />
         </a>
       </div>
 
