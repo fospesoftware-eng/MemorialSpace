@@ -20,11 +20,8 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-3">
-            <img src={logoMark} alt="MemorialSpace" className="h-10 w-auto select-none" draggable={false} />
-            <div className="hidden sm:block border-l border-border/60 pl-3">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest">For Cemeteries</div>
-            </div>
+          <Link href="/" className="flex items-center">
+            <img src={logoMark} alt="MemorialSpace" className="h-14 w-auto select-none" draggable={false} />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
@@ -81,7 +78,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2">
               <div className="flex items-center mb-4">
-                <img src={logoMark} alt="MemorialSpace" className="h-9 w-auto select-none" draggable={false} />
+                <img src={logoMark} alt="MemorialSpace" className="h-12 w-auto select-none" draggable={false} />
               </div>
               <p className="text-sm text-muted-foreground max-w-md">The complete platform for cemeteries to manage operations, honor lives, and serve families with dignity.</p>
             </div>
