@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { Award, Menu } from "lucide-react";
+import logoMark from "@assets/ChatGPT_Image_May_14,_2026,_02_00_07_PM_(1)_(1)_1778747500894.png";
+import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,12 +20,9 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-primary to-[#2d5f3f] flex items-center justify-center shadow-lg shadow-primary/20">
-              <Award className="h-5 w-5 text-background" />
-            </div>
-            <div>
-              <div className="font-bold text-base leading-tight">MemorialSpace</div>
+          <Link href="/" className="flex items-center gap-3">
+            <img src={logoMark} alt="MemorialSpace" className="h-10 w-auto select-none" draggable={false} />
+            <div className="hidden sm:block border-l border-border/60 pl-3">
               <div className="text-[10px] text-muted-foreground uppercase tracking-widest">For Cemeteries</div>
             </div>
           </Link>
@@ -82,11 +80,8 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 py-12">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-[#2d5f3f] flex items-center justify-center">
-                  <Award className="h-4 w-4 text-background" />
-                </div>
-                <span className="font-bold">MemorialSpace</span>
+              <div className="flex items-center mb-4">
+                <img src={logoMark} alt="MemorialSpace" className="h-9 w-auto select-none" draggable={false} />
               </div>
               <p className="text-sm text-muted-foreground max-w-md">The complete platform for cemeteries to manage operations, honor lives, and serve families with dignity.</p>
             </div>
