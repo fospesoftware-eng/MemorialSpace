@@ -290,6 +290,12 @@ function Router() {
       <Route path="/tutorial/family">
         <SaasMarketingRoutes><TutorialFamilyPage /></SaasMarketingRoutes>
       </Route>
+      <Route path="/shop">
+        <SaasMarketingRoutes><PublicShop /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/store">
+        <SaasMarketingRoutes><PublicShop /></SaasMarketingRoutes>
+      </Route>
       <Route path="/">
         <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>
       </Route>

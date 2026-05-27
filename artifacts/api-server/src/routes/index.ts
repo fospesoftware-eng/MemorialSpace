@@ -17,7 +17,7 @@ import expenseCategoriesRouter from "./expenseCategories";
 import expensesRouter from "./expenses";
 import qrCodesRouter from "./qrCodes";
 import obituariesRouter from "./obituaries";
-import marketplaceRouter from "./marketplace";
+import marketplaceRouter, { marketplacePublicRouter, marketplaceAdminRouter } from "./marketplace";
 import dashboardRouter from "./dashboard";
 import publicApiRouter from "./publicApi";
 import aiMapRouter from "./aiMap";
@@ -54,6 +54,7 @@ router.use(memorialRitualsRouter);
 // and family request submission. The vendor-authed endpoints sit on a
 // separate router gated by `requireVendor` further down.
 router.use(vendorPublicRouter);
+router.use(marketplacePublicRouter);
 
 // --- Vendor-authenticated surface --------------------------------------------
 // Path-scoped to `/vendor/*` so `requireVendor` ONLY fires for vendor-tier
@@ -99,7 +100,7 @@ orgRouter.use(expenseCategoriesRouter);
 orgRouter.use(expensesRouter);
 orgRouter.use(qrCodesRouter);
 orgRouter.use(obituariesRouter);
-orgRouter.use(marketplaceRouter);
+orgRouter.use(marketplaceAdminRouter);
 orgRouter.use(dashboardRouter);
 orgRouter.use(columbariaRouter);
 orgRouter.use(mausoleumsRouter);

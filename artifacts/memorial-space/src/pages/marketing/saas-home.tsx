@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +7,141 @@ import { AnimatedHeroBackground } from "@/components/animated-hero-bg";
 import {
   Map, QrCode, Users, ShoppingBag, FileText, Calendar,
   ArrowRight, Check, Sparkles, BarChart3,
-  Search, Zap, Globe, Star,
+  Search, Zap, Globe, Star, Flower2, Package, Wrench,
 } from "lucide-react";
 import { MARKETING_PLANS } from "./_plans";
+
+/* ------------------------------------------------------------------ */
+/*  Featured Store — lightweight fetch for the marketing homepage      */
+/* ------------------------------------------------------------------ */
+
+const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
+type StoreProduct = {
+  id: number;
+  name: string;
+  description: string | null;
+  category: string;
+  price: number;
+  imageUrl: string | null;
+  inStock: boolean;
+};
+
+function useFeaturedProducts(limit = 6) {
+  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BASE}/api/marketplace/products`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: StoreProduct[]) => {
+        if (cancelled) return;
+        const shuffled = data.sort(() => 0.5 - Math.random());
+        setProducts(shuffled.slice(0, limit));
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [limit]);
+
+  return { products, isLoading };
+}
+
+const categoryMeta: Record<string, { icon: typeof Flower2; label: string }> = {
+  flowers: { icon: Flower2, label: "Flowers" },
+  urns: { icon: Package, label: "Urns" },
+  services: { icon: Wrench, label: "Services" },
+  other: { icon: ShoppingBag, label: "Memorials" },
+};
+
+function FeaturedStore() {
+  const { products, isLoading } = useFeaturedProducts(6);
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Card key={i} className="h-80 animate-pulse bg-muted" />
+        ))}
+      </div>
+    );
+  }
+
+  if (products.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <ShoppingBag className="h-10 w-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm">Store products will appear here once available.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {products.map((p) => {
+        const meta = categoryMeta[p.category] ?? { icon: ShoppingBag, label: p.category };
+        const Icon = meta.icon;
+        return (
+          <Card
+            key={p.id}
+            className="group overflow-hidden border-border/60 bg-card hover:border-primary/40 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            {p.imageUrl ? (
+              <div className="h-48 overflow-hidden">
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </div>
+            ) : (
+              <div className="h-48 bg-muted flex items-center justify-center">
+                <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
+              </div>
+            )}
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <h3 className="font-semibold text-sm">{p.name}</h3>
+                  <div className="flex items-center gap-1 mt-1">
+                    <Badge variant="outline" className="text-[11px] flex items-center gap-1">
+                      <Icon className="h-3 w-3" />
+                      {meta.label}
+                    </Badge>
+                  </div>
+                </div>
+                <span className="font-bold text-primary shrink-0 text-sm">
+                  ${p.price.toFixed(2)}
+                </span>
+              </div>
+              {p.description && (
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
+                  {p.description}
+                </p>
+              )}
+              <Button
+                asChild
+                size="sm"
+                className="w-full"
+                variant={p.inStock ? "default" : "outline"}
+                disabled={!p.inStock}
+              >
+                <Link href="/shop">
+                  {p.inStock ? "View in Store" : "Out of Stock"}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 const features = [
   { icon: Map, title: "Interactive Plot Mapping", desc: "GeoJSON-powered memorial space maps with real-time status: available, reserved, occupied, maintenance.", color: "from-emerald-500/20 to-emerald-500/5" },
@@ -124,8 +257,29 @@ export default function SaasHome() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* Featured Store */}
       <section className="py-24 px-4 bg-card/30 border-y border-border/40">
+        <div className="container mx-auto max-w-6xl">
+          <div className="text-center mb-16">
+            <Badge variant="outline" className="mb-4">Memorial Store</Badge>
+            <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4">Flowers, urns, and remembrance</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              A curated selection of memorial products and services. Browse, order, and have them delivered to the gravesite.
+            </p>
+          </div>
+
+          <FeaturedStore />
+
+          <div className="text-center mt-10">
+            <Button asChild variant="outline" size="lg">
+              <Link href="/shop">Browse the full store<ArrowRight className="h-4 w-4 ml-2" /></Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="py-24 px-4">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4">From paper records to a living digital archive</h2>
