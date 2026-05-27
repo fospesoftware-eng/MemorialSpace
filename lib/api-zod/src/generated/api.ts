@@ -21,6 +21,16 @@ export const ListOrganizationsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -43,6 +53,10 @@ export const ListOrganizationsResponse = zod.array(
 export const CreateOrganizationBody = zod.object({
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .optional(),
+  featuresColumbarium: zod.boolean().optional(),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -65,6 +79,16 @@ export const GetOrganizationResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -88,6 +112,10 @@ export const UpdateOrganizationParams = zod.object({
 export const UpdateOrganizationBody = zod.object({
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .optional(),
+  featuresColumbarium: zod.boolean().optional(),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -103,6 +131,16 @@ export const UpdateOrganizationResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   slug: zod.string(),
+  cemeteryType: zod
+    .enum(["church", "private", "pet", "municipality", "columbarium"])
+    .describe(
+      "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+    ),
+  featuresColumbarium: zod
+    .boolean()
+    .describe(
+      "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+    ),
   address: zod.string().optional(),
   city: zod.string().optional(),
   country: zod.string().optional(),
@@ -132,11 +170,16 @@ export const ListUsersQueryParams = zod.object({
 
 export const ListUsersResponseItem = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 export const ListUsersResponse = zod.array(ListUsersResponseItem);
@@ -145,10 +188,13 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem);
  * @summary Create a new user
  */
 export const CreateUserBody = zod.object({
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]).optional(),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
 });
 
@@ -161,11 +207,16 @@ export const GetUserParams = zod.object({
 
 export const GetUserResponse = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -177,20 +228,28 @@ export const UpdateUserParams = zod.object({
 });
 
 export const UpdateUserBody = zod.object({
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]).optional(),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
 });
 
 export const UpdateUserResponse = zod.object({
   id: zod.number(),
-  organizationId: zod.number().optional(),
+  organizationId: zod.number(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["admin", "staff", "viewer"]),
+  role: zod.enum(["owner", "admin", "manager", "staff", "viewer"]),
+  status: zod.enum(["active", "invited", "suspended"]),
+  jobTitle: zod.string().optional(),
+  phone: zod.string().optional(),
   avatarUrl: zod.string().optional(),
+  lastActiveAt: zod.coerce.date().optional(),
+  invitedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -699,16 +758,22 @@ export const ListWorkOrdersQueryParams = zod.object({
 export const ListWorkOrdersResponseItem = zod.object({
   id: zod.number(),
   organizationId: zod.number(),
-  plotId: zod.number().optional(),
-  assignedTo: zod.number().optional(),
+  plotId: zod.number().nullish(),
+  assetId: zod.number().nullish(),
+  assignedTo: zod.number().nullish(),
   title: zod.string(),
-  description: zod.string().optional(),
+  description: zod.string().nullish(),
   type: zod.enum(["maintenance", "burial", "cleaning", "inspection", "other"]),
   status: zod.enum(["open", "in_progress", "completed", "cancelled"]),
   priority: zod.enum(["low", "medium", "high", "urgent"]),
-  dueDate: zod.coerce.date().optional(),
-  completedAt: zod.coerce.date().optional(),
+  dueDate: zod.coerce.date().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+  laborHours: zod.string().nullish(),
+  laborCost: zod.string().nullish(),
+  materialsCost: zod.string().nullish(),
+  completionNotes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 export const ListWorkOrdersResponse = zod.array(ListWorkOrdersResponseItem);
 
@@ -717,14 +782,19 @@ export const ListWorkOrdersResponse = zod.array(ListWorkOrdersResponseItem);
  */
 export const CreateWorkOrderBody = zod.object({
   organizationId: zod.number(),
-  plotId: zod.number().optional(),
-  assignedTo: zod.number().optional(),
+  plotId: zod.number().nullish(),
+  assetId: zod.number().nullish(),
+  assignedTo: zod.number().nullish(),
   title: zod.string(),
-  description: zod.string().optional(),
+  description: zod.string().nullish(),
   type: zod.enum(["maintenance", "burial", "cleaning", "inspection", "other"]),
   status: zod.enum(["open", "in_progress", "completed", "cancelled"]),
   priority: zod.enum(["low", "medium", "high", "urgent"]),
-  dueDate: zod.coerce.date().optional(),
+  dueDate: zod.coerce.date().nullish(),
+  laborHours: zod.string().nullish(),
+  laborCost: zod.string().nullish(),
+  materialsCost: zod.string().nullish(),
+  completionNotes: zod.string().nullish(),
 });
 
 /**
@@ -737,16 +807,22 @@ export const GetWorkOrderParams = zod.object({
 export const GetWorkOrderResponse = zod.object({
   id: zod.number(),
   organizationId: zod.number(),
-  plotId: zod.number().optional(),
-  assignedTo: zod.number().optional(),
+  plotId: zod.number().nullish(),
+  assetId: zod.number().nullish(),
+  assignedTo: zod.number().nullish(),
   title: zod.string(),
-  description: zod.string().optional(),
+  description: zod.string().nullish(),
   type: zod.enum(["maintenance", "burial", "cleaning", "inspection", "other"]),
   status: zod.enum(["open", "in_progress", "completed", "cancelled"]),
   priority: zod.enum(["low", "medium", "high", "urgent"]),
-  dueDate: zod.coerce.date().optional(),
-  completedAt: zod.coerce.date().optional(),
+  dueDate: zod.coerce.date().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+  laborHours: zod.string().nullish(),
+  laborCost: zod.string().nullish(),
+  materialsCost: zod.string().nullish(),
+  completionNotes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
@@ -758,29 +834,40 @@ export const UpdateWorkOrderParams = zod.object({
 
 export const UpdateWorkOrderBody = zod.object({
   organizationId: zod.number(),
-  plotId: zod.number().optional(),
-  assignedTo: zod.number().optional(),
+  plotId: zod.number().nullish(),
+  assetId: zod.number().nullish(),
+  assignedTo: zod.number().nullish(),
   title: zod.string(),
-  description: zod.string().optional(),
+  description: zod.string().nullish(),
   type: zod.enum(["maintenance", "burial", "cleaning", "inspection", "other"]),
   status: zod.enum(["open", "in_progress", "completed", "cancelled"]),
   priority: zod.enum(["low", "medium", "high", "urgent"]),
-  dueDate: zod.coerce.date().optional(),
+  dueDate: zod.coerce.date().nullish(),
+  laborHours: zod.string().nullish(),
+  laborCost: zod.string().nullish(),
+  materialsCost: zod.string().nullish(),
+  completionNotes: zod.string().nullish(),
 });
 
 export const UpdateWorkOrderResponse = zod.object({
   id: zod.number(),
   organizationId: zod.number(),
-  plotId: zod.number().optional(),
-  assignedTo: zod.number().optional(),
+  plotId: zod.number().nullish(),
+  assetId: zod.number().nullish(),
+  assignedTo: zod.number().nullish(),
   title: zod.string(),
-  description: zod.string().optional(),
+  description: zod.string().nullish(),
   type: zod.enum(["maintenance", "burial", "cleaning", "inspection", "other"]),
   status: zod.enum(["open", "in_progress", "completed", "cancelled"]),
   priority: zod.enum(["low", "medium", "high", "urgent"]),
-  dueDate: zod.coerce.date().optional(),
-  completedAt: zod.coerce.date().optional(),
+  dueDate: zod.coerce.date().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+  laborHours: zod.string().nullish(),
+  laborCost: zod.string().nullish(),
+  materialsCost: zod.string().nullish(),
+  completionNotes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
@@ -806,6 +893,12 @@ export const ListQrCodesResponseItem = zod.object({
   memorialId: zod.number().optional(),
   qrImageUrl: zod.string().optional(),
   scanCount: zod.number().optional(),
+  editPin: zod
+    .string()
+    .nullish()
+    .describe(
+      "6-digit PIN required to edit the memorial via the public edit page. Operator-visible only.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListQrCodesResponse = zod.array(ListQrCodesResponseItem);
@@ -837,6 +930,12 @@ export const ResolveQrCodeResponse = zod.object({
     memorialId: zod.number().optional(),
     qrImageUrl: zod.string().optional(),
     scanCount: zod.number().optional(),
+    editPin: zod
+      .string()
+      .nullish()
+      .describe(
+        "6-digit PIN required to edit the memorial via the public edit page. Operator-visible only.",
+      ),
     createdAt: zod.coerce.date(),
   }),
   burial: zod
@@ -1206,6 +1305,567 @@ export const GetPlotStatusBreakdownResponse = zod.object({
 });
 
 /**
+ * @summary List customers for an organization
+ */
+export const ListCustomersQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const ListCustomersResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
+
+/**
+ * @summary Create a customer
+ */
+export const CreateCustomerBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get customer by ID
+ */
+export const GetCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCustomerQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetCustomerResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a customer
+ */
+export const UpdateCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateCustomerBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateCustomerResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  addressLine1: zod.string().nullish(),
+  addressLine2: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  country: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a customer
+ */
+export const DeleteCustomerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteCustomerQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List tax rates for an organization
+ */
+export const ListTaxRatesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  includeArchived: zod.coerce.boolean().optional(),
+});
+
+export const ListTaxRatesResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean(),
+  isArchived: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListTaxRatesResponse = zod.array(ListTaxRatesResponseItem);
+
+/**
+ * @summary Create a tax rate
+ */
+export const CreateTaxRateBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean().optional(),
+  isArchived: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a tax rate
+ */
+export const UpdateTaxRateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateTaxRateBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean().optional(),
+  isArchived: zod.boolean().optional(),
+});
+
+export const UpdateTaxRateResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  ratePercent: zod.number(),
+  isDefault: zod.boolean(),
+  isArchived: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete (or archive) a tax rate
+ */
+export const DeleteTaxRateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteTaxRateQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List invoices for an organization
+ */
+export const ListInvoicesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  status: zod
+    .enum(["draft", "issued", "partially_paid", "paid", "voided"])
+    .optional(),
+  customerId: zod.coerce.number().optional(),
+});
+
+export const ListInvoicesResponseItem = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerName: zod.string(),
+      balanceDue: zod.number(),
+    }),
+  );
+export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem);
+
+/**
+ * @summary Create a draft invoice with line items
+ */
+export const CreateInvoiceBody = zod.object({
+  organizationId: zod.number(),
+  customerId: zod.number(),
+  bookingId: zod.number().nullish(),
+  issueDate: zod.string().nullish(),
+  dueDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      description: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      taxRateId: zod.number().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get invoice with line items, payments, and customer
+ */
+export const GetInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+      payments: zod.array(
+        zod.object({
+          id: zod.number(),
+          organizationId: zod.number(),
+          invoiceId: zod.number(),
+          amount: zod.number(),
+          paymentDate: zod.string(),
+          method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+          reference: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+      customer: zod.object({
+        id: zod.number(),
+        organizationId: zod.number(),
+        name: zod.string(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        addressLine1: zod.string().nullish(),
+        addressLine2: zod.string().nullish(),
+        city: zod.string().nullish(),
+        state: zod.string().nullish(),
+        postalCode: zod.string().nullish(),
+        country: zod.string().nullish(),
+        notes: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+      balanceDue: zod.number(),
+    }),
+  );
+
+/**
+ * @summary Update a draft invoice (header + line items)
+ */
+export const UpdateInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateInvoiceBody = zod.object({
+  organizationId: zod.number(),
+  customerId: zod.number(),
+  bookingId: zod.number().nullish(),
+  issueDate: zod.string().nullish(),
+  dueDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      description: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      taxRateId: zod.number().nullish(),
+    }),
+  ),
+});
+
+export const UpdateInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Delete a draft invoice
+ */
+export const DeleteInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary Issue (finalize) a draft invoice — assigns invoice number
+ */
+export const IssueInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const IssueInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const IssueInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Void an invoice (terminal)
+ */
+export const VoidInvoiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const VoidInvoiceQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const VoidInvoiceResponse = zod
+  .object({
+    id: zod.number(),
+    organizationId: zod.number(),
+    customerId: zod.number(),
+    bookingId: zod.number().nullish(),
+    invoiceNumber: zod.string().nullish(),
+    status: zod.enum(["draft", "issued", "partially_paid", "paid", "voided"]),
+    issueDate: zod.string().nullish(),
+    dueDate: zod.string().nullish(),
+    subtotal: zod.number(),
+    taxTotal: zod.number(),
+    total: zod.number(),
+    amountPaid: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          invoiceId: zod.number(),
+          description: zod.string(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          taxRateId: zod.number().nullish(),
+          lineSubtotal: zod.number(),
+          lineTax: zod.number(),
+          lineTotal: zod.number(),
+          position: zod.number(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary List payments
+ */
+export const ListPaymentsQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  invoiceId: zod.coerce.number().optional(),
+});
+
+export const ListPaymentsResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  invoiceId: zod.number(),
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem);
+
+/**
+ * @summary Record a payment against an invoice
+ */
+export const CreatePaymentBody = zod.object({
+  organizationId: zod.number(),
+  invoiceId: zod.number(),
+  amount: zod.number(),
+  paymentDate: zod.string(),
+  method: zod.enum(["cash", "check", "card", "bank_transfer", "other"]),
+  reference: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete a payment (recomputes parent invoice)
+ */
+export const DeletePaymentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeletePaymentQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary AR summary + aging buckets for an organization
+ */
+export const GetAccountingSummaryQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetAccountingSummaryResponse = zod.object({
+  totalOutstanding: zod.number(),
+  totalOverdue: zod.number(),
+  paidThisMonth: zod.number(),
+  invoicedThisMonth: zod.number(),
+  draftCount: zod.number(),
+  issuedCount: zod.number(),
+  overdueCount: zod.number(),
+  paidCount: zod.number(),
+  aging: zod.array(
+    zod.object({
+      label: zod.string(),
+      count: zod.number(),
+      amount: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Public grave search by name
  */
 export const PublicGraveSearchQueryParams = zod.object({
@@ -1250,6 +1910,16 @@ export const PublicGraveSearchResponseItem = zod.object({
     id: zod.number(),
     name: zod.string(),
     slug: zod.string(),
+    cemeteryType: zod
+      .enum(["church", "private", "pet", "municipality", "columbarium"])
+      .describe(
+        "Type of cemetery chosen at signup. Drives module visibility (e.g. enables the Columbarium module).",
+      ),
+    featuresColumbarium: zod
+      .boolean()
+      .describe(
+        "True if this cemetery operates a columbarium. Always true when cemeteryType=columbarium; opt-in for cemeteryType=church.",
+      ),
     address: zod.string().optional(),
     city: zod.string().optional(),
     country: zod.string().optional(),
@@ -1302,3 +1972,610 @@ export const ListPublicObituariesResponseItem = zod.object({
 export const ListPublicObituariesResponse = zod.array(
   ListPublicObituariesResponseItem,
 );
+
+/**
+ * @summary List assets
+ */
+export const ListAssetsQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+  type: zod.coerce.string().optional(),
+});
+
+export const ListAssetsResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["equipment", "vehicle", "area", "building", "tool", "other"]),
+  location: zod.string().nullish(),
+  serialNumber: zod.string().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  status: zod.enum(["active", "maintenance", "retired"]),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListAssetsResponse = zod.array(ListAssetsResponseItem);
+
+/**
+ * @summary Create an asset
+ */
+export const CreateAssetBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["equipment", "vehicle", "area", "building", "tool", "other"]),
+  location: zod.string().nullish(),
+  serialNumber: zod.string().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  status: zod.enum(["active", "maintenance", "retired"]).optional(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get asset by ID
+ */
+export const GetAssetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAssetQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetAssetResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["equipment", "vehicle", "area", "building", "tool", "other"]),
+  location: zod.string().nullish(),
+  serialNumber: zod.string().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  status: zod.enum(["active", "maintenance", "retired"]),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update an asset
+ */
+export const UpdateAssetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAssetBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["equipment", "vehicle", "area", "building", "tool", "other"]),
+  location: zod.string().nullish(),
+  serialNumber: zod.string().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  status: zod.enum(["active", "maintenance", "retired"]).optional(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateAssetResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["equipment", "vehicle", "area", "building", "tool", "other"]),
+  location: zod.string().nullish(),
+  serialNumber: zod.string().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  status: zod.enum(["active", "maintenance", "retired"]),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete an asset
+ */
+export const DeleteAssetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteAssetQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List maintenance schedules
+ */
+export const ListMaintenanceSchedulesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  assetId: zod.coerce.number().optional(),
+  isActive: zod.coerce.boolean().optional(),
+});
+
+export const ListMaintenanceSchedulesResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  assetId: zod.number().nullish(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  frequency: zod.enum([
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "custom",
+  ]),
+  intervalDays: zod.number(),
+  lastPerformedAt: zod.coerce.date().nullish(),
+  nextDueAt: zod.coerce.date().nullish(),
+  assignedTo: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListMaintenanceSchedulesResponse = zod.array(
+  ListMaintenanceSchedulesResponseItem,
+);
+
+/**
+ * @summary Create a maintenance schedule
+ */
+export const CreateMaintenanceScheduleBody = zod.object({
+  organizationId: zod.number(),
+  assetId: zod.number().nullish(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  frequency: zod.enum([
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "custom",
+  ]),
+  intervalDays: zod.number(),
+  lastPerformedAt: zod.coerce.date().nullish(),
+  nextDueAt: zod.coerce.date().nullish(),
+  assignedTo: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]).optional(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Get a maintenance schedule
+ */
+export const GetMaintenanceScheduleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetMaintenanceScheduleQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetMaintenanceScheduleResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  assetId: zod.number().nullish(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  frequency: zod.enum([
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "custom",
+  ]),
+  intervalDays: zod.number(),
+  lastPerformedAt: zod.coerce.date().nullish(),
+  nextDueAt: zod.coerce.date().nullish(),
+  assignedTo: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a maintenance schedule
+ */
+export const UpdateMaintenanceScheduleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateMaintenanceScheduleBody = zod.object({
+  organizationId: zod.number(),
+  assetId: zod.number().nullish(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  frequency: zod.enum([
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "custom",
+  ]),
+  intervalDays: zod.number(),
+  lastPerformedAt: zod.coerce.date().nullish(),
+  nextDueAt: zod.coerce.date().nullish(),
+  assignedTo: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]).optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateMaintenanceScheduleResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  assetId: zod.number().nullish(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  frequency: zod.enum([
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "custom",
+  ]),
+  intervalDays: zod.number(),
+  lastPerformedAt: zod.coerce.date().nullish(),
+  nextDueAt: zod.coerce.date().nullish(),
+  assignedTo: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a maintenance schedule
+ */
+export const DeleteMaintenanceScheduleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteMaintenanceScheduleQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary Generate a work order from a schedule and advance its next-due date
+ */
+export const GenerateMaintenanceWorkOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GenerateMaintenanceWorkOrderBody = zod.object({
+  organizationId: zod.number(),
+});
+
+/**
+ * @summary List comments for a work order
+ */
+export const ListWorkOrderCommentsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListWorkOrderCommentsQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const ListWorkOrderCommentsResponseItem = zod.object({
+  id: zod.number(),
+  workOrderId: zod.number(),
+  userId: zod.number().nullish(),
+  authorName: zod.string().nullish(),
+  body: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListWorkOrderCommentsResponse = zod.array(
+  ListWorkOrderCommentsResponseItem,
+);
+
+/**
+ * @summary Add a comment to a work order
+ */
+export const CreateWorkOrderCommentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateWorkOrderCommentBody = zod.object({
+  authorName: zod.string().nullish(),
+  body: zod.string(),
+});
+
+/**
+ * @summary List expense categories
+ */
+export const ListExpenseCategoriesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+});
+
+export const ListExpenseCategoriesResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  color: zod.string(),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListExpenseCategoriesResponse = zod.array(
+  ListExpenseCategoriesResponseItem,
+);
+
+/**
+ * @summary Create an expense category
+ */
+export const CreateExpenseCategoryBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  color: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update an expense category
+ */
+export const UpdateExpenseCategoryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateExpenseCategoryBody = zod.object({
+  organizationId: zod.number(),
+  name: zod.string(),
+  color: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateExpenseCategoryResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  name: zod.string(),
+  color: zod.string(),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete an expense category
+ */
+export const DeleteExpenseCategoryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteExpenseCategoryQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary List expenses
+ */
+export const ListExpensesQueryParams = zod.object({
+  organizationId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+  categoryId: zod.coerce.number().optional(),
+});
+
+export const ListExpensesResponseItem = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListExpensesResponse = zod.array(ListExpensesResponseItem);
+
+/**
+ * @summary Create an expense
+ */
+export const CreateExpenseBody = zod.object({
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]).optional(),
+  submittedBy: zod.number().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get an expense
+ */
+export const GetExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetExpenseQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+export const GetExpenseResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update an expense
+ */
+export const UpdateExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateExpenseBody = zod.object({
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]).optional(),
+  submittedBy: zod.number().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateExpenseResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete an expense
+ */
+export const DeleteExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteExpenseQueryParams = zod.object({
+  organizationId: zod.coerce.number(),
+});
+
+/**
+ * @summary Approve an expense
+ */
+export const ApproveExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApproveExpenseBody = zod.object({
+  organizationId: zod.number(),
+  approvedBy: zod.number().nullish(),
+});
+
+export const ApproveExpenseResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Reject an expense
+ */
+export const RejectExpenseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectExpenseBody = zod.object({
+  organizationId: zod.number(),
+  approvedBy: zod.number().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const RejectExpenseResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Mark an expense as paid
+ */
+export const MarkExpensePaidParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkExpensePaidBody = zod.object({
+  organizationId: zod.number(),
+});
+
+export const MarkExpensePaidResponse = zod.object({
+  id: zod.number(),
+  organizationId: zod.number(),
+  categoryId: zod.number().nullish(),
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string().nullish(),
+  description: zod.string(),
+  amount: zod.string(),
+  expenseDate: zod.coerce.date(),
+  paymentMethod: zod.enum(["cash", "card", "check", "transfer", "other"]),
+  receiptUrl: zod.string().nullish(),
+  status: zod.enum(["pending", "approved", "rejected", "paid"]),
+  submittedBy: zod.number().nullish(),
+  approvedBy: zod.number().nullish(),
+  approvedAt: zod.coerce.date().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});

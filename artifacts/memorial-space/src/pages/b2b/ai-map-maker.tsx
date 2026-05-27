@@ -18,7 +18,26 @@ import {
 
 // ---------- PDF rendering (lazy) ----------
 
-interface PdfRenderResult { dataUrl: string; width: number; height: number; pageCount: number }
+/**
+ * Optional PDF text item extracted from a vector PDF, normalised to [0..1]
+ * in the *rendered image* coordinate system. Used by the AI Map Maker
+ * "grid plan" mode so each detected plot rectangle can be labelled with the
+ * names / dates printed inside it — no OCR, perfect accuracy.
+ */
+interface PdfTextItem { text: string; x: number; y: number; w: number; h: number }
+
+interface PdfRenderResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+  pageCount: number;
+  /**
+   * Word-level text positions extracted from the same page, in normalised
+   * image coordinates. Empty when the PDF page has no extractable vector
+   * text (e.g. scanned-image-only PDFs).
+   */
+  textItems: PdfTextItem[];
+}
 
 async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<PdfRenderResult> {
   const pdfjs = await import("pdfjs-dist");
@@ -31,12 +50,16 @@ async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<P
   const safePage = Math.min(Math.max(1, pageNumber), pdf.numPages);
   const page = await pdf.getPage(safePage);
 
-  // Pick a render scale that lands near 1600px on the longer edge,
-  // matching what the rest of the editor uses.
+  // Render PDFs at ~2400px long edge so the server's grid pipeline can
+  // separate the small plot rectangles in dense vector plans (a 60×30 pdf
+  // plot drops to ~10×5px at 1600px and stops being separable). Raster
+  // image uploads keep their existing 1600px target — they're processed
+  // by the colour-section pipeline which is happy at lower res. The 2400
+  // JPEG lands around 700-900 KB, well under the 12 MB body limit.
   const baseViewport = page.getViewport({ scale: 1 });
   const longEdge = Math.max(baseViewport.width, baseViewport.height);
-  const targetLongEdge = 1600;
-  const scale = Math.max(0.5, Math.min(3, targetLongEdge / longEdge));
+  const targetLongEdge = 2400;
+  const scale = Math.max(0.5, Math.min(4, targetLongEdge / longEdge));
   const viewport = page.getViewport({ scale });
 
   const canvas = document.createElement("canvas");
@@ -50,11 +73,50 @@ async function renderPdfPageToDataUrl(file: File, pageNumber: number): Promise<P
 
   await page.render({ canvasContext: ctx, viewport }).promise;
 
+  // Extract vector text + positions from the same page. PDF user space has
+  // Y going UP from the bottom; pdfjs gives us the text baseline origin in
+  // PDF space (tx[4], tx[5]) and a `width` in the same space. We normalise
+  // to [0..1] using the base (scale=1) viewport — the rendering scale
+  // cancels, so the same numbers map 1:1 onto the rendered image.
+  const textItems: PdfTextItem[] = [];
+  try {
+    const content = await page.getTextContent();
+    const pdfW = baseViewport.width;
+    const pdfH = baseViewport.height;
+    for (const it of content.items) {
+      // Skip TextMarkedContent items (no .str, no .transform).
+      if (!("str" in it) || !("transform" in it)) continue;
+      const text = it.str;
+      if (!text || !text.trim()) continue;
+      const tx = it.transform;
+      // tx = [a, b, c, d, e, f] — a/d are the font size when there's no
+      // rotation/skew, which is the case for the cemetery PDFs we ingest.
+      const fontSize = Math.abs(tx[3] || tx[0]) || 12;
+      const xPdf = tx[4];
+      const yBaseline = tx[5];
+      // Image-space top-of-glyph: flip y, subtract one font size to go from
+      // baseline up to the top of the cap-height.
+      const yTop = pdfH - yBaseline - fontSize;
+      if (!Number.isFinite(xPdf) || !Number.isFinite(yTop)) continue;
+      textItems.push({
+        text,
+        x: xPdf / pdfW,
+        y: yTop / pdfH,
+        w: it.width / pdfW,
+        h: fontSize / pdfH,
+      });
+    }
+  } catch {
+    // Some PDFs (scanned images) have no extractable text — that's fine,
+    // the server will fall back to colour-section detection.
+  }
+
   return {
     dataUrl: canvas.toDataURL("image/jpeg", 0.9),
     width: canvas.width,
     height: canvas.height,
     pageCount: pdf.numPages,
+    textItems,
   };
 }
 
@@ -67,16 +129,30 @@ interface DetectedPlot {
   x: number; y: number; w: number; h: number; // normalised 0..1, bounding box
   /** Optional polygon outline (normalised 0..1 vertices, in perimeter order). */
   points?: [number, number][];
+  /** Text extracted from inside the marker (names, dates, inscriptions). */
+  textInside?: string;
+  birthYear?: string;
+  deathYear?: string;
+  gridRef?: string;
 }
 interface DetectedSpot {
   label: string;
   spotTypeId: string;
   x: number; y: number; // normalised 0..1
+  /** AI-detected symbol category: sign, handicap, manhole, utility, legend, tree, bench, other. */
+  symbolType?: string;
 }
 interface DetectionResult {
   plots: DetectedPlot[];
   spots: DetectedSpot[];
   notes?: string;
+  /** Rich metadata from full AI vision detection. */
+  boundary?: { points: [number, number][] };
+  roads?: { label: string; points: [number, number][] }[];
+  gridReferences?: { rows: string[]; columns: string[] };
+  scale?: string;
+  orientation?: string;
+  uncertainText?: string[];
 }
 
 interface SourceImage {
@@ -110,6 +186,13 @@ export default function AiMapMaker() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfPage, setPdfPage] = useState(1);
+  /**
+   * Cached vector-text positions for the currently-rendered PDF page (empty
+   * for non-PDF sources or scanned-image PDFs). Sent alongside the image to
+   * the server so the grid-detection pipeline can label each plot rectangle
+   * with the names / dates printed inside it.
+   */
+  const [pdfTextItems, setPdfTextItems] = useState<PdfTextItem[]>([]);
   const [isRendering, setIsRendering] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
@@ -131,6 +214,7 @@ export default function AiMapMaker() {
     setPdfFile(null);
     setPdfPageCount(0);
     setPdfPage(1);
+    setPdfTextItems([]);
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "AI imported map";
     setMapName(baseName);
@@ -149,10 +233,12 @@ export default function AiMapMaker() {
         const pdf = await renderPdfPageToDataUrl(file, 1);
         setPdfPageCount(pdf.pageCount);
         setPdfPage(1);
-        // Downscale to keep the AI payload reasonable (~<5 MB base64).
-        const scaled = await downscaleImage(pdf.dataUrl, 1600);
+        setPdfTextItems(pdf.textItems);
+        // Keep the PDF render at full ~2400px — the server's grid pipeline
+        // needs the resolution to separate adjacent plots. (For raster
+        // images we still downscale to 1600px below.)
         setSource({
-          dataUrl: scaled.data, width: scaled.width, height: scaled.height,
+          dataUrl: pdf.dataUrl, width: pdf.width, height: pdf.height,
           baseName, origin: pdf.pageCount > 1 ? `PDF page 1 / ${pdf.pageCount}` : "PDF",
         });
       } else {
@@ -211,12 +297,12 @@ export default function AiMapMaker() {
     setResult(null);
     try {
       const pdf = await renderPdfPageToDataUrl(pdfFile, pageNum);
-      const scaled = await downscaleImage(pdf.dataUrl, 1600);
       setSource((s) => s
-        ? { ...s, dataUrl: scaled.data, width: scaled.width, height: scaled.height,
+        ? { ...s, dataUrl: pdf.dataUrl, width: pdf.width, height: pdf.height,
             origin: pdf.pageCount > 1 ? `PDF page ${pageNum} / ${pdf.pageCount}` : "PDF" }
         : s);
       setPdfPage(pageNum);
+      setPdfTextItems(pdf.textItems);
     } catch (err) {
       setError(`Couldn't render that PDF page: ${err instanceof Error ? err.message : "unknown error"}`);
     } finally {
@@ -242,6 +328,10 @@ export default function AiMapMaker() {
           imgHeight: source.height,
           plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
           spotTypes: spotTypes.map((t) => ({ id: t.id, name: t.name })),
+          // When the source is a vector PDF, ship the extracted text
+          // positions so the server can run grid-mode detection and produce
+          // pixel-perfect labelled plots (no Claude vision call needed).
+          ...(pdfTextItems.length > 0 ? { pdfText: pdfTextItems } : {}),
         }),
       });
       if (!res.ok) {
@@ -256,7 +346,7 @@ export default function AiMapMaker() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [source, plotTypes, spotTypes]);
+  }, [source, plotTypes, spotTypes, pdfTextItems]);
 
   // ---- Hand off to the regular Map Maker ----
   const openInMapMaker = useCallback(() => {
@@ -283,6 +373,10 @@ export default function AiMapMaker() {
             Math.max(0, Math.min(h, py * h)),
           ] as [number, number])
         : undefined,
+      textInside: p.textInside,
+      birthYear: p.birthYear,
+      deathYear: p.deathYear,
+      gridRef: p.gridRef,
     }));
 
     const spots: BurialSpot[] = result.spots.map((s) => ({
@@ -291,6 +385,7 @@ export default function AiMapMaker() {
       y: Math.max(0, Math.min(h, s.y * h)),
       name: s.label || "",
       spotTypeId: spotTypes.find((t) => t.id === s.spotTypeId) ? s.spotTypeId : fallbackSpotId,
+      symbolType: s.symbolType,
     }));
 
     const slug = makeSlug(mapName);
@@ -419,7 +514,7 @@ export default function AiMapMaker() {
                 <span className="text-sm text-muted-foreground">{source.width} × {source.height}px</span>
                 <span className="text-sm font-medium">{source.baseName}</span>
                 <div className="flex-1" />
-                <Button variant="ghost" size="sm" onClick={() => { setSource(null); setPdfFile(null); setResult(null); setError(null); }} data-testid="btn-remove-source">
+                <Button variant="ghost" size="sm" onClick={() => { setSource(null); setPdfFile(null); setPdfTextItems([]); setResult(null); setError(null); }} data-testid="btn-remove-source">
                   <X className="h-4 w-4 mr-1.5" /> Remove
                 </Button>
               </div>
@@ -462,6 +557,21 @@ export default function AiMapMaker() {
                     preserveAspectRatio="none"
                     data-testid="detection-overlay"
                   >
+                    {/* Boundary polygon */}
+                    {result.boundary && result.boundary.points.length >= 3 && (
+                      <polygon
+                        points={result.boundary.points.map(([px, py]) => `${px * source.width},${py * source.height}`).join(" ")}
+                        fill="none" stroke="#22c55e" strokeWidth={3} strokeDasharray="6 4" opacity={0.8}
+                      />
+                    )}
+                    {/* Road / path polylines */}
+                    {result.roads && result.roads.map((r, ri) => r.points.length >= 2 && (
+                      <polyline
+                        key={`road${ri}`}
+                        points={r.points.map(([px, py]) => `${px * source.width},${py * source.height}`).join(" ")}
+                        fill="none" stroke="#a1a1aa" strokeWidth={6} strokeLinecap="round" opacity={0.75}
+                      />
+                    ))}
                     {result.plots.map((p, i) => {
                       const t = getPlotType(p.typeId);
                       const labelX = p.x * source.width + 6;
@@ -486,14 +596,14 @@ export default function AiMapMaker() {
                       return (
                         <g key={`p${i}`}>
                           {shape}
-                          {p.label && (
+                          {(p.label || p.gridRef) && (
                             <text
                               x={labelX} y={labelY}
                               fill="#ffffff" stroke="#000000" strokeWidth={3}
                               paintOrder="stroke"
                               fontSize={14} fontWeight={600}
                             >
-                              {p.label}
+                              {p.gridRef ? `${p.label || ""} [${p.gridRef}]` : p.label}
                             </text>
                           )}
                         </g>
@@ -613,6 +723,41 @@ export default function AiMapMaker() {
               </div>
             )}
 
+            {/* Rich metadata from AI vision */}
+            {(result.scale || result.orientation || result.gridReferences || (result.roads && result.roads.length > 0) || (result.uncertainText && result.uncertainText.length > 0)) && (
+              <div className="rounded-md border border-border bg-card/50 p-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Map metadata (AI-extracted)
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {result.scale && (
+                    <span className="text-muted-foreground"><span className="font-medium text-foreground">Scale:</span> {result.scale}</span>
+                  )}
+                  {result.orientation && (
+                    <span className="text-muted-foreground"><span className="font-medium text-foreground">Orientation:</span> {result.orientation}</span>
+                  )}
+                  {result.gridReferences && (result.gridReferences.rows.length > 0 || result.gridReferences.columns.length > 0) && (
+                    <span className="text-muted-foreground">
+                      <span className="font-medium text-foreground">Grid:</span>{" "}
+                      {result.gridReferences.rows.join(",")} × {result.gridReferences.columns.join(",")}
+                    </span>
+                  )}
+                </div>
+                {result.roads && result.roads.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium text-foreground">Roads / paths:</span>{" "}
+                    <span className="text-muted-foreground">{result.roads.map((r) => r.label || "Unnamed").join(", ")}</span>
+                  </div>
+                )}
+                {result.uncertainText && result.uncertainText.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium text-amber-400">Uncertain text:</span>{" "}
+                    <span className="text-muted-foreground">{result.uncertainText.join("; ")}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
                 Map name
@@ -656,10 +801,49 @@ export default function AiMapMaker() {
               )}
             </div>
 
+            {/* Plots with extracted text */}
+            {result.plots.some((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear) && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Plots with extracted text
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Grid</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Text</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Years</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.plots
+                        .filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear)
+                        .slice(0, 50)
+                        .map((p, i) => (
+                          <tr key={i} className="border-t border-border hover:bg-muted/50">
+                            <td className="px-3 py-1.5 text-xs font-mono text-muted-foreground">{p.gridRef || "—"}</td>
+                            <td className="px-3 py-1.5 max-w-[200px] truncate" title={p.textInside}>{p.textInside || p.label || "—"}</td>
+                            <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                              {p.birthYear || p.deathYear ? `${p.birthYear || "?"} – ${p.deathYear || "?"}` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {result.plots.filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear).length > 50 && (
+                    <div className="px-3 py-1.5 text-xs text-muted-foreground border-t border-border">
+                      +{result.plots.filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear).length - 50} more with text
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {result.spots.length > 0 && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Detected burial spots
+                  Detected burial spots &amp; symbols
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {result.spots.slice(0, 12).map((s, i) => {
@@ -669,6 +853,7 @@ export default function AiMapMaker() {
                       <Badge key={i} variant="outline" className="gap-1.5">
                         <Icon className="h-3 w-3" style={{ color: t.color }} />
                         {s.label || t.name}
+                        {s.symbolType && <span className="text-[10px] text-muted-foreground">({s.symbolType})</span>}
                       </Badge>
                     );
                   })}

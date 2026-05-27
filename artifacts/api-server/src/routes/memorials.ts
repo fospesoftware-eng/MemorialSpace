@@ -29,7 +29,7 @@ router.post("/memorials", async (req, res) => {
 router.get("/memorials/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));
-  if (!memorial) return res.status(404).json({ error: "Not found" });
+  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
 });
 
@@ -40,7 +40,7 @@ router.put("/memorials/:id", async (req, res) => {
     ...rest,
     photos: photos ? JSON.stringify(photos) : null,
   }).where(eq(memorialsTable.id, id)).returning();
-  if (!memorial) return res.status(404).json({ error: "Not found" });
+  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
 });
 

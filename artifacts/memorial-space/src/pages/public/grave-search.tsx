@@ -53,7 +53,7 @@ export default function GraveSearch() {
           <div className="text-center text-muted-foreground py-12">
             <Search className="h-16 w-16 mx-auto mb-4 opacity-20" />
             <p className="text-lg">Enter a name above to search burial records</p>
-            <p className="text-sm mt-2">Search across all cemeteries in our network</p>
+            <p className="text-sm mt-2">Search across all memorial spaces in our network</p>
           </div>
         )}
 

@@ -2,6 +2,21 @@ import { useCallback, useEffect, useState } from "react";
 import { Cross, Star, Heart, Shield, Flower2, Flag, Award, Circle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+/**
+ * The geometry a plot type is drawn with by default. Users pick a shape
+ * per plot type in Cemetery Setup; clicking that type in the Map Maker's
+ * palette auto-switches the canvas tool to match.
+ *
+ *   - "rect"    — drag-to-create axis-aligned rectangle (the original behaviour)
+ *   - "circle"  — drag-from-center to define radius
+ *   - "polygon" — click-to-place vertices forming a closed filled shape
+ *   - "path"    — click-to-place flexible polyline (roads, paths, bridges)
+ *
+ * The user can still pick any tool manually from the toolbar; the default
+ * is purely a convenience for the most common shape per type.
+ */
+export type PlotShape = "rect" | "circle" | "polygon" | "path";
+
 export interface PlotType {
   id: string;
   code: string;
@@ -9,6 +24,12 @@ export interface PlotType {
   fill: string;
   stroke: string;
   description?: string;
+  /**
+   * Default drawing shape used when the user picks this type from the
+   * palette. Optional so older saved configs (which predate this field)
+   * keep working — the Map Maker treats `undefined` as "rect".
+   */
+  defaultShape?: PlotShape;
 }
 
 export type SpotIconKey = "cross" | "star" | "heart" | "shield" | "flower" | "flag" | "award" | "circle";
@@ -50,19 +71,42 @@ export interface BurialSpot {
   dob?: string;
   dod?: string;
   spotTypeId: string;
-  headstoneImage?: string;
+  /**
+   * Headstone photographs (front, back, inscription close-up, surrounding
+   * area, etc.). Stored as downscaled data URLs. The legacy single-image
+   * field `headstoneImage` is migrated into the first slot of this array
+   * by `migrateDoc()` so older saved maps continue to work.
+   */
+  headstoneImages?: string[];
   lat?: number;
   lon?: number;
   notes?: string;
+  /** AI-detected symbol category (e.g. sign, handicap, manhole, utility, legend, tree, bench). */
+  symbolType?: string;
 }
 
+/** Hard cap so a single spot can't grow without bound and bust localStorage. */
+export const MAX_HEADSTONE_IMAGES = 8;
+
 export const DEFAULT_PLOT_TYPES: PlotType[] = [
-  { id: "RC",       code: "RC",  name: "Roman Catholic",  fill: "#a8d5d2", stroke: "#5a9290", description: "Catholic section" },
-  { id: "CON",      code: "CON", name: "Consecrated",     fill: "#6ba5a3", stroke: "#3d7572", description: "Consecrated ground" },
-  { id: "FC",       code: "FC",  name: "Free Church",     fill: "#3d6b6a", stroke: "#244442", description: "Non-denominational" },
-  { id: "MU",       code: "MU",  name: "Muslim",          fill: "#8b9bbf", stroke: "#5a6a8c", description: "Muslim section" },
-  { id: "PATH",     code: "PATH",name: "Path / Road",     fill: "#d1d5db", stroke: "#9ca3af", description: "Walkway or road" },
-  { id: "BUILDING", code: "BLD", name: "Building",        fill: "#475569", stroke: "#1e293b", description: "Office, chapel, etc." },
+  // ---- Burial sections ---- (rectangular by default)
+  { id: "RC",         code: "RC",   name: "Roman Catholic",  fill: "#a8d5d2", stroke: "#5a9290", description: "Catholic section",                              defaultShape: "rect" },
+  { id: "CON",        code: "CON",  name: "Consecrated",     fill: "#6ba5a3", stroke: "#3d7572", description: "Consecrated ground",                            defaultShape: "rect" },
+  { id: "FC",         code: "FC",   name: "Free Church",     fill: "#3d6b6a", stroke: "#244442", description: "Non-denominational",                            defaultShape: "rect" },
+  { id: "MU",         code: "MU",   name: "Muslim",          fill: "#8b9bbf", stroke: "#5a6a8c", description: "Muslim section",                                defaultShape: "rect" },
+  // ---- Infrastructure / map features ----
+  // Sensible per-type shape defaults — paths/bridges are flexible polylines,
+  // water bodies and gardens are circles, the rest are rectangles. Users
+  // can override every one of these in Cemetery Setup.
+  { id: "PATH",       code: "PATH", name: "Path / Road",     fill: "#d1d5db", stroke: "#9ca3af", description: "Walkway or vehicle road",                       defaultShape: "path" },
+  { id: "BUILDING",   code: "BLD",  name: "Building",        fill: "#475569", stroke: "#1e293b", description: "Office, chapel, admin",                         defaultShape: "rect" },
+  { id: "COLUMBARIUM",code: "COL",  name: "Columbarium",     fill: "#c4b5fd", stroke: "#6d28d9", description: "Cremation niche structure",                     defaultShape: "rect" },
+  { id: "MAUSOLEUM",  code: "MAU",  name: "Mausoleum",       fill: "#94a3b8", stroke: "#334155", description: "Above-ground tomb structure",                   defaultShape: "rect" },
+  { id: "WATER",      code: "WTR",  name: "Lake / Water",    fill: "#93c5fd", stroke: "#1d4ed8", description: "Pond, lake, stream or other water body",        defaultShape: "circle" },
+  { id: "BRIDGE",     code: "BR",   name: "Bridge",          fill: "#c8a97e", stroke: "#8a6d3b", description: "Pedestrian or vehicle bridge",                  defaultShape: "path" },
+  { id: "GARDEN",     code: "GDN",  name: "Garden / Trees",  fill: "#86efac", stroke: "#15803d", description: "Landscaping, lawn, tree area",                  defaultShape: "circle" },
+  { id: "PARKING",    code: "PRK",  name: "Parking",         fill: "#d6d3d1", stroke: "#78716c", description: "Visitor parking area",                          defaultShape: "rect" },
+  { id: "GATE",       code: "GT",   name: "Gate / Entrance", fill: "#fde68a", stroke: "#a16207", description: "Cemetery entrance or gate",                     defaultShape: "rect" },
 ];
 
 export const DEFAULT_SPOT_TYPES: SpotType[] = [
@@ -95,6 +139,25 @@ export const PLOT_TYPES_KEY = "memorialspace.plot-types";
 export const SPOT_TYPES_KEY = "memorialspace.spot-types";
 export const BACKGROUNDS_KEY = "memorialspace.bg-library";
 export const BACKGROUND_LIBRARY_LIMIT = 6;
+
+// One-shot merge marker for plot-type defaults. When we ship NEW default
+// plot types, add a new entry to PLOT_TYPE_MIGRATIONS keyed by the next
+// integer version, and bump PLOT_TYPES_SEED_VERSION to match. On first
+// load after the bump, only the ids introduced in versions
+// (storedSeed, PLOT_TYPES_SEED_VERSION] get merged into the user's stored
+// list — so we never resurrect a default the user deleted in an earlier
+// release, and we never clobber customisations to existing entries.
+export const PLOT_TYPES_SEED_KEY = "memorialspace.plot-types.seed-version";
+export const PLOT_TYPES_SEED_VERSION = 2;
+
+// Ids introduced at each seed version. v1 is the original 6 (RC, CON, FC,
+// MU, PATH, BUILDING) and is intentionally absent: a brand-new install
+// already gets all defaults via the useStored fallback, and an existing
+// install at seed=1 that's missing one of these legacy ids deleted it on
+// purpose.
+export const PLOT_TYPE_MIGRATIONS: Record<number, readonly string[]> = {
+  2: ["COLUMBARIUM", "MAUSOLEUM", "WATER", "BRIDGE", "GARDEN", "PARKING", "GATE"],
+};
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -148,7 +211,66 @@ export function useStored<T>(key: string, fallback: T): [T, (next: T | ((prev: T
 }
 
 export function usePlotTypes() {
-  return useStored<PlotType[]>(PLOT_TYPES_KEY, DEFAULT_PLOT_TYPES);
+  const result = useStored<PlotType[]>(PLOT_TYPES_KEY, DEFAULT_PLOT_TYPES);
+  const [, setStored] = result;
+
+  // Merge ONLY the ids introduced in each version > storedSeed, exactly
+  // once per release that bumps PLOT_TYPES_SEED_VERSION. Uses a functional
+  // setter so concurrent mounts (map-maker + ai-map-maker + cemetery setup
+  // page can all mount this hook) can't clobber each other's updates with
+  // stale captured state.
+  useEffect(() => {
+    let storedSeed = 1;
+    try {
+      const raw = localStorage.getItem(PLOT_TYPES_SEED_KEY);
+      if (raw) {
+        const parsed = parseInt(raw, 10);
+        if (Number.isFinite(parsed)) storedSeed = parsed;
+      }
+    } catch {
+      /* localStorage unavailable — skip migration */
+      return;
+    }
+    if (storedSeed >= PLOT_TYPES_SEED_VERSION) return;
+
+    // Collect all ids added in versions (storedSeed, PLOT_TYPES_SEED_VERSION].
+    // Defaults removed from DEFAULT_PLOT_TYPES are NOT resurrected because
+    // the migration uses an explicit id list per version, not the full
+    // default catalogue.
+    const idsToAdd: string[] = [];
+    for (let v = storedSeed + 1; v <= PLOT_TYPES_SEED_VERSION; v++) {
+      const ids = PLOT_TYPE_MIGRATIONS[v];
+      if (ids) idsToAdd.push(...ids);
+    }
+    if (idsToAdd.length === 0) {
+      try { localStorage.setItem(PLOT_TYPES_SEED_KEY, String(PLOT_TYPES_SEED_VERSION)); } catch { /* ignore */ }
+      return;
+    }
+
+    setStored((prev) => {
+      const have = new Set(prev.map((t) => t.id));
+      const additions: PlotType[] = [];
+      for (const id of idsToAdd) {
+        if (have.has(id)) continue;
+        const def = DEFAULT_PLOT_TYPES.find((t) => t.id === id);
+        if (def) additions.push(def);
+      }
+      if (additions.length === 0) return prev;
+      return [...prev, ...additions];
+    });
+    // Bump the seed marker only after we've issued the merge. The setter
+    // above is async; if persistence later fails, the worst case is we
+    // re-run an idempotent no-op merge on the next load.
+    try {
+      localStorage.setItem(PLOT_TYPES_SEED_KEY, String(PLOT_TYPES_SEED_VERSION));
+    } catch {
+      /* ignore */
+    }
+    // Run once on mount; merging is a one-shot per seed version.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return result;
 }
 export function useSpotTypes() {
   return useStored<SpotType[]>(SPOT_TYPES_KEY, DEFAULT_SPOT_TYPES);

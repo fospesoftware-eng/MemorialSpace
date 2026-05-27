@@ -1,102 +1,154 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { LifeBuoy, AlertCircle, Clock, CheckCircle2, MessageSquare } from "lucide-react";
-import { format } from "date-fns";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  History,
+  Search,
+  Shield,
+  CreditCard,
+  Building2,
+  Receipt,
+  RefreshCw,
+} from "lucide-react";
+import { useAuditLog } from "./api";
+import { formatDateTime, relativeTime } from "./_shared";
 
-type Ticket = {
-  id: string;
-  subject: string;
-  org: string;
-  contact: string;
-  priority: "urgent" | "high" | "normal" | "low";
-  status: "open" | "in-progress" | "resolved";
-  opened: Date;
-  preview: string;
-};
-
-const tickets: Ticket[] = [
-  { id: "T-2026-0421", subject: "Bulk import of 1,800 historical records failing", org: "Mountainview Funeral Group", contact: "robert.c@mountainview.com", priority: "urgent", status: "in-progress", opened: new Date(2026, 4, 1, 9, 14), preview: "We've tried three times overnight. CSV is UTF-8 with proper headers but rows 401-450 keep erroring..." },
-  { id: "T-2026-0420", subject: "QR codes not redirecting to mobile memorial pages", org: "Greenwood Memorial Park", contact: "margaret@greenwood-memorial.com", priority: "high", status: "open", opened: new Date(2026, 4, 1, 8, 2), preview: "After our last rollout, scanning a QR on iOS opens the desktop layout. Android works fine..." },
-  { id: "T-2026-0419", subject: "Stripe payouts arriving 24h late", org: "Sunset Valley", contact: "j.okonkwo@sunsetvalley.com", priority: "high", status: "open", opened: new Date(2026, 3, 30, 16, 45), preview: "Marketplace orders processed Sunday haven't hit our account yet. Last week was on time..." },
-  { id: "T-2026-0418", subject: "Request: bulk obituary template", org: "Pine Hill Cemetery", contact: "elena@pinehill.org", priority: "normal", status: "open", opened: new Date(2026, 3, 30, 11, 22), preview: "Would love a way to apply the same obituary template across multiple memorial pages..." },
-  { id: "T-2026-0417", subject: "User can't access plot map on iPad", org: "Hillside Eternal Rest", contact: "d.martinez@hillside.us", priority: "normal", status: "in-progress", opened: new Date(2026, 3, 29, 14, 8), preview: "Page just spins forever. Network shows the request returning 200 but nothing renders..." },
-  { id: "T-2026-0416", subject: "Refund: duplicate charge on subscription", org: "St. Mary's Cemetery", contact: "thomas@stmarys.ca", priority: "low", status: "resolved", opened: new Date(2026, 3, 28, 10, 30), preview: "Got billed twice for April. Need a refund for the extra $199. Already confirmed with Stripe..." },
+const ACTION_FILTERS = [
+  { value: "all", label: "All actions" },
+  { value: "organization.", label: "Organization actions" },
+  { value: "subscription.", label: "Subscription actions" },
+  { value: "invoice.", label: "Invoice actions" },
+  { value: "plan.", label: "Plan actions" },
 ];
 
-const priorityColor: Record<string, string> = {
-  urgent: "border-rose-500/40 text-rose-400 bg-rose-500/10",
-  high: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-  normal: "border-sky-500/40 text-sky-400 bg-sky-500/10",
-  low: "border-border text-muted-foreground",
-};
+function actionIcon(action: string) {
+  if (action.startsWith("organization")) return Building2;
+  if (action.startsWith("subscription")) return RefreshCw;
+  if (action.startsWith("invoice")) return Receipt;
+  if (action.startsWith("plan")) return CreditCard;
+  return Shield;
+}
 
-const statusIcon: Record<string, { icon: typeof AlertCircle; color: string }> = {
-  open: { icon: AlertCircle, color: "text-rose-400" },
-  "in-progress": { icon: Clock, color: "text-amber-400" },
-  resolved: { icon: CheckCircle2, color: "text-emerald-400" },
-};
+function actionTone(action: string): string {
+  if (action.includes("suspend") || action.includes("cancel") || action.includes("void"))
+    return "bg-rose-500/10 text-rose-400";
+  if (action.includes("paid") || action.includes("reactivat") || action.includes("issued"))
+    return "bg-emerald-500/10 text-emerald-400";
+  if (action.includes("created") || action.includes("updated"))
+    return "bg-[#d4a843]/10 text-[#d4a843]";
+  return "bg-muted text-muted-foreground";
+}
 
 export default function AdminSupport() {
-  const [filter, setFilter] = useState<"all" | "open" | "in-progress" | "resolved">("all");
-  const filtered = filter === "all" ? tickets : tickets.filter(t => t.status === filter);
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useAuditLog({
+    action: filter === "all" ? undefined : filter,
+    limit: 200,
+  });
+
+  const filtered = (data ?? []).filter((row) => {
+    if (!search.trim()) return true;
+    const s = search.toLowerCase();
+    return (
+      (row.summary ?? "").toLowerCase().includes(s) ||
+      (row.actorEmail ?? "").toLowerCase().includes(s) ||
+      row.action.toLowerCase().includes(s)
+    );
+  });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Support Tickets</h1>
-          <p className="text-muted-foreground mt-1">Customer requests requiring platform team attention.</p>
-        </div>
-        <Button className="bg-primary hover:bg-primary/90"><MessageSquare className="h-4 w-4 mr-2" />New ticket</Button>
+    <div className="space-y-6">
+      <div>
+        <p className="text-xs uppercase tracking-widest text-[#d4a843] mb-1">Super Admin</p>
+        <h1 className="text-3xl font-bold tracking-tight">Audit Log</h1>
+        <p className="text-muted-foreground mt-1">
+          Every Super Admin action is recorded here — perfect for support investigations,
+          compliance, and recovering from accidental changes.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-rose-500/30 bg-rose-500/5"><CardContent className="p-4"><div className="flex items-center gap-3"><AlertCircle className="h-5 w-5 text-rose-400" /><div><p className="text-xs uppercase tracking-wider text-muted-foreground">Open</p><p className="text-2xl font-bold">{tickets.filter(t => t.status === "open").length}</p></div></div></CardContent></Card>
-        <Card className="border-amber-500/30 bg-amber-500/5"><CardContent className="p-4"><div className="flex items-center gap-3"><Clock className="h-5 w-5 text-amber-400" /><div><p className="text-xs uppercase tracking-wider text-muted-foreground">In Progress</p><p className="text-2xl font-bold">{tickets.filter(t => t.status === "in-progress").length}</p></div></div></CardContent></Card>
-        <Card className="border-emerald-500/30 bg-emerald-500/5"><CardContent className="p-4"><div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-400" /><div><p className="text-xs uppercase tracking-wider text-muted-foreground">Resolved (7d)</p><p className="text-2xl font-bold">14</p></div></div></CardContent></Card>
-        <Card className="border-border/60"><CardContent className="p-4"><div className="flex items-center gap-3"><LifeBuoy className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-wider text-muted-foreground">Avg Response</p><p className="text-2xl font-bold">42m</p></div></div></CardContent></Card>
-      </div>
+      <Card className="border-border/60">
+        <CardContent className="p-4 flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              data-testid="audit-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by summary, actor, or action key"
+              className="pl-9"
+            />
+          </div>
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className="w-56" data-testid="audit-filter"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ACTION_FILTERS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
-      <div className="flex gap-2 flex-wrap">
-        {(["all", "open", "in-progress", "resolved"] as const).map(s => (
-          <Button key={s} size="sm" variant={filter === s ? "default" : "outline"} onClick={() => setFilter(s)} className="capitalize" data-testid={`filter-${s}`}>
-            {s.replace("-", " ")}
-          </Button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.map(t => {
-          const StatusIcon = statusIcon[t.status].icon;
-          return (
-            <Card key={t.id} className="border-border/60 hover:border-primary/30 transition-colors cursor-pointer">
-              <CardContent className="p-5">
-                <div className="flex items-start gap-4">
-                  <StatusIcon className={`h-5 w-5 mt-1 shrink-0 ${statusIcon[t.status].color}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <p className="font-semibold">{t.subject}</p>
-                      <Badge variant="outline" className={`capitalize text-[10px] ${priorityColor[t.priority]}`}>{t.priority}</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-1">{t.preview}</p>
-                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-                      <span className="font-medium text-foreground/70">{t.org}</span>
-                      <span>·</span>
-                      <span>{t.contact}</span>
-                      <span>·</span>
-                      <span>{t.id}</span>
-                      <span>·</span>
-                      <span>{format(t.opened, "MMM d, h:mm a")}</span>
-                    </div>
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5 text-[#d4a843]" />
+            {filtered.length} event{filtered.length === 1 ? "" : "s"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {!isLoading && filtered.length === 0 && (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No audit events match.
+            </p>
+          )}
+          {filtered.map((row) => {
+            const Icon = actionIcon(row.action);
+            return (
+              <div
+                key={row.id}
+                className="flex items-start gap-3 p-3 rounded-lg border border-border/40 hover:border-border transition-colors"
+                data-testid={`audit-row-${row.id}`}
+              >
+                <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${actionTone(row.action)}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm font-medium">
+                      {row.summary ?? row.action}
+                    </p>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {relativeTime(row.createdAt)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {row.action}
+                    </Badge>
+                    {row.actorEmail && <span>by {row.actorEmail}</span>}
+                    {row.targetType && row.targetId && (
+                      <span>· {row.targetType} #{row.targetId}</span>
+                    )}
+                    <span>· {formatDateTime(row.createdAt)}</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }

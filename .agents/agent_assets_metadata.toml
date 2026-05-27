@@ -1,0 +1,38 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "pWpdYnAvofcdoVbfVzn4j"
+uri = "file://screenshots/team-members.jpg"
+type = "image"
+title = "Team & Access — Members"
+
+[[outputs]]
+id = "fYMP-LbaYNhgVvIaTmwl7"
+uri = "file://screenshots/team-roles-matrix.jpg"
+type = "image"
+title = "Team & Access — Roles & Permission Matrix"
+
+[[outputs]]
+id = "jea4lizB1jtj5PTgbDX-E"
+uri = "file://screenshots/site-builder-design.jpg"
+type = "image"
+title = "Operator Website Builder — Design Tab"
+
+[[outputs]]
+id = "ie0sxpNkkegBK5vIxY6tz"
+uri = "file://screenshots/site-heritage-garden.jpg"
+type = "image"
+title = "Public Site — Heritage Garden Theme"
+
+[[outputs]]
+id = "Ra1auZVAnFtOUg0RHwiMb"
+uri = "file://screenshots/site-classic-marble.jpg"
+type = "image"
+title = "Public Site — Classic Marble Theme"
+
+[[outputs]]
+id = "mw0O1So08o7HKzaerbirs"
+uri = "file://screenshots/site-modern-minimal.jpg"
+type = "image"
+title = "Public Site — Modern Minimal Theme"

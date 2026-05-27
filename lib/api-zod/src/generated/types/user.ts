@@ -6,13 +6,19 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserRole } from "./userRole";
+import type { UserStatus } from "./userStatus";
 
 export interface User {
   id: number;
-  organizationId?: number;
+  organizationId: number;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
+  jobTitle?: string;
+  phone?: string;
   avatarUrl?: string;
+  lastActiveAt?: Date;
+  invitedAt?: Date;
   createdAt: Date;
 }

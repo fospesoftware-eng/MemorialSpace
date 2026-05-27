@@ -1,0 +1,77 @@
+Update the UI with a cost-optimized implementation. Do not add heavy paid libraries or unnecessary packages. Reuse the existing frontend structure, CSS/Tailwind setup, and assets wherever possible.
+
+Requirements:
+
+1. Dark / Light Theme Switcher
+- Add a simple dark/light theme toggle in the home page header.
+- Keep it lightweight using CSS variables or existing Tailwind dark mode.
+- Save selected theme in localStorage.
+- Apply the theme globally across the website, dashboards, forms, cards, tables, modals, sidebar, and navigation.
+- Do not rewrite the full UI. Only update required theme styles.
+- Use existing icons if available. If no icon library exists, use simple SVG or text-based sun/moon icons.
+- Add aria-label for accessibility.
+
+2. Cost-Optimized Animated Hero Background
+- Add a lightweight animated background to the home page hero section.
+- Do not use Three.js, WebGL, Lottie, video files, or large animation libraries.
+- Use only CSS animations, SVG, or lightweight React/CSS elements.
+- Animation should be subtle and premium.
+- Theme should match MemorialSpace / cemetery management concept.
+- Use minimal elements such as:
+  - slow floating particles
+  - soft glowing memorial lights
+  - subtle tree silhouettes
+  - very light cemetery path/grid lines
+- Keep animation low CPU usage.
+- Use limited number of animated elements.
+- Make sure text remains readable in both dark and light themes.
+- Respect prefers-reduced-motion and disable/reduce animation when needed.
+
+3. Logo Update Everywhere
+- Replace the current logo in all places across the application.
+- Search the full project for existing logo references and update them.
+- Update:
+  - home page header
+  - footer
+  - login page
+  - signup page
+  - admin dashboard
+  - user dashboard
+  - sidebar
+  - mobile navigation
+  - loading screens if any
+- Use a single reusable Logo component if possible.
+- Avoid duplicating logo code across files.
+- Support light and dark backgrounds if needed.
+- Make sure old logo references are removed.
+
+4. UI/UX Rules
+- Keep current UI structure and layout.
+- Improve only what is required.
+- Maintain modern, minimal, premium look.
+- Ensure responsive design on desktop, tablet, and mobile.
+- Ensure proper contrast in dark and light modes.
+- Do not introduce layout breaking changes.
+- Do not add unnecessary animations outside the hero section.
+
+5. Technical Rules
+- First inspect the current frontend framework and styling method.
+- Use existing dependencies only unless absolutely required.
+- Avoid installing new packages.
+- Create reusable components only when useful:
+  - ThemeProvider or simple global theme hook
+  - ThemeToggle
+  - AnimatedHeroBackground
+  - Logo
+- Keep code simple, readable, and production-ready.
+- Make sure npm/pnpm build passes.
+- Fix any console errors caused by the update.
+
+Final expected result:
+- Cost-optimized dark/light theme switcher in home page header.
+- Global dark/light theme support.
+- Lightweight animated hero background.
+- Logo updated everywhere using reusable logic.
+- No heavy animation libraries.
+- No old logo references.
+- Responsive and clean final UI.

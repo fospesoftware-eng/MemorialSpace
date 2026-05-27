@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Shield, Menu, LogOut } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Menu, LogOut, Banknote, Sparkles } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,8 @@ const nav = [
   { name: "Organizations", href: "/organizations", key: "organizations", icon: Building2 },
   { name: "Users", href: "/users", key: "users", icon: Users },
   { name: "Billing & MRR", href: "/billing", key: "billing", icon: CreditCard },
+  { name: "Payment Gateway", href: "/payment-gateway", key: "payment-gateway", icon: Banknote },
+  { name: "AI Settings", href: "/ai-settings", key: "ai-settings", icon: Sparkles },
   { name: "Analytics", href: "/analytics", key: "analytics", icon: BarChart3 },
   { name: "Support Tickets", href: "/support", key: "support", icon: LifeBuoy },
 ];
@@ -23,12 +26,9 @@ function SidebarContent() {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-        <a href="/" className="flex items-center gap-2">
-          <Shield className="h-6 w-6 text-[#d4a843]" />
-          <div>
-            <div className="text-sm font-bold leading-tight text-sidebar-foreground">MemorialSpace</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#d4a843]">Super Admin</div>
-          </div>
+        <a href="/" className="flex items-center gap-3">
+          <Logo height={36} forDarkBg />
+          <div className="text-[10px] uppercase tracking-widest text-[#d4a843] font-semibold leading-none">Super<br/>Admin</div>
         </a>
       </div>
 

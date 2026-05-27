@@ -12,14 +12,30 @@ import type { WorkOrderType } from "./workOrderType";
 export interface WorkOrder {
   id: number;
   organizationId: number;
-  plotId?: number;
-  assignedTo?: number;
+  /** @nullable */
+  plotId?: number | null;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  assignedTo?: number | null;
   title: string;
-  description?: string;
+  /** @nullable */
+  description?: string | null;
   type: WorkOrderType;
   status: WorkOrderStatus;
   priority: WorkOrderPriority;
-  dueDate?: Date;
-  completedAt?: Date;
+  /** @nullable */
+  dueDate?: Date | null;
+  /** @nullable */
+  completedAt?: Date | null;
+  /** @nullable */
+  laborHours?: string | null;
+  /** @nullable */
+  laborCost?: string | null;
+  /** @nullable */
+  materialsCost?: string | null;
+  /** @nullable */
+  completionNotes?: string | null;
   createdAt: Date;
+  updatedAt: Date;
 }

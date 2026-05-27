@@ -11,7 +11,7 @@ router.get("/bookings", async (req, res) => {
   const { organizationId, status } = req.query;
   const conditions = [];
   if (organizationId) conditions.push(eq(bookingsTable.organizationId, Number(organizationId)));
-  if (status) conditions.push(eq(bookingsTable.status, status as string));
+  if (status) conditions.push(eq(bookingsTable.status, status as "pending" | "confirmed" | "cancelled" | "completed"));
   const bookings = conditions.length
     ? await db.select().from(bookingsTable).where(and(...conditions))
     : await db.select().from(bookingsTable);
@@ -28,14 +28,14 @@ router.post("/bookings", async (req, res) => {
 router.get("/bookings/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
-  if (!booking) return res.status(404).json({ error: "Not found" });
+  if (!booking) { res.status(404).json({ error: "Not found" }); return; }
   res.json(booking);
 });
 
 router.put("/bookings/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [booking] = await db.update(bookingsTable).set(req.body).where(eq(bookingsTable.id, id)).returning();
-  if (!booking) return res.status(404).json({ error: "Not found" });
+  if (!booking) { res.status(404).json({ error: "Not found" }); return; }
   res.json(booking);
 });
 

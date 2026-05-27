@@ -1,5 +1,6 @@
-import { Building2, Heart, Shield, ArrowRight, Award } from "lucide-react";
+import { Building2, Heart, Shield, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Logo } from "@/components/logo";
 
 const portals = [
   {
@@ -36,11 +37,8 @@ export default function SignInHub() {
     <div className="min-h-screen w-full bg-background flex flex-col">
       <header className="w-full border-b border-border/40 bg-background/60 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-[#2d5f3f] flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-background" />
-            </div>
-            <span className="font-bold text-sm">MemorialSpace</span>
+          <a href="/" className="flex items-center">
+            <Logo height={32} />
           </a>
           <a href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← Back to home

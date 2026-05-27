@@ -11,7 +11,21 @@ export const memorialsTable = pgTable("memorials", {
   title: text("title").notNull(),
   biography: text("biography"),
   photos: text("photos"),
+  // JSON-stringified array of video URLs (currently YouTube only). Stored
+  // as `text` to mirror `photos` — keeps the column shape uniform and
+  // avoids a migration to `jsonb` that would force every existing row
+  // through a cast. Parsed defensively on read.
+  videos: text("videos"),
   isPublic: boolean("is_public").default(true),
+  // Privacy mode controls what an anonymous visitor sees on the public
+  // memorial page. The QR code in the URL is the read credential, but the
+  // family can choose to also gate the *content* behind the same edit PIN.
+  // - "open"    → full page visible to anyone with the QR (default)
+  // - "basic"   → name + dates + plot visible; bio + photos require PIN
+  // - "private" → nothing visible without the PIN (hard gate)
+  // Stored as text instead of an enum so we can add modes later without a
+  // type-altering migration.
+  visibility: text("visibility").default("open").notNull(),
   viewCount: integer("view_count").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

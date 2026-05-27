@@ -11,12 +11,26 @@ import type { CreateWorkOrderBodyType } from "./createWorkOrderBodyType";
 
 export interface CreateWorkOrderBody {
   organizationId: number;
-  plotId?: number;
-  assignedTo?: number;
+  /** @nullable */
+  plotId?: number | null;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  assignedTo?: number | null;
   title: string;
-  description?: string;
+  /** @nullable */
+  description?: string | null;
   type: CreateWorkOrderBodyType;
   status: CreateWorkOrderBodyStatus;
   priority: CreateWorkOrderBodyPriority;
-  dueDate?: Date;
+  /** @nullable */
+  dueDate?: Date | null;
+  /** @nullable */
+  laborHours?: string | null;
+  /** @nullable */
+  laborCost?: string | null;
+  /** @nullable */
+  materialsCost?: string | null;
+  /** @nullable */
+  completionNotes?: string | null;
 }

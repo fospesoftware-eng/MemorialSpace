@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, MapPin } from "lucide-react";
-import { format } from "date-fns";
+import { PlotDetailSheet } from "@/components/plot-detail-sheet";
 
 const ORG_ID = 1;
 
 export default function Plots() {
   const [search, setSearch] = useState("");
+  const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
   const { data: plots, isLoading } = useListPlots({ organizationId: ORG_ID });
 
   const getStatusColor = (status: string) => {
@@ -79,7 +80,19 @@ export default function Plots() {
               </TableRow>
             ) : (
               filteredPlots.map((plot) => (
-                <TableRow key={plot.id}>
+                <TableRow
+                  key={plot.id}
+                  data-testid={`plot-row-${plot.id}`}
+                  onClick={() => setSelectedPlotId(plot.id)}
+                  className="cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedPlotId(plot.id);
+                    }
+                  }}
+                >
                   <TableCell className="font-medium">{plot.plotNumber}</TableCell>
                   <TableCell>{plot.section || '-'} / {plot.row || '-'}</TableCell>
                   <TableCell className="capitalize">{plot.type || 'Standard'}</TableCell>
@@ -96,6 +109,12 @@ export default function Plots() {
           </TableBody>
         </Table>
       </div>
+
+      <PlotDetailSheet
+        plotId={selectedPlotId}
+        organizationId={ORG_ID}
+        onOpenChange={(open) => !open && setSelectedPlotId(null)}
+      />
     </div>
   );
 }

@@ -10,7 +10,9 @@ export type CreateUserBodyRole =
   (typeof CreateUserBodyRole)[keyof typeof CreateUserBodyRole];
 
 export const CreateUserBodyRole = {
+  owner: "owner",
   admin: "admin",
+  manager: "manager",
   staff: "staff",
   viewer: "viewer",
 } as const;

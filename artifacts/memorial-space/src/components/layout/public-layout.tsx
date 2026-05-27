@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { Search, Award, BookOpen, ShoppingBag, LogOut, User } from "lucide-react";
+import { Search, BookOpen, ShoppingBag, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -11,9 +12,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-6 md:gap-10">
-            <a href="/" className="flex items-center space-x-2">
-              <Award className="h-6 w-6 text-primary" />
-              <span className="inline-block font-bold">MemorialSpace</span>
+            <a href="/" className="flex items-center">
+              <Logo height={36} />
             </a>
             <nav className="hidden md:flex gap-6">
               <Link
@@ -69,9 +69,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       </main>
       <footer className="border-t border-border/40 py-6 md:px-8 md:py-0">
         <div className="container mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:h-24 md:flex-row px-4">
-          <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Powered by <Award className="inline-block h-4 w-4 mb-1 mx-1 text-primary" /> MemorialSpace. Honoring legacies.
-          </p>
+          <div className="flex flex-col items-center gap-2 md:flex-row md:gap-3">
+            <span className="text-sm text-muted-foreground">Powered by</span>
+            <Logo height={28} />
+            <span className="text-sm text-muted-foreground">— Honoring legacies.</span>
+          </div>
         </div>
       </footer>
     </div>

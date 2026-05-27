@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Menu, LogOut, Layers, Sliders, Wand2 } from "lucide-react";
+import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote, CreditCard } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,10 +15,20 @@ const navigation = [
       { name: "Map View", href: "/map", icon: Map },
       { name: "Map Maker", href: "/map-maker", icon: Layers },
       { name: "AI Map Maker", href: "/ai-map-maker", icon: Wand2 },
+      { name: "Columbarium", href: "/columbarium", icon: Box },
+      { name: "Mausoleum", href: "/mausoleum", icon: Building2 },
       { name: "Plots", href: "/plots", icon: MapPin },
       { name: "Burials", href: "/burials", icon: Users },
       { name: "Bookings", href: "/bookings", icon: Calendar },
       { name: "Work Orders", href: "/work-orders", icon: Wrench },
+    ],
+  },
+  {
+    name: "Operations & Finance",
+    items: [
+      { name: "Assets", href: "/assets", icon: Boxes },
+      { name: "Maintenance", href: "/maintenance", icon: CalendarClock },
+      { name: "Expenses", href: "/expenses", icon: Banknote },
     ],
   },
   {
@@ -29,18 +40,40 @@ const navigation = [
     ],
   },
   {
+    name: "Public Website",
+    items: [
+      { name: "Website Builder", href: "/site-builder", icon: Globe },
+    ],
+  },
+  {
     name: "Marketplace",
     items: [
       { name: "Catalog & Orders", href: "/marketplace", icon: ShoppingBag },
     ],
   },
   {
+    name: "Accounting",
+    items: [
+      { name: "Overview", href: "/accounting", icon: BarChart3 },
+      { name: "Invoices", href: "/accounting/invoices", icon: Receipt },
+      { name: "Customers", href: "/accounting/customers", icon: UserSquare2 },
+      { name: "Tax Rates", href: "/accounting/tax-rates", icon: Percent },
+    ],
+  },
+  {
+    name: "Team & Access",
+    items: [
+      { name: "Members", href: "/team", icon: Users },
+      { name: "Roles & Permissions", href: "/team/roles", icon: Shield },
+    ],
+  },
+  {
     name: "Settings",
     items: [
       { name: "Organizations", href: "/organizations", icon: Building },
-      { name: "Users", href: "/users", icon: Users },
       { name: "Cemetery Setup", href: "/cemetery-setup", icon: Sliders },
       { name: "General Settings", href: "/settings", icon: Settings },
+      { name: "Payment Gateway", href: "/settings/payment-gateway", icon: CreditCard },
     ],
   },
 ];
@@ -51,9 +84,8 @@ function SidebarContent() {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-        <a href="/" className="flex items-center gap-2 text-primary">
-          <Award className="h-6 w-6" />
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">MemorialSpace</span>
+        <a href="/" className="flex items-center">
+          <Logo height={36} forDarkBg />
         </a>
       </div>
 

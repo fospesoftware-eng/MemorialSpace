@@ -1,35 +1,53 @@
 import { Link, useLocation } from "wouter";
-import { Award, Menu } from "lucide-react";
+import { Menu, Facebook, Instagram, Linkedin, Youtube, Twitter } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
+import { SimpleThemeToggle } from "@/components/simple-theme-toggle";
 import { cn } from "@/lib/utils";
+
+const navLinks = [
+  { href: "/find", label: "Find Loved Ones" },
+  { href: "/features", label: "Features" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/vendors", label: "Marketplace" },
+];
+
+const FooterCol = ({
+  title,
+  links,
+}: {
+  title: string;
+  links: { label: string; href: string }[];
+}) => (
+  <div>
+    <p className="text-sm font-semibold mb-3 text-foreground">{title}</p>
+    <ul className="space-y-2 text-sm text-muted-foreground">
+      {links.map((l) => (
+        <li key={l.label}>
+          <Link href={l.href} className="hover:text-foreground transition-colors">
+            {l.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
 
 export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const links = [
-    { href: "/#features", label: "Features" },
-    { href: "/#pricing", label: "Pricing" },
-    { href: "/#testimonials", label: "Customers" },
-    { href: "/find", label: "Find a Loved One" },
-    { href: "/demo", label: "Demo Access" },
-  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-primary to-[#2d5f3f] flex items-center justify-center shadow-lg shadow-primary/20">
-              <Award className="h-5 w-5 text-background" />
-            </div>
-            <div>
-              <div className="font-bold text-base leading-tight">MemorialSpace</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest">For Cemeteries</div>
-            </div>
+          <Link href="/" className="flex items-center">
+            <Logo height={56} />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
-            {links.map((l) => (
+            {navLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -43,15 +61,23 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-3">
+            <SimpleThemeToggle />
             <Button asChild variant="ghost" size="sm" data-testid="link-signin">
-              <Link href="/sign-in">Client Sign In</Link>
+              <Link href="/sign-in">Sign In</Link>
             </Button>
-            <Button asChild size="sm" className="bg-primary hover:bg-primary/90" data-testid="link-demo">
-              <Link href="/#pricing">Request Demo</Link>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="border-primary/40 text-primary hover:bg-primary/10"
+              data-testid="link-create-memorial"
+            >
+              <Link href="/sign-in/family">Create Memorial</Link>
             </Button>
           </div>
 
+          {/* Mobile sheet */}
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden">
@@ -60,12 +86,19 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             </SheetTrigger>
             <SheetContent side="right" className="w-72 bg-background">
               <div className="flex flex-col gap-3 mt-8">
-                {links.map((l) => (
+                {navLinks.map((l) => (
                   <Link key={l.href} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
                 ))}
                 <div className="border-t border-border my-3" />
-                <Button asChild variant="outline"><Link href="/sign-in">Client Sign In</Link></Button>
-                <Button asChild><Link href="/#pricing">Request Demo</Link></Button>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Theme</span>
+                  <SimpleThemeToggle />
+                </div>
+                <div className="border-t border-border my-3" />
+                <Button asChild variant="outline"><Link href="/sign-in">Sign In</Link></Button>
+                <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary/10">
+                  <Link href="/sign-in/family">Create Memorial</Link>
+                </Button>
                 <div className="border-t border-border my-3" />
                 <Link href="/account" className="text-sm text-muted-foreground py-1">My Account</Link>
                 <Link href="/admin" className="text-sm text-muted-foreground py-1">Admin Console</Link>
@@ -77,40 +110,109 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
 
       <main className="flex-1">{children}</main>
 
+      {/* Footer */}
       <footer className="border-t border-border/40 bg-background/50">
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-[#2d5f3f] flex items-center justify-center">
-                  <Award className="h-4 w-4 text-background" />
-                </div>
-                <span className="font-bold">MemorialSpace</span>
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 py-14">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 lg:gap-10">
+            {/* Column 1: Brand */}
+            <div className="col-span-2 md:col-span-3 lg:col-span-1">
+              <Link href="/" className="flex items-center mb-4">
+                <Logo height={44} />
+              </Link>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                A complete digital memorial ecosystem for memorial spaces, families, partners, and future generations.
+              </p>
+              <p className="text-sm text-muted-foreground italic mb-6">
+                Preserve memories. Manage spaces. Connect generations.
+              </p>
+              <div className="flex items-center gap-3">
+                <a href="#" aria-label="Facebook" className="text-muted-foreground hover:text-foreground transition-colors"><Facebook className="h-4 w-4" /></a>
+                <a href="#" aria-label="Instagram" className="text-muted-foreground hover:text-foreground transition-colors"><Instagram className="h-4 w-4" /></a>
+                <a href="#" aria-label="LinkedIn" className="text-muted-foreground hover:text-foreground transition-colors"><Linkedin className="h-4 w-4" /></a>
+                <a href="#" aria-label="YouTube" className="text-muted-foreground hover:text-foreground transition-colors"><Youtube className="h-4 w-4" /></a>
+                <a href="#" aria-label="X / Twitter" className="text-muted-foreground hover:text-foreground transition-colors"><Twitter className="h-4 w-4" /></a>
               </div>
-              <p className="text-sm text-muted-foreground max-w-md">The complete platform for cemeteries to manage operations, honor lives, and serve families with dignity.</p>
             </div>
-            <div>
-              <p className="text-sm font-semibold mb-3">Product</p>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/#features" className="hover:text-foreground">Features</Link></li>
-                <li><Link href="/#pricing" className="hover:text-foreground">Pricing</Link></li>
-                <li><Link href="/find" className="hover:text-foreground">Family Portal</Link></li>
-                <li><Link href="/demo" className="hover:text-foreground">Demo Access</Link></li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-sm font-semibold mb-3">Portals</p>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/app/dashboard" className="hover:text-foreground">Cemetery Client</Link></li>
-                <li><Link href="/account" className="hover:text-foreground">Family Member</Link></li>
-                <li><Link href="/admin" className="hover:text-foreground">Platform Admin</Link></li>
-              </ul>
-            </div>
+
+            {/* Column 2: Company */}
+            <FooterCol
+              title="Company"
+              links={[
+                { label: "About Us", href: "#" },
+                { label: "Contact", href: "/contact" },
+                { label: "Careers", href: "#" },
+                { label: "Our Mission", href: "#" },
+                { label: "How It Works", href: "/tutorial" },
+                { label: "News & Updates", href: "#" },
+                { label: "Blog", href: "#" },
+                { label: "Media Kit", href: "#" },
+                { label: "Partner With Us", href: "#" },
+              ]}
+            />
+
+            {/* Column 3: Support */}
+            <FooterCol
+              title="Support"
+              links={[
+                { label: "Help Center", href: "#" },
+                { label: "Customer Support", href: "/contact" },
+                { label: "FAQs", href: "#" },
+                { label: "Report a Problem", href: "#" },
+                { label: "Submit a Request", href: "#" },
+                { label: "Memorial Page Support", href: "#" },
+                { label: "Account & Login Help", href: "#" },
+                { label: "Billing Support", href: "#" },
+                { label: "Data Correction Request", href: "#" },
+                { label: "Request a Demo", href: "/demo" },
+              ]}
+            />
+
+            {/* Column 4: Partners & Marketplace */}
+            <FooterCol
+              title="Partners & Marketplace"
+              links={[
+                { label: "Marketplace", href: "/vendors" },
+                { label: "Vendor Registration", href: "/vendor/signup" },
+                { label: "Partner Registration", href: "#" },
+                { label: "Memorial Space Registration", href: "/signup/cemetery" },
+                { label: "Service Provider Listing", href: "#" },
+                { label: "Funeral Service Providers", href: "#" },
+                { label: "Flower & Tribute Vendors", href: "#" },
+                { label: "Headstone & Plaque Providers", href: "#" },
+                { label: "Pet Memorial Services", href: "#" },
+                { label: "Business Dashboard", href: "#" },
+                { label: "Vendor Login", href: "/sign-in/vendor" },
+              ]}
+            />
+
+            {/* Column 5: Legal & Policies */}
+            <FooterCol
+              title="Terms & Policies"
+              links={[
+                { label: "Terms & Conditions", href: "#" },
+                { label: "Privacy Policy", href: "#" },
+                { label: "Cookie Policy", href: "#" },
+                { label: "Refund Policy", href: "#" },
+                { label: "Data Protection Policy", href: "#" },
+                { label: "User Content Policy", href: "#" },
+                { label: "Memorial Content Policy", href: "#" },
+                { label: "Marketplace Policy", href: "#" },
+                { label: "Vendor Terms", href: "#" },
+                { label: "Partner Terms", href: "#" },
+                { label: "QR Memorial Policy", href: "#" },
+              ]}
+            />
           </div>
-          <div className="mt-10 pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-muted-foreground">© 2026 MemorialSpace. Honoring legacies with technology.</p>
+
+          <div className="mt-14 pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-muted-foreground">
+              &copy; 2026 MemorialSpace.app. All rights reserved. Honoring legacies with technology.
+            </p>
             <div className="flex gap-4 text-xs text-muted-foreground">
-              <span>Privacy</span><span>Terms</span><span>Security</span>
+              <Link href="#" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="#" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link href="#" className="hover:text-foreground transition-colors">Security</Link>
+              <Link href="#" className="hover:text-foreground transition-colors">Cookies</Link>
             </div>
           </div>
         </div>

@@ -1,10 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Award, Eye, EyeOff, Loader2, Sparkles, KeyRound, Copy, Check, Wand2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Sparkles, KeyRound, Copy, Check, Wand2, AlertCircle } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth, type SessionKind } from "@/lib/auth";
 
 export type SignInTheme = "green" | "gold" | "rose";
 
@@ -37,8 +39,11 @@ export interface SignInFormProps {
   title: string;
   subtitle: string;
   theme: SignInTheme;
+  /** Which sign-in tier these credentials must satisfy on the server. */
+  kind: SessionKind;
   demoEmail: string;
   demoPassword: string;
+  /** Fallback path used if the server doesn't return one. */
   redirectTo: string;
   signUpHref?: string;
   signUpLabel?: string;
@@ -46,21 +51,32 @@ export interface SignInFormProps {
 }
 
 export function SignInForm(props: SignInFormProps) {
-  const { portalLabel, title, subtitle, theme, demoEmail, demoPassword, redirectTo, signUpHref, signUpLabel, rightPanel } = props;
+  const { portalLabel, title, subtitle, theme, kind, demoEmail, demoPassword, redirectTo, signUpHref, signUpLabel, rightPanel } = props;
   const t = themeMap[theme];
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(true);
   const [copied, setCopied] = useState<"email" | "password" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (emailValue: string, passwordValue: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const target = await signIn(kind, emailValue, passwordValue);
+      window.location.href = target || redirectTo;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sign-in failed");
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      window.location.href = redirectTo;
-    }, 700);
+    void submit(email, password);
   };
 
   const fillDemo = () => {
@@ -71,8 +87,7 @@ export function SignInForm(props: SignInFormProps) {
   const fillDemoAndSubmit = () => {
     setEmail(demoEmail);
     setPassword(demoPassword);
-    setLoading(true);
-    setTimeout(() => { window.location.href = redirectTo; }, 700);
+    void submit(demoEmail, demoPassword);
   };
 
   const copyToClipboard = async (value: string, kind: "email" | "password") => {
@@ -90,11 +105,8 @@ export function SignInForm(props: SignInFormProps) {
       {/* Top bar */}
       <header className="w-full border-b border-border/40 bg-background/60 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className={`h-8 w-8 rounded-md ${t.logoBg} flex items-center justify-center shadow-md`}>
-              <Award className="h-4 w-4 text-background" />
-            </div>
-            <span className="font-bold text-sm">MemorialSpace</span>
+          <a href="/" className="flex items-center">
+            <Logo height={32} />
           </a>
           <a href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← Back to home
@@ -163,6 +175,13 @@ export function SignInForm(props: SignInFormProps) {
                   Just fill the form (don't sign in)
                 </button>
               </div>
+
+              {error && (
+                <div className="rounded-md border border-rose-500/40 bg-rose-500/10 text-rose-300 px-3 py-2 text-xs flex items-center gap-2" data-testid="sign-in-error">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-4" data-testid="sign-in-form">
                 <div className="space-y-1.5">

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import {
-  Award,
   Building2,
   Heart,
   Search,
@@ -14,7 +13,9 @@ import {
   Globe,
   Sparkles,
   Info,
+  Store,
 } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,18 @@ const portals: Portal[] = [
     accent: "green",
     audience: "Cemetery managers & groundskeepers",
     highlights: ["Interactive plot map", "Burial & booking workflows", "QR codes & memorial pages"],
+  },
+  {
+    key: "vendor",
+    name: "Marketplace Vendor",
+    tagline: "Third-party service providers — florists, stonemasons, transport — managing services and incoming family requests.",
+    url: "/vendor/dashboard",
+    email: "florist@test.com",
+    password: "password123",
+    icon: Store,
+    accent: "violet",
+    audience: "Florists, stonemasons & care providers",
+    highlights: ["Service catalog & pricing", "Incoming request inbox", "Public listing on /vendors"],
   },
   {
     key: "admin",
@@ -270,7 +283,7 @@ export default function DemoCredentials() {
         <Card className="border-border/60">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-primary" />
+              <Logo height={20} />
               <h3 className="text-base font-semibold">Quick reference</h3>
             </div>
             <p className="text-xs text-muted-foreground mt-1">

@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Heart, ShoppingBag, MessageSquare, Bookmark, Settings, Award, Menu, LogOut } from "lucide-react";
+import { LayoutDashboard, Heart, ShoppingBag, MessageSquare, Bookmark, Settings, Menu, LogOut } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,9 +24,8 @@ function SidebarContent() {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-        <a href="/" className="flex items-center gap-2 text-primary">
-          <Award className="h-6 w-6" />
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">MemorialSpace</span>
+        <a href="/" className="flex items-center">
+          <Logo height={36} forDarkBg />
         </a>
       </div>
 

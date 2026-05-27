@@ -1,0 +1,308 @@
+/* Hero background animations — pure CSS, no libraries
+ * Light-mode defaults; .dark overrides for dark theme.
+ */
+
+/* ========== LIGHT MODE (default) ========== */
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.16;
+  animation: orbBreath 16s ease-in-out infinite alternate;
+}
+.hero-orb-1 {
+  top: -5%;
+  left: 5%;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 65%);
+  animation-delay: 0s;
+}
+.hero-orb-2 {
+  top: 15%;
+  right: -3%;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(212, 168, 67, 0.15) 0%, transparent 65%);
+  animation-delay: -4s;
+}
+.hero-orb-3 {
+  bottom: 10%;
+  left: 40%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.18) 0%, transparent 65%);
+  animation-delay: -8s;
+}
+.hero-orb-4 {
+  top: 50%;
+  left: -5%;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.16) 0%, transparent 65%);
+  animation-delay: -6s;
+}
+
+.hero-aurora {
+  position: absolute;
+  top: -20%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  background: conic-gradient(
+    from 180deg at 50% 50%,
+    transparent 0deg,
+    rgba(16, 185, 129, 0.03) 60deg,
+    transparent 120deg,
+    rgba(212, 168, 67, 0.02) 180deg,
+    transparent 240deg,
+    rgba(52, 211, 153, 0.03) 300deg,
+    transparent 360deg
+  );
+  animation: auroraSpin 24s linear infinite;
+  filter: blur(45px);
+  opacity: 0.6;
+}
+
+.hero-star {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.18);
+  animation-name: starTwinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.hero-memorial-light {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(0.5px);
+  animation-name: memorialTwinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  opacity: 0.55;
+  box-shadow: 0 0 10px 3px currentColor;
+}
+
+.hero-particle {
+  position: absolute;
+  bottom: -8px;
+  border-radius: 50%;
+  animation-name: particleDrift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  opacity: 0;
+}
+
+.hero-wave {
+  display: none;
+}
+.hero-ray {
+  display: none;
+}
+.hero-mist {
+  display: none;
+}
+
+/* ========== DARK MODE (.dark) ========== */
+.dark .hero-orb {
+  filter: blur(40px);
+  opacity: 1;
+}
+.dark .hero-orb-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.65) 0%, transparent 55%);
+}
+.dark .hero-orb-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(234, 179, 8, 0.5) 0%, transparent 55%);
+}
+.dark .hero-orb-3 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.5) 0%, transparent 55%);
+}
+.dark .hero-orb-4 {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.45) 0%, transparent 55%);
+}
+
+.dark .hero-aurora {
+  background: conic-gradient(
+    from 180deg at 50% 50%,
+    transparent 0deg,
+    rgba(34, 197, 94, 0.18) 60deg,
+    transparent 120deg,
+    rgba(234, 179, 8, 0.12) 180deg,
+    transparent 240deg,
+    rgba(52, 211, 153, 0.15) 300deg,
+    transparent 360deg
+  );
+  filter: blur(28px);
+  opacity: 1;
+}
+
+.dark .hero-star {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.dark .hero-memorial-light {
+  filter: blur(0.2px);
+  opacity: 1;
+  box-shadow: 0 0 24px 12px currentColor;
+}
+
+/* ---- Flowing gradient waves (creative add-on) ---- */
+.dark .hero-wave {
+  display: block;
+  position: absolute;
+  left: -10%;
+  width: 120%;
+  height: 2px;
+  border-radius: 1px;
+  filter: blur(3px);
+  opacity: 0;
+  animation: waveFlow 10s ease-in-out infinite;
+}
+.dark .hero-wave-1 {
+  top: 25%;
+  background: linear-gradient(90deg, transparent 0%, rgba(34,197,94,0.6) 40%, rgba(234,179,8,0.4) 60%, transparent 100%);
+  animation-delay: 0s;
+}
+.dark .hero-wave-2 {
+  top: 55%;
+  background: linear-gradient(90deg, transparent 0%, rgba(52,211,153,0.5) 30%, rgba(34,197,94,0.4) 70%, transparent 100%);
+  animation-delay: -3.5s;
+  animation-duration: 12s;
+}
+.dark .hero-wave-3 {
+  top: 80%;
+  background: linear-gradient(90deg, transparent 0%, rgba(234,179,8,0.35) 45%, rgba(34,197,94,0.3) 65%, transparent 100%);
+  animation-delay: -7s;
+  animation-duration: 14s;
+}
+
+/* ---- Light rays from center (creative add-on) ---- */
+.dark .hero-ray {
+  display: block;
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 2px;
+  height: 60vh;
+  transform-origin: top center;
+  background: linear-gradient(180deg, rgba(34,197,94,0.25) 0%, transparent 80%);
+  filter: blur(4px);
+  opacity: 0;
+  animation: rayPulse 8s ease-in-out infinite;
+}
+.dark .hero-ray-1 { transform: translateX(-50%) rotate(-35deg); animation-delay: 0s; }
+.dark .hero-ray-2 { transform: translateX(-50%) rotate(-15deg); animation-delay: -2s; height: 50vh; }
+.dark .hero-ray-3 { transform: translateX(-50%) rotate(10deg); animation-delay: -4s; height: 55vh; }
+.dark .hero-ray-4 { transform: translateX(-50%) rotate(30deg); animation-delay: -6s; height: 45vh; }
+
+/* ---- Ground mist haze (creative add-on) ---- */
+.dark .hero-mist {
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(0deg, rgba(16,185,129,0.08) 0%, transparent 100%);
+  filter: blur(20px);
+  animation: mistRise 12s ease-in-out infinite alternate;
+}
+
+/* ========== Keyframes ========== */
+@keyframes orbBreath {
+  0% { transform: translate(0, 0) scale(1); opacity: var(--orb-min, 0.7); }
+  100% { transform: translate(40px, -50px) scale(1.28); opacity: var(--orb-max, 0.95); }
+}
+@keyframes auroraSpin {
+  0% { transform: rotate(0deg) scale(1); }
+  100% { transform: rotate(360deg) scale(1.05); }
+}
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.7; }
+}
+@keyframes memorialTwinkle {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(2.6); }
+}
+@keyframes particleDrift {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  3% { opacity: 0.9; }
+  50% { transform: translateY(-55vh) translateX(var(--drift, 20px)); opacity: 0.55; }
+  97% { opacity: 0.35; }
+  100% { transform: translateY(-115vh) translateX(calc(var(--drift, 20px) * -0.3)); opacity: 0; }
+}
+
+@keyframes waveFlow {
+  0% { transform: translateX(-100%); opacity: 0; }
+  20% { opacity: 0.7; }
+  80% { opacity: 0.5; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+@keyframes rayPulse {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.6; }
+}
+@keyframes mistRise {
+  0% { transform: translateY(0) scaleX(1); opacity: 0.5; }
+  100% { transform: translateY(-15px) scaleX(1.05); opacity: 0.8; }
+}
+
+/* ========== Hero blend overlay (header-to-hero gradient) ========== */
+.hero-blend-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* Light mode: solid light top, subtle green wash at bottom */
+  background: linear-gradient(
+    180deg,
+    hsl(150 20% 97%) 0%,
+    hsl(150 20% 97% / 0.85) 18%,
+    hsl(150 20% 97% / 0.55) 40%,
+    hsl(155 30% 92% / 0.25) 60%,
+    hsl(160 32% 90% / 0.55) 85%,
+    hsl(160 30% 88% / 0.75) 100%
+  );
+}
+
+.dark .hero-blend-overlay {
+  /* Dark mode: lighter blend so animations show through vividly */
+  background: linear-gradient(
+    180deg,
+    hsl(var(--background) / 0.92) 0%,
+    hsl(var(--background) / 0.72) 18%,
+    hsl(var(--background) / 0.40) 40%,
+    hsl(160 32% 9% / 0.15) 60%,
+    hsl(160 38% 11% / 0.40) 85%,
+    hsl(160 35% 13% / 0.60) 100%
+  );
+}
+
+/* ========== Ground silhouette ========== */
+.hero-ground-silhouette {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 160px;
+  pointer-events: none;
+}
+
+/* ========== Reduced motion ========== */
+@media (prefers-reduced-motion: reduce) {
+  .hero-orb, .hero-aurora, .hero-memorial-light, .hero-particle, .hero-star,
+  .hero-wave, .hero-ray, .hero-mist {
+    animation: none !important;
+  }
+  .hero-aurora, .hero-mist { opacity: 0; }
+}

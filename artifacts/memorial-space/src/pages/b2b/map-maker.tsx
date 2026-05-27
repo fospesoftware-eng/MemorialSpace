@@ -5,6 +5,7 @@ import {
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
+  Spline, Circle as CircleIcon, Hexagon, SquareDashed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,14 +19,34 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   usePlotTypes, useSpotTypes, useBackgrounds,
   SPOT_ICONS, FALLBACK_PLOT_TYPE, FALLBACK_SPOT_TYPE,
-  STATUS_COLORS, BACKGROUND_LIBRARY_LIMIT,
-  type PlotType, type SpotType, type PlotStatus, type BurialSpot, type BackgroundEntry,
+  STATUS_COLORS, BACKGROUND_LIBRARY_LIMIT, MAX_HEADSTONE_IMAGES,
+  type PlotType, type PlotShape, type SpotType, type PlotStatus, type BurialSpot, type BackgroundEntry,
   newId, fileToDataUrl, downscaleImage, calcAge,
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "draw" | "spot";
+type Tool = "select" | "draw" | "rect-outline" | "circle" | "polygon" | "polygon-outline" | "path" | "spot" | "pan";
+
+/** Tools that produce an axis-aligned rectangle (drag-to-draw). */
+const isRectTool = (t: Tool): t is "draw" | "rect-outline" => t === "draw" || t === "rect-outline";
+/** Tools that produce a closed polygon (click-to-place vertices). */
+const isPolygonTool = (t: Tool): t is "polygon" | "polygon-outline" => t === "polygon" || t === "polygon-outline";
+/** True for the outline-only variants (no fill, just a stroked boundary). */
+const isOutlineTool = (t: Tool) => t === "rect-outline" || t === "polygon-outline";
+
+/** Map a plot type's `defaultShape` to the canvas tool that draws it. */
+function shapeToTool(shape: PlotShape | undefined): Extract<Tool, "draw" | "circle" | "polygon" | "path"> {
+  if (shape === "circle") return "circle";
+  if (shape === "polygon") return "polygon";
+  if (shape === "path") return "path";
+  return "draw";
+}
 type View = "2d" | "3d";
+
+/** Default stroke thickness for new path/road plots, in SVG units. */
+const DEFAULT_PATH_WIDTH = 14;
+/** Hard cap on vertices per drawn path — guards against runaway clicks. */
+const MAX_PATH_VERTICES = 200;
 
 interface Plot {
   id: string;
@@ -44,6 +65,37 @@ interface Plot {
    * existing select / move / resize handles still work.
    */
   points?: [number, number][];
+  /**
+   * Optional polyline vertices in absolute SVG coordinates. When present
+   * (≥ 2 points) the plot renders as a stroked open `<polyline>` — the
+   * "Path" tool uses this for flexible paths/roads/bridges that can't be
+   * expressed as a rectangle. Mutually exclusive with `points` (a plot is
+   * either a closed polygon or an open polyline, not both). Bounding box
+   * (x/y/w/h) is kept in sync with these points so move/select work.
+   */
+  pathPoints?: [number, number][];
+  /** Stroke width (SVG units) for polyline plots. Defaults to DEFAULT_PATH_WIDTH. */
+  pathWidth?: number;
+  /**
+   * Optional circle geometry. When present the plot renders as an SVG
+   * `<circle>`. Mutually exclusive with `points` and `pathPoints` (a plot
+   * is at most one of: path, circle, polygon, or plain rectangle). The
+   * bounding box (x/y/w/h) is kept in sync with the circle so the existing
+   * select / move handles still work.
+   */
+  circle?: { cx: number; cy: number; r: number };
+  /**
+   * When true, render this plot as an outline only (no fill) — used to mark
+   * boundaries for family graves, sections, or other groupings that contain
+   * smaller plots inside without obscuring them. Applies to rect and polygon
+   * shapes; ignored for paths (already stroke-only) and circles.
+   */
+  outline?: boolean;
+  /** Text extracted from inside the marker by AI vision (names, dates, inscriptions). */
+  textInside?: string;
+  birthYear?: string;
+  deathYear?: string;
+  gridRef?: string;
 }
 
 interface MapDoc {
@@ -106,6 +158,45 @@ function migrateDoc(raw: unknown): MapDoc {
         }
         if (pts.length >= 3) points = pts;
       }
+      // Polyline / path vertices (optional). Coerce, clamp to MAX, drop
+      // the field if fewer than 2 valid vertices remain so the rest of the
+      // editor stays on the rect/polygon code paths.
+      let pathPoints: [number, number][] | undefined;
+      const rawPath = (p as LegacyPlot & { pathPoints?: unknown }).pathPoints;
+      if (Array.isArray(rawPath)) {
+        const pts: [number, number][] = [];
+        for (const pt of rawPath.slice(0, MAX_PATH_VERTICES)) {
+          if (Array.isArray(pt) && pt.length >= 2) {
+            const px = safeOptNum(pt[0]);
+            const py = safeOptNum(pt[1]);
+            if (px !== undefined && py !== undefined) pts.push([px, py]);
+          }
+        }
+        if (pts.length >= 2) pathPoints = pts;
+      }
+      // Clamp `pathWidth` to the same range exposed by the inspector slider
+      // (2..60) so a poisoned saved doc can't load with a runaway / negative
+      // stroke that paints over the rest of the map. Falls back to the
+      // default when the field is missing or non-finite.
+      const outline = (p as LegacyPlot & { outline?: unknown }).outline === true ? true : undefined;
+      const pathWidth = pathPoints
+        ? Math.max(2, Math.min(60, safeOptNum((p as LegacyPlot & { pathWidth?: unknown }).pathWidth) ?? DEFAULT_PATH_WIDTH))
+        : undefined;
+      // Circle geometry (optional). Coerce + validate cx/cy/r; clamp r so
+      // a poisoned doc can't load with a giant circle that swamps the map.
+      // Drop the field entirely if any required component is missing or
+      // non-positive — the editor stays on the rect/polygon/polyline path.
+      let circle: { cx: number; cy: number; r: number } | undefined;
+      const rawCircle = (p as LegacyPlot & { circle?: unknown }).circle;
+      if (rawCircle && typeof rawCircle === "object") {
+        const rc = rawCircle as { cx?: unknown; cy?: unknown; r?: unknown };
+        const cx = safeOptNum(rc.cx);
+        const cy = safeOptNum(rc.cy);
+        const r  = safeOptNum(rc.r);
+        if (cx !== undefined && cy !== undefined && r !== undefined && r > 0) {
+          circle = { cx, cy, r: Math.max(1, Math.min(2000, r)) };
+        }
+      }
       return {
         id: safeStr(p.id, newId("p")),
         typeId: safeStr(p.typeId ?? p.type, "_unknown"),
@@ -114,18 +205,45 @@ function migrateDoc(raw: unknown): MapDoc {
         x: safeNum(p.x, 0), y: safeNum(p.y, 0),
         w: safeNum(p.w, 40), h: safeNum(p.h, 25),
         points,
+        pathPoints,
+        pathWidth,
+        circle,
+        outline,
+        textInside: safeOptStr((p as LegacyPlot & { textInside?: unknown }).textInside),
+        birthYear: safeOptStr((p as LegacyPlot & { birthYear?: unknown }).birthYear),
+        deathYear: safeOptStr((p as LegacyPlot & { deathYear?: unknown }).deathYear),
+        gridRef: safeOptStr((p as LegacyPlot & { gridRef?: unknown }).gridRef),
       };
     }),
-    spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => ({
-      id: safeStr(s.id, newId("s")),
-      x: safeNum(s.x, 0), y: safeNum(s.y, 0),
-      name: safeStr(s.name, ""),
-      dob: safeOptStr(s.dob), dod: safeOptStr(s.dod),
-      spotTypeId: safeStr(s.spotTypeId, "civilian"),
-      headstoneImage: safeOptStr(s.headstoneImage),
-      lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
-      notes: safeOptStr(s.notes),
-    })),
+    spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
+      // Headstone images: migrate from the legacy single `headstoneImage`
+      // string into an array. Newer saves already store `headstoneImages`,
+      // and we tolerate both being present (newer wins, legacy is folded in
+      // only if the array is empty) so a downgraded client can't lose data.
+      const legacyOne = safeOptStr((s as LegacySpot & { headstoneImage?: unknown }).headstoneImage);
+      const fromArrayRaw = (s as LegacySpot & { headstoneImages?: unknown }).headstoneImages;
+      const fromArray = Array.isArray(fromArrayRaw)
+        ? fromArrayRaw
+            .filter((v): v is string => typeof v === "string" && v.length > 0)
+            .slice(0, MAX_HEADSTONE_IMAGES)
+        : [];
+      const headstoneImages = fromArray.length > 0
+        ? fromArray
+        : legacyOne
+          ? [legacyOne]
+          : undefined;
+      return {
+        id: safeStr(s.id, newId("s")),
+        x: safeNum(s.x, 0), y: safeNum(s.y, 0),
+        name: safeStr(s.name, ""),
+        dob: safeOptStr(s.dob), dod: safeOptStr(s.dod),
+        spotTypeId: safeStr(s.spotTypeId, "civilian"),
+        headstoneImages,
+        lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
+        notes: safeOptStr(s.notes),
+        symbolType: safeOptStr((s as LegacySpot & { symbolType?: unknown }).symbolType),
+      };
+    }),
     updatedAt: safeNum(d.updatedAt, Date.now()),
   };
 }
@@ -144,8 +262,14 @@ export default function MapMaker() {
   const [tilt, setTilt] = useState(55);
   const [zoom, setZoom] = useState(1);
   const [showImage, setShowImage] = useState(true);
-  const [showLabels, setShowLabels] = useState(true);
+  // Labels are off by default — they crowd the canvas on dense imported maps
+  // (e.g. a Gresham-style grid with 300+ plots). Hover any plot to see its
+  // label; toggle the "Labels" button in the toolbar to pin them all on.
+  const [showLabels, setShowLabels] = useState(false);
   const [showSpots, setShowSpots] = useState(true);
+  // Tracks the plot the pointer is currently hovering over, so we can show
+  // its label on hover even when the global "Labels" toggle is off.
+  const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -161,8 +285,24 @@ export default function MapMaker() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
-  const dragState = useRef<{ mode: "create" | "move" | "resize" | "move-spot"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean } | null>(null);
+  const dragState = useRef<{ mode: "create" | "create-circle" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
+  // ----- Path / Polygon tool draft state -----
+  // Both the Path tool (open polyline) and the Polygon tool (closed filled
+  // shape) build up a vertex list through discrete clicks (NOT a drag), so
+  // they share this draft separate from `draftRect` / `dragState`. The
+  // `closed` discriminator decides which kind of plot is committed and how
+  // the live preview is rendered. The ref is the source of truth (committed
+  // during synchronous handlers); the state mirror exists purely to trigger
+  // re-renders so the live preview updates.
+  type DraftPath = { typeId: string; pathWidth: number; points: [number, number][]; closed: boolean; outline?: boolean };
+  const draftPathRef = useRef<DraftPath | null>(null);
+  const [draftPath, setDraftPath] = useState<DraftPath | null>(null);
+  // Latest pointer position (SVG units) while the Path / Polygon tool is
+  // active — used to draw a "rubber band" segment from the last vertex to
+  // the cursor (and, for polygons, back to the first vertex to preview the
+  // closing edge).
+  const [pathCursor, setPathCursor] = useState<{ x: number; y: number } | null>(null);
   const viewRef = useRef<View>("2d");
 
   useEffect(() => { viewRef.current = view; }, [view]);
@@ -213,6 +353,15 @@ export default function MapMaker() {
       setDraftRect(null);
     }
   }, [view]);
+
+  // Clear stale hover state when the underlying plots change (e.g. after a
+  // delete or after loading a new map) so we don't keep referencing an id
+  // that no longer exists.
+  useEffect(() => {
+    if (hoveredPlotId && !doc.plots.some((p) => p.id === hoveredPlotId)) {
+      setHoveredPlotId(null);
+    }
+  }, [doc.plots, hoveredPlotId]);
 
   // Maintain valid active type ids if registry changes
   useEffect(() => {
@@ -296,6 +445,15 @@ export default function MapMaker() {
   }, []);
 
   // ----- Canvas pointer handlers -----
+  // Find the Radix ScrollArea viewport that wraps our SVG canvas. The hand
+  // tool scrolls THIS element to pan; we look it up lazily because it's
+  // mounted by ScrollArea and only exists at runtime.
+  const findScrollViewport = useCallback((): HTMLElement | null => {
+    return canvasWrapRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement | null;
+  }, []);
+
   const onCanvasPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (view === "3d") return;
     const target = e.target as SVGElement;
@@ -307,17 +465,82 @@ export default function MapMaker() {
       : undefined;
     const { x, y } = toSvgPoint(e);
 
-    if (tool === "draw" && !isPlotEl && !isResizeEl && !isSpotEl) {
+    // Hand / pan tool: drag to scroll the canvas viewport. Always wins —
+    // even when the press lands on a plot — so the user can pan over busy
+    // imported maps without accidentally selecting things.
+    if (tool === "pan") {
+      const vp = findScrollViewport();
+      if (!vp) return;
+      dragState.current = {
+        mode: "pan",
+        panStartClientX: e.clientX,
+        panStartClientY: e.clientY,
+        panStartScrollLeft: vp.scrollLeft,
+        panStartScrollTop: vp.scrollTop,
+      };
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    if (isRectTool(tool) && !isPlotEl && !isResizeEl && !isSpotEl) {
       if (!activePlotTypeId) return;
       const id = newId("p");
       const draft: Plot = {
         id, typeId: activePlotTypeId, label: "", status: "available",
         x, y, w: 0, h: 0,
+        ...(tool === "rect-outline" ? { outline: true } : {}),
       };
       draftRectRef.current = draft;
       setDraftRect(draft);
       dragState.current = { mode: "create", id, anchorX: x, anchorY: y };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // Circle tool: drag from the press point (center) outward; the distance
+    // to the cursor defines the radius. Bounding box is kept as a square
+    // around the circle so the existing select/move handles still work.
+    // Same draft refs as the rect tool — only one draft can be active at a time.
+    if (tool === "circle" && !isPlotEl && !isResizeEl && !isSpotEl) {
+      if (!activePlotTypeId) return;
+      const id = newId("p");
+      const draft: Plot = {
+        id, typeId: activePlotTypeId, label: "", status: "available",
+        x, y, w: 0, h: 0,
+        circle: { cx: x, cy: y, r: 0 },
+      };
+      draftRectRef.current = draft;
+      setDraftRect(draft);
+      dragState.current = { mode: "create-circle", id, anchorX: x, anchorY: y };
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // Path / Polygon tool: each click adds a vertex to the in-progress shape.
+    // Double-click / Enter / Esc finishes; Backspace pops the last vertex.
+    // We deliberately ignore plot/spot underlays so a road or polygon can
+    // pass over a plot without flipping selection mid-draw. We also do NOT
+    // capture the pointer — both tools rely on discrete clicks, not drags.
+    // The `closed` flag picks polygon (filled) vs polyline (stroked).
+    if (tool === "path" || isPolygonTool(tool)) {
+      if (!activePlotTypeId) return;
+      const closed = isPolygonTool(tool);
+      const outline = tool === "polygon-outline";
+      const cur = draftPathRef.current;
+      if (!cur) {
+        const next: DraftPath = { typeId: activePlotTypeId, pathWidth: DEFAULT_PATH_WIDTH, points: [[x, y] as [number, number]], closed, outline };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      } else if (cur.points.length < MAX_PATH_VERTICES) {
+        // Skip duplicate vertices (the second pointerdown of a dblclick lands
+        // on the same point as the first; the dblclick handler will commit).
+        const [lx, ly] = cur.points[cur.points.length - 1];
+        if (Math.hypot(x - lx, y - ly) < 0.5) return;
+        const next: DraftPath = { ...cur, points: [...cur.points, [x, y] as [number, number]] };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      }
+      setPathCursor({ x, y });
       return;
     }
 
@@ -367,9 +590,32 @@ export default function MapMaker() {
   };
 
   const onCanvasPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (!dragState.current || viewRef.current === "3d") return;
-    const { x, y } = toSvgPoint(e);
+    if (viewRef.current === "3d") return;
+    // Path / Polygon tools: track the cursor for the live "rubber band"
+    // preview from the last placed vertex to the pointer (and, for polygons,
+    // the closing edge back to the first vertex). Runs even when no drag is
+    // active — both tools are click-based, not drag-based.
+    if ((tool === "path" || isPolygonTool(tool)) && draftPathRef.current) {
+      const { x, y } = toSvgPoint(e);
+      setPathCursor({ x, y });
+      return;
+    }
+    if (!dragState.current) return;
     const ds = dragState.current;
+
+    // Hand / pan tool: scroll the viewport. Compute the delta in SCREEN
+    // pixels (not SVG units) — we're moving the scroll container, which
+    // is unaffected by the SVG viewBox transform.
+    if (ds.mode === "pan") {
+      const vp = findScrollViewport();
+      if (vp) {
+        vp.scrollLeft = ds.panStartScrollLeft! - (e.clientX - ds.panStartClientX!);
+        vp.scrollTop  = ds.panStartScrollTop!  - (e.clientY - ds.panStartClientY!);
+      }
+      return;
+    }
+
+    const { x, y } = toSvgPoint(e);
 
     if (ds.mode === "create" && draftRectRef.current) {
       const ax = ds.anchorX!, ay = ds.anchorY!;
@@ -382,6 +628,18 @@ export default function MapMaker() {
       setDraftRect(next);
     }
 
+    if (ds.mode === "create-circle" && draftRectRef.current) {
+      const ax = ds.anchorX!, ay = ds.anchorY!;
+      const r = Math.hypot(x - ax, y - ay);
+      const next: Plot = {
+        ...draftRectRef.current,
+        x: ax - r, y: ay - r, w: r * 2, h: r * 2,
+        circle: { cx: ax, cy: ay, r },
+      };
+      draftRectRef.current = next;
+      setDraftRect(next);
+    }
+
     if (ds.mode === "move" && ds.id) {
       setDoc((d) => ({
         ...d,
@@ -389,12 +647,14 @@ export default function MapMaker() {
           if (p.id !== ds.id) return p;
           const nx = x - ds.offsetX!;
           const ny = y - ds.offsetY!;
-          // Translate the polygon outline by the same delta so the rendered
-          // shape stays glued to the bounding box.
+          // Translate the polygon outline, polyline path, AND circle center
+          // by the same delta so any rendered shape stays glued to the box.
           const dx = nx - p.x;
           const dy = ny - p.y;
           const points = p.points ? p.points.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
-          return { ...p, x: nx, y: ny, points };
+          const pathPoints = p.pathPoints ? p.pathPoints.map(([px, py]) => [px + dx, py + dy] as [number, number]) : undefined;
+          const circle = p.circle ? { cx: p.circle.cx + dx, cy: p.circle.cy + dy, r: p.circle.r } : undefined;
+          return { ...p, x: nx, y: ny, points, pathPoints, circle };
         }),
       }));
     }
@@ -413,8 +673,8 @@ export default function MapMaker() {
           if (p.id !== ds.id) return p;
           const nw = Math.max(8, x - p.x);
           const nh = Math.max(8, y - p.y);
-          // Scale the polygon outline relative to the top-left so the shape
-          // stays inside (and proportional to) the new bounding box.
+          // Scale the polygon / polyline outline relative to the top-left so
+          // the shape stays inside (and proportional to) the new bounding box.
           let points = p.points;
           if (points && p.w > 0 && p.h > 0) {
             const sx = nw / p.w;
@@ -424,7 +684,16 @@ export default function MapMaker() {
               p.y + (py - p.y) * sy,
             ] as [number, number]);
           }
-          return { ...p, w: nw, h: nh, points };
+          let pathPoints = p.pathPoints;
+          if (pathPoints && p.w > 0 && p.h > 0) {
+            const sx = nw / p.w;
+            const sy = nh / p.h;
+            pathPoints = pathPoints.map(([px, py]) => [
+              p.x + (px - p.x) * sx,
+              p.y + (py - p.y) * sy,
+            ] as [number, number]);
+          }
+          return { ...p, w: nw, h: nh, points, pathPoints };
         }),
       }));
     }
@@ -452,6 +721,23 @@ export default function MapMaker() {
         setTool("select");
       }
     }
+    if (ds.mode === "create-circle" && viewRef.current === "2d") {
+      const { x, y } = toSvgPoint(e);
+      const ax = ds.anchorX!, ay = ds.anchorY!;
+      const r = Math.hypot(x - ax, y - ay);
+      // Same minimum size threshold as the rect tool — guards against
+      // accidental zero-radius circles from a stray click.
+      if (draftRectRef.current && r > 4) {
+        const finalPlot: Plot = {
+          ...draftRectRef.current,
+          x: ax - r, y: ay - r, w: r * 2, h: r * 2,
+          circle: { cx: ax, cy: ay, r },
+        };
+        setDoc((d) => ({ ...d, plots: [...d.plots, finalPlot], updatedAt: Date.now() }));
+        setSelection({ kind: "plot", id: finalPlot.id });
+        setTool("select");
+      }
+    }
     if (ds.mode === "move" || ds.mode === "move-spot" || ds.mode === "resize") {
       // bump updatedAt on any geometry change
       setDoc((d) => ({ ...d, updatedAt: Date.now() }));
@@ -472,10 +758,152 @@ export default function MapMaker() {
     try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch {}
   };
 
+  // Commit the in-progress polyline as a real Plot. Trims trailing
+  // near-duplicate vertices (the dblclick gesture leaves one behind), drops
+  // the draft if too few real vertices remain. By default switches back to
+  // Select; pass `switchToSelect: false` when an outer caller is itself
+  // switching the user to a different tool (e.g. tool-change auto-commit)
+  // so we don't clobber their target.
+  // Returns true if a plot was committed, false otherwise.
+  const commitDraftPath = useCallback((opts?: { switchToSelect?: boolean }): boolean => {
+    const switchToSelect = opts?.switchToSelect ?? true;
+    const cur = draftPathRef.current;
+    draftPathRef.current = null;
+    setDraftPath(null);
+    setPathCursor(null);
+    if (!cur) return false;
+    // Trim trailing near-duplicates so a dblclick that places the second
+    // pointerdown ~on top of the previous vertex doesn't create a zero-length
+    // tail segment. 4 SVG units ≈ what the browser treats as the same point.
+    const pts: [number, number][] = [];
+    for (const pt of cur.points) {
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(pt[0] - last[0], pt[1] - last[1]) > 4) pts.push(pt);
+    }
+    // Polygons need ≥3 vertices (a triangle is the smallest valid polygon);
+    // open paths need ≥2 (a single segment is a valid road).
+    const minVertices = cur.closed ? 3 : 2;
+    if (pts.length < minVertices) return false;
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    let finalPlot: Plot;
+    if (cur.closed) {
+      // Closed polygon — bbox is the tight min/max of the vertices (no
+      // half-stroke padding; the fill stays inside the geometry).
+      const bx = Math.min(...xs);
+      const by = Math.min(...ys);
+      const bw = Math.max(8, Math.max(...xs) - bx);
+      const bh = Math.max(8, Math.max(...ys) - by);
+      finalPlot = {
+        id: newId("p"),
+        typeId: cur.typeId,
+        label: "",
+        status: "available",
+        x: bx, y: by, w: bw, h: bh,
+        points: pts,
+        ...(cur.outline ? { outline: true } : {}),
+      };
+    } else {
+      // Open polyline — bbox includes a half-stroke padding so the visible
+      // stroked line never spills outside the bounding rect.
+      const pad = cur.pathWidth / 2;
+      const bx = Math.min(...xs) - pad;
+      const by = Math.min(...ys) - pad;
+      const bw = Math.max(8, Math.max(...xs) - Math.min(...xs) + cur.pathWidth);
+      const bh = Math.max(8, Math.max(...ys) - Math.min(...ys) + cur.pathWidth);
+      finalPlot = {
+        id: newId("p"),
+        typeId: cur.typeId,
+        label: "",
+        status: "available",
+        x: bx, y: by, w: bw, h: bh,
+        pathPoints: pts,
+        pathWidth: cur.pathWidth,
+      };
+    }
+    setDoc((d) => ({ ...d, plots: [...d.plots, finalPlot], updatedAt: Date.now() }));
+    setSelection({ kind: "plot", id: finalPlot.id });
+    if (switchToSelect) setTool("select");
+    return true;
+  }, []);
+
+  // Cancel the current path draft without committing (used by Esc when the
+  // user wants to throw away the in-progress shape, or by tool changes).
+  const cancelDraftPath = useCallback(() => {
+    draftPathRef.current = null;
+    setDraftPath(null);
+    setPathCursor(null);
+  }, []);
+
+  // Switching tools mid-draw should not strand a partial polyline / polygon
+  // (and must not silently commit one shape as the other). Commit-or-discard
+  // whenever the active tool no longer matches the in-progress draft's mode:
+  // either the user left the click-based tools entirely, or they swapped
+  // between Path and Polygon (which have different `closed` semantics, so
+  // continuing the same draft would yield the wrong stored shape and
+  // vertex-min enforcement). Pass switchToSelect=false so we honour whichever
+  // tool the user actually picked instead of forcing them into Select.
+  useEffect(() => {
+    const cur = draftPathRef.current;
+    if (!cur) return;
+    // Switching between fill ↔ outline variants of the same closed-polygon
+    // family is fine — the outline flag is a render-time decision, not a
+    // geometry one — so we only force a commit when the user crosses the
+    // open/closed boundary (path ↔ polygon).
+    const stillSameMode =
+      (tool === "path"            && !cur.closed) ||
+      (isPolygonTool(tool)        &&  cur.closed);
+    if (!stillSameMode) {
+      commitDraftPath({ switchToSelect: false });
+      return;
+    }
+    // Sync the active draft's outline flag when toggling between
+    // `polygon` and `polygon-outline` mid-draw, so the live preview and
+    // eventual commit honour whichever variant the user has selected
+    // *now*, not whichever one started the draft.
+    if (cur.closed) {
+      const wantOutline = tool === "polygon-outline";
+      if ((cur.outline ?? false) !== wantOutline) {
+        const next: DraftPath = { ...cur, outline: wantOutline };
+        draftPathRef.current = next;
+        setDraftPath(next);
+      }
+    }
+  }, [tool, commitDraftPath]);
+
+  // Double-click on the canvas finishes the in-progress path or polygon.
+  // Wired on the SVG element so the user can dblclick anywhere — including
+  // on the last vertex they just placed — to signal "done".
+  const onCanvasDoubleClick = () => {
+    if ((tool === "path" || isPolygonTool(tool)) && draftPathRef.current) commitDraftPath();
+  };
+
   // ----- Keyboard shortcuts -----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Path-drawing keys take priority — Backspace pops the last vertex,
+      // Enter commits, Escape discards the in-progress draft. We branch
+      // first so they don't fall through to the global Backspace=delete
+      // selection / Esc=clear selection behaviour.
+      if (draftPathRef.current) {
+        if (e.key === "Backspace" || e.key === "Delete") {
+          e.preventDefault();
+          const cur = draftPathRef.current;
+          if (cur.points.length <= 1) {
+            cancelDraftPath();
+          } else {
+            const next = { ...cur, points: cur.points.slice(0, -1) };
+            draftPathRef.current = next;
+            setDraftPath(next);
+          }
+          return;
+        }
+        if (e.key === "Enter") { e.preventDefault(); commitDraftPath(); return; }
+        if (e.key === "Escape") { e.preventDefault(); cancelDraftPath(); return; }
+      }
+
       if ((e.key === "Delete" || e.key === "Backspace") && selection) {
         e.preventDefault();
         if (selection.kind === "plot") {
@@ -488,8 +916,12 @@ export default function MapMaker() {
       if (e.key === "Escape") setSelection(null);
       const k = e.key.toLowerCase();
       if (k === "v") setTool("select");
-      if (k === "r") setTool("draw");
+      if (k === "r") setTool(e.shiftKey ? "rect-outline" : "draw");
+      if (k === "c") setTool("circle");
+      if (k === "g") setTool(e.shiftKey ? "polygon-outline" : "polygon");
+      if (k === "p") setTool("path");
       if (k === "s") setTool("spot");
+      if (k === "h") setTool("pan");
       if (k === "f") {
         e.preventDefault();
         void enterFullscreen();
@@ -497,7 +929,7 @@ export default function MapMaker() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, enterFullscreen]);
+  }, [selection, enterFullscreen, commitDraftPath, cancelDraftPath]);
 
   // ----- Background image management -----
   // Returns true on success, false on failure. Caller should only show
@@ -669,18 +1101,86 @@ export default function MapMaker() {
     setDoc((d) => ({ ...d, spots: d.spots.map((s) => s.id === selectedSpot.id ? { ...s, ...patch } : s), updatedAt: Date.now() }));
   };
 
+  // Append one or more headstone photos to the selected spot. Each file is
+  // downscaled in parallel and only the surviving ones are committed (one
+  // bad file shouldn't block the rest). Excess uploads beyond
+  // MAX_HEADSTONE_IMAGES are silently dropped with a status message.
+  //
+  // The merge runs inside a functional setDoc so two batches uploaded back
+  // to back can't clobber each other — each batch sees the latest array
+  // and re-clamps to the cap. We capture the spot id (not the spot object)
+  // before awaiting, so a selection change mid-upload still targets the
+  // right spot.
   const onUploadHeadstone = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file || !selectedSpot) return;
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      const scaled = await downscaleImage(dataUrl, 400);
-      updateSpot({ headstoneImage: scaled.data });
-    } catch {
-      setSaveError("Couldn't process the headstone image.");
+    if (files.length === 0 || !selectedSpot) return;
+    const spotId = selectedSpot.id;
+
+    const existingAtStart = selectedSpot.headstoneImages ?? [];
+    const room = Math.max(0, MAX_HEADSTONE_IMAGES - existingAtStart.length);
+    if (room === 0) {
+      setSaveError(`This spot already has the maximum of ${MAX_HEADSTONE_IMAGES} headstone photos. Remove one before adding more.`);
+      setTimeout(() => setSaveError(null), 4000);
+      return;
+    }
+    const accepted = files.slice(0, room);
+    const droppedUpFront = files.length - accepted.length;
+
+    const results = await Promise.allSettled(
+      accepted.map(async (file) => {
+        const dataUrl = await fileToDataUrl(file);
+        const scaled = await downscaleImage(dataUrl, 400);
+        return scaled.data;
+      }),
+    );
+    const newImages = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const failed = results.length - newImages.length;
+
+    let droppedAtCommit = 0;
+    if (newImages.length > 0) {
+      setDoc((d) => ({
+        ...d,
+        spots: d.spots.map((s) => {
+          if (s.id !== spotId) return s;
+          const current = s.headstoneImages ?? [];
+          const slots = Math.max(0, MAX_HEADSTONE_IMAGES - current.length);
+          const fit = newImages.slice(0, slots);
+          droppedAtCommit = newImages.length - fit.length;
+          if (fit.length === 0) return s;
+          return { ...s, headstoneImages: [...current, ...fit] };
+        }),
+        updatedAt: Date.now(),
+      }));
+    }
+
+    const totalDropped = droppedUpFront + droppedAtCommit;
+    if (failed > 0 || totalDropped > 0) {
+      const parts: string[] = [];
+      if (failed > 0) parts.push(`${failed} photo${failed === 1 ? "" : "s"} couldn't be processed`);
+      if (totalDropped > 0) parts.push(`${totalDropped} skipped (max ${MAX_HEADSTONE_IMAGES} per spot)`);
+      setSaveError(parts.join(" · "));
       setTimeout(() => setSaveError(null), 4000);
     }
+  };
+
+  // Remove a single headstone image by index from the selected spot. Uses a
+  // functional setDoc so a remove racing with a concurrent upload always
+  // operates on the latest array.
+  const onRemoveHeadstone = (index: number) => {
+    if (!selectedSpot) return;
+    const spotId = selectedSpot.id;
+    setDoc((d) => ({
+      ...d,
+      spots: d.spots.map((s) => {
+        if (s.id !== spotId) return s;
+        const current = s.headstoneImages ?? [];
+        if (index < 0 || index >= current.length) return s;
+        const next = current.filter((_, i) => i !== index);
+        return { ...s, headstoneImages: next.length > 0 ? next : undefined };
+      }),
+      updatedAt: Date.now(),
+    }));
   };
 
   // ----- Stats -----
@@ -696,7 +1196,14 @@ export default function MapMaker() {
     return { totalPlots: doc.plots.length, totalSpots: doc.spots.length, byPlotType, available, reserved, occupied };
   }, [doc.plots, doc.spots]);
 
-  const cursorClass = tool === "draw" ? "cursor-crosshair" : tool === "spot" ? "cursor-cell" : "cursor-default";
+  const cursorClass =
+    isRectTool(tool)   ? "cursor-crosshair" :
+    tool === "circle"  ? "cursor-crosshair" :
+    isPolygonTool(tool) ? "cursor-crosshair" :
+    tool === "path"    ? "cursor-crosshair" :
+    tool === "spot"    ? "cursor-cell" :
+    tool === "pan"     ? "cursor-grab active:cursor-grabbing" :
+    "cursor-default";
 
   // Fit-to-screen: compute zoom that fits the canvas inside the viewport.
   const fitToScreen = useCallback(() => {
@@ -859,7 +1366,13 @@ export default function MapMaker() {
           <aside className="w-12 shrink-0 border-r border-border bg-card flex flex-col items-center py-2 gap-1">
             <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select-mini" iconOnly />
             <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw-mini" iconOnly />
+            <ToolButton active={tool === "rect-outline"} onClick={() => setTool("rect-outline")} icon={SquareDashed} label="Rect outline" testId="tool-rect-outline-mini" iconOnly />
+            <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle"  testId="tool-circle-mini" iconOnly />
+            <ToolButton active={tool === "polygon"}onClick={() => setTool("polygon")}icon={Hexagon}       label="Polygon" testId="tool-polygon-mini" iconOnly />
+            <ToolButton active={tool === "polygon-outline"} onClick={() => setTool("polygon-outline")} icon={Hexagon} label="Polygon outline" testId="tool-polygon-outline-mini" iconOnly />
+            <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path-mini" iconOnly />
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
+            <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
             <Separator className="my-1 w-8" />
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => fileInputRef.current?.click()} title="Upload background image">
               <Upload className="h-4 w-4" />
@@ -879,25 +1392,37 @@ export default function MapMaker() {
           <ScrollArea className="flex-1">
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Tool</div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-2 gap-1">
                 <ToolButton active={tool === "select"} onClick={() => setTool("select")} icon={MousePointer2} label="Select" testId="tool-select" />
                 <ToolButton active={tool === "draw"}   onClick={() => setTool("draw")}   icon={Square}        label="Plot"   testId="tool-draw" />
+                <ToolButton active={tool === "rect-outline"} onClick={() => setTool("rect-outline")} icon={SquareDashed} label="Rect outline" testId="tool-rect-outline" />
+                <ToolButton active={tool === "circle"} onClick={() => setTool("circle")} icon={CircleIcon}    label="Circle"  testId="tool-circle" />
+                <ToolButton active={tool === "polygon"}onClick={() => setTool("polygon")}icon={Hexagon}       label="Polygon" testId="tool-polygon" />
+                <ToolButton active={tool === "polygon-outline"} onClick={() => setTool("polygon-outline")} icon={Hexagon} label="Polygon outline" testId="tool-polygon-outline" />
+                <ToolButton active={tool === "path"}   onClick={() => setTool("path")}   icon={Spline}        label="Path"   testId="tool-path" />
                 <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot" />
+                <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan" />
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
-                {tool === "draw"  && "Drag on the canvas to place a plot."}
-                {tool === "spot"  && "Click on the canvas to drop a burial spot."}
-                {tool === "select"&& "Click an item to edit. Drag to move."}
+                {tool === "draw"   && "Drag on the canvas to place a plot."}
+                {tool === "rect-outline" && "Drag to draw an outline-only rectangle (e.g. a family-grave boundary that contains plots inside)."}
+                {tool === "polygon-outline" && "Click to place vertices for an outline-only polygon (e.g. a family-grave boundary or section). Double-click to finish."}
+                {tool === "circle" && "Drag from the center outward to define the radius."}
+                {tool === "polygon"&& "Click to place vertices for a closed shape (need at least 3). Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
+                {tool === "path"   && "Click to place points along a path or road. Double-click (or press Enter) to finish, Backspace to undo last point, Esc to cancel."}
+                {tool === "spot"   && "Click on the canvas to drop a burial spot."}
+                {tool === "select" && "Click an item to edit. Drag to move."}
+                {tool === "pan"    && "Drag the canvas to pan around the map."}
               </p>
             </div>
 
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
                 <span>Plot Type</span>
-                <a href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</a>
+                <Link href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</Link>
               </div>
               {plotTypes.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No plot types configured. <a className="text-primary underline" href="/cemetery-setup">Add some →</a></p>
+                <p className="text-xs text-muted-foreground">No plot types configured. <Link className="text-primary underline" href="/cemetery-setup">Add some →</Link></p>
               ) : (
                 <div className="space-y-1">
                   {plotTypes.map((t) => {
@@ -906,7 +1431,7 @@ export default function MapMaker() {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => { setActivePlotTypeId(t.id); setTool("draw"); }}
+                        onClick={() => { setActivePlotTypeId(t.id); setTool(shapeToTool(t.defaultShape)); }}
                         data-testid={`palette-plot-${t.code}`}
                         className={cn(
                           "w-full flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
@@ -929,7 +1454,7 @@ export default function MapMaker() {
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
                 <span>Spot Type</span>
-                <a href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</a>
+                <Link href="/cemetery-setup" className="text-[9px] text-primary hover:underline normal-case tracking-normal">Manage →</Link>
               </div>
               {spotTypes.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No spot types configured.</p>
@@ -1085,6 +1610,7 @@ export default function MapMaker() {
                   onPointerMove={onCanvasPointerMove}
                   onPointerUp={onCanvasPointerUp}
                   onPointerCancel={onCanvasPointerCancel}
+                  onDoubleClick={onCanvasDoubleClick}
                   data-testid="map-canvas"
                 >
                   {!doc.image && (
@@ -1103,39 +1629,140 @@ export default function MapMaker() {
                   )}
 
                   {/* 3D plot shadows */}
-                  {view === "3d" && doc.plots.map((p) => (
-                    p.points && p.points.length >= 3 ? (
-                      <polygon
-                        key={`shadow-${p.id}`}
-                        points={p.points.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
-                        fill="rgba(0,0,0,0.35)" pointerEvents="none"
-                      />
-                    ) : (
-                      <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />
-                    )
-                  ))}
+                  {view === "3d" && doc.plots.map((p) => {
+                    // Outline-only boundaries don't have a body to cast a
+                    // shadow — skip them so the 3D view doesn't paint a
+                    // filled silhouette underneath what should look hollow.
+                    if (p.outline) return null;
+                    if (p.pathPoints && p.pathPoints.length >= 2) {
+                      return (
+                        <polyline
+                          key={`shadow-${p.id}`}
+                          points={p.pathPoints.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
+                          fill="none"
+                          stroke="rgba(0,0,0,0.35)"
+                          strokeWidth={p.pathWidth ?? DEFAULT_PATH_WIDTH}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          pointerEvents="none"
+                        />
+                      );
+                    }
+                    if (p.circle) {
+                      return (
+                        <circle
+                          key={`shadow-${p.id}`}
+                          cx={p.circle.cx + 4} cy={p.circle.cy + 4} r={p.circle.r}
+                          fill="rgba(0,0,0,0.35)" pointerEvents="none"
+                        />
+                      );
+                    }
+                    if (p.points && p.points.length >= 3) {
+                      return (
+                        <polygon
+                          key={`shadow-${p.id}`}
+                          points={p.points.map(([px, py]) => `${px + 4},${py + 4}`).join(" ")}
+                          fill="rgba(0,0,0,0.35)" pointerEvents="none"
+                        />
+                      );
+                    }
+                    return <rect key={`shadow-${p.id}`} x={p.x + 4} y={p.y + 4} width={p.w} height={p.h} fill="rgba(0,0,0,0.35)" pointerEvents="none" />;
+                  })}
 
                   {/* Plots */}
                   {doc.plots.map((p) => {
                     const meta = getPlotType(p.typeId);
                     const isSel = selection?.kind === "plot" && selection.id === p.id;
-                    // Polygon plots (typically AI-imported, non-rectangular)
-                    // render their true outline. Plain plots render as the
-                    // classic axis-aligned rectangle.
-                    const hasPolygon = p.points && p.points.length >= 3;
+                    const isHov = hoveredPlotId === p.id;
+                    // Show this plot's label when the global toggle is on,
+                    // OR the user is hovering it, OR it's currently selected.
+                    const showThisLabel = (showLabels || isHov || isSel) && p.w > 24 && p.h > 14;
+                    // Four render shapes, in priority order:
+                    //   1. Polyline (path/road) — `pathPoints` defines an open
+                    //      stroked line; we render two stacked polylines so a
+                    //      thin road still has a generously thick hit area.
+                    //   2. Circle — `circle` defines cx/cy/r.
+                    //   3. Polygon (typically AI-imported, non-rectangular).
+                    //   4. Plain axis-aligned rectangle.
+                    const hasPath = p.pathPoints && p.pathPoints.length >= 2;
+                    const hasCircle = !hasPath && !!p.circle;
+                    const hasPolygon = !hasPath && !hasCircle && p.points && p.points.length >= 3;
+                    const onPlotEnter = () => setHoveredPlotId(p.id);
+                    const onPlotLeave = () => setHoveredPlotId((cur) => (cur === p.id ? null : cur));
                     return (
                       <g key={p.id}>
-                        {hasPolygon ? (
-                          <polygon
+                        {hasPath ? (
+                          <>
+                            {/* Wide invisible hit-strip so narrow roads are easy to click. */}
+                            <polyline
+                              data-plot="true"
+                              data-plot-id={p.id}
+                              data-testid={`plot-${p.id}-hit`}
+                              points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                              fill="none"
+                              stroke="transparent"
+                              strokeWidth={Math.max((p.pathWidth ?? DEFAULT_PATH_WIDTH) + 8, 18)}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                              onPointerEnter={onPlotEnter}
+                              onPointerLeave={onPlotLeave}
+                            />
+                            {/* Visible stroke. When selected, draw a thicker
+                                halo underneath the visible body using paintOrder. */}
+                            <polyline
+                              data-testid={`plot-${p.id}`}
+                              points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                              fill="none"
+                              stroke={meta.fill}
+                              strokeOpacity={doc.image ? 0.92 : 1}
+                              strokeWidth={p.pathWidth ?? DEFAULT_PATH_WIDTH}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              pointerEvents="none"
+                            />
+                            {isSel && (
+                              <polyline
+                                points={p.pathPoints!.map(([px, py]) => `${px},${py}`).join(" ")}
+                                fill="none"
+                                stroke="#0ea5e9"
+                                strokeWidth={(p.pathWidth ?? DEFAULT_PATH_WIDTH) + 3}
+                                strokeOpacity={0.55}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeDasharray="6 4"
+                                pointerEvents="none"
+                              />
+                            )}
+                          </>
+                        ) : hasCircle ? (
+                          <circle
                             data-plot="true"
                             data-plot-id={p.id}
                             data-testid={`plot-${p.id}`}
-                            points={p.points!.map(([px, py]) => `${px},${py}`).join(" ")}
+                            cx={p.circle!.cx} cy={p.circle!.cy} r={p.circle!.r}
                             fill={meta.fill}
                             fillOpacity={doc.image ? 0.85 : 1}
                             stroke={isSel ? "#0ea5e9" : meta.stroke}
                             strokeWidth={isSel ? 2.5 : 1}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
+                          />
+                        ) : hasPolygon ? (
+                          <polygon
+                            data-plot="true"
+                            data-plot-id={p.id}
+                            data-testid={`plot-${p.id}`}
+                            points={p.points!.map(([px, py]) => `${px},${py}`).join(" ")}
+                            fill={p.outline ? "none" : meta.fill}
+                            fillOpacity={p.outline ? undefined : (doc.image ? 0.85 : 1)}
+                            stroke={isSel ? "#0ea5e9" : (p.outline ? meta.fill : meta.stroke)}
+                            strokeWidth={isSel ? 2.5 : (p.outline ? 2.5 : 1)}
+                            strokeDasharray={p.outline && !isSel ? "8 4" : undefined}
+                            className={tool === "select" ? "cursor-move" : "cursor-pointer"}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
                           />
                         ) : (
                           <rect
@@ -1144,18 +1771,23 @@ export default function MapMaker() {
                             data-testid={`plot-${p.id}`}
                             x={p.x} y={p.y}
                             width={p.w} height={p.h}
-                            fill={meta.fill}
-                            fillOpacity={doc.image ? 0.85 : 1}
-                            stroke={isSel ? "#0ea5e9" : meta.stroke}
-                            strokeWidth={isSel ? 2.5 : 1}
+                            fill={p.outline ? "none" : meta.fill}
+                            fillOpacity={p.outline ? undefined : (doc.image ? 0.85 : 1)}
+                            stroke={isSel ? "#0ea5e9" : (p.outline ? meta.fill : meta.stroke)}
+                            strokeWidth={isSel ? 2.5 : (p.outline ? 2.5 : 1)}
+                            strokeDasharray={p.outline && !isSel ? "8 4" : undefined}
                             className={tool === "select" ? "cursor-move" : "cursor-pointer"}
                             rx={2}
+                            onPointerEnter={onPlotEnter}
+                            onPointerLeave={onPlotLeave}
                           />
                         )}
-                        {p.w > 12 && p.h > 12 && (
+                        {/* Status dot — skip on path plots (no obvious anchor). */}
+                        {!hasPath && p.w > 12 && p.h > 12 && (
                           <circle cx={p.x + p.w - 6} cy={p.y + 6} r={3} fill={STATUS_COLORS[p.status]} pointerEvents="none" />
                         )}
-                        {showLabels && p.w > 24 && p.h > 14 && (
+                        {/* Label — paths get the label centred on their middle vertex. */}
+                        {showThisLabel && !hasPath && (
                           <text
                             x={p.x + p.w / 2}
                             y={p.y + p.h / 2 + 3}
@@ -1163,12 +1795,32 @@ export default function MapMaker() {
                             fontSize={Math.min(11, p.h * 0.45)}
                             fontWeight={600}
                             fill={isLightFill(meta.fill) ? "#1f2937" : "#ffffff"}
+                            stroke="#ffffff"
+                            strokeWidth={isHov && !showLabels ? 3 : 0}
+                            paintOrder="stroke"
                             pointerEvents="none"
                           >
                             {p.label || meta.code}
                           </text>
                         )}
-                        {isSel && (
+                        {hasPath && (showLabels || isHov || isSel) && (() => {
+                          const mid = p.pathPoints![Math.floor(p.pathPoints!.length / 2)];
+                          return (
+                            <text
+                              x={mid[0]} y={mid[1] - (p.pathWidth ?? DEFAULT_PATH_WIDTH) / 2 - 4}
+                              textAnchor="middle" fontSize={11} fontWeight={600}
+                              fill={isLightFill(meta.fill) ? "#1f2937" : "#ffffff"}
+                              stroke="#ffffff" strokeWidth={3} paintOrder="stroke"
+                              pointerEvents="none"
+                            >
+                              {p.label || meta.code}
+                            </text>
+                          );
+                        })()}
+                        {/* Resize handle — only meaningful for rect/polygon plots.
+                            Path plots edit thickness via the inspector slider,
+                            circles edit radius via the inspector slider. */}
+                        {isSel && !hasPath && !hasCircle && (
                           <rect
                             data-resize="true"
                             x={p.x + p.w - 5} y={p.y + p.h - 5}
@@ -1177,6 +1829,16 @@ export default function MapMaker() {
                             className="cursor-nwse-resize"
                           />
                         )}
+                        {/* Path vertex handles when selected — visual only,
+                            help the user understand the shape they drew. */}
+                        {isSel && hasPath && p.pathPoints!.map(([vx, vy], i) => (
+                          <circle
+                            key={`v-${i}`}
+                            cx={vx} cy={vy} r={3.5}
+                            fill="#0ea5e9" stroke="#fff" strokeWidth={1.5}
+                            pointerEvents="none"
+                          />
+                        ))}
                       </g>
                     );
                   })}
@@ -1225,11 +1887,12 @@ export default function MapMaker() {
                     );
                   })}
 
-                  {/* Draft rectangle */}
-                  {draftRect && (
-                    <rect
-                      x={draftRect.x} y={draftRect.y}
-                      width={draftRect.w} height={draftRect.h}
+                  {/* Draft rectangle / circle preview. The same draft ref is
+                      reused by both tools — branch on whether a circle is
+                      present so the preview matches the in-progress shape. */}
+                  {draftRect && (draftRect.circle ? (
+                    <circle
+                      cx={draftRect.circle.cx} cy={draftRect.circle.cy} r={draftRect.circle.r}
                       fill={getPlotType(draftRect.typeId).fill}
                       fillOpacity={0.5}
                       stroke={getPlotType(draftRect.typeId).stroke}
@@ -1237,7 +1900,128 @@ export default function MapMaker() {
                       strokeWidth={1.5}
                       pointerEvents="none"
                     />
-                  )}
+                  ) : (
+                    <rect
+                      x={draftRect.x} y={draftRect.y}
+                      width={draftRect.w} height={draftRect.h}
+                      fill={draftRect.outline ? "none" : getPlotType(draftRect.typeId).fill}
+                      fillOpacity={draftRect.outline ? undefined : 0.5}
+                      stroke={draftRect.outline ? getPlotType(draftRect.typeId).fill : getPlotType(draftRect.typeId).stroke}
+                      strokeDasharray={draftRect.outline ? "8 4" : "4 3"}
+                      strokeWidth={draftRect.outline ? 2.5 : 1.5}
+                      pointerEvents="none"
+                    />
+                  ))}
+
+                  {/* Draft path / polygon preview — committed segments solid;
+                      the "rubber band" segment from the last vertex to the
+                      cursor is dashed so the user knows it's not placed yet.
+                      Polygons additionally render a translucent fill once at
+                      least 2 vertices exist plus the closing edge from the
+                      cursor back to the first vertex, giving a live preview
+                      of the closed shape. */}
+                  {draftPath && (() => {
+                    const meta = getPlotType(draftPath.typeId);
+                    const placed = draftPath.points;
+                    const placedStr = placed.map(([px, py]) => `${px},${py}`).join(" ");
+                    const last = placed[placed.length - 1];
+                    const first = placed[0];
+                    if (draftPath.closed) {
+                      // Polygon preview — fill the area defined by the placed
+                      // vertices (plus the cursor when we have one) so the
+                      // user sees the shape, not just an outline. For the
+                      // outline-only variant we skip the fill entirely so the
+                      // boundary preview matches the committed render.
+                      const previewPoints = pathCursor ? [...placed, [pathCursor.x, pathCursor.y] as [number, number]] : placed;
+                      const previewStr = previewPoints.map(([px, py]) => `${px},${py}`).join(" ");
+                      return (
+                        <g pointerEvents="none">
+                          {previewPoints.length >= 3 && !draftPath.outline && (
+                            <polygon
+                              points={previewStr}
+                              fill={meta.fill}
+                              fillOpacity={0.35}
+                              stroke="none"
+                            />
+                          )}
+                          {placed.length >= 2 && (
+                            <polyline
+                              points={placedStr}
+                              fill="none"
+                              stroke={meta.fill}
+                              strokeOpacity={0.9}
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          )}
+                          {pathCursor && (
+                            <>
+                              <line
+                                x1={last[0]} y1={last[1]}
+                                x2={pathCursor.x} y2={pathCursor.y}
+                                stroke={meta.fill}
+                                strokeOpacity={0.55}
+                                strokeWidth={2}
+                                strokeDasharray="6 5"
+                                strokeLinecap="round"
+                              />
+                              {placed.length >= 2 && (
+                                <line
+                                  x1={pathCursor.x} y1={pathCursor.y}
+                                  x2={first[0]} y2={first[1]}
+                                  stroke={meta.stroke}
+                                  strokeOpacity={0.45}
+                                  strokeWidth={1.5}
+                                  strokeDasharray="3 3"
+                                  strokeLinecap="round"
+                                />
+                              )}
+                            </>
+                          )}
+                          {placed.map(([vx, vy], i) => (
+                            <circle
+                              key={`dv-${i}`} cx={vx} cy={vy} r={4}
+                              fill={i === 0 ? meta.fill : "#ffffff"}
+                              stroke={meta.stroke} strokeWidth={1.5}
+                            />
+                          ))}
+                        </g>
+                      );
+                    }
+                    return (
+                      <g pointerEvents="none">
+                        {placed.length >= 2 && (
+                          <polyline
+                            points={placedStr}
+                            fill="none"
+                            stroke={meta.fill}
+                            strokeOpacity={0.9}
+                            strokeWidth={draftPath.pathWidth}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        )}
+                        {pathCursor && (
+                          <line
+                            x1={last[0]} y1={last[1]}
+                            x2={pathCursor.x} y2={pathCursor.y}
+                            stroke={meta.fill}
+                            strokeOpacity={0.55}
+                            strokeWidth={draftPath.pathWidth}
+                            strokeDasharray="6 5"
+                            strokeLinecap="round"
+                          />
+                        )}
+                        {placed.map(([vx, vy], i) => (
+                          <circle
+                            key={`dv-${i}`} cx={vx} cy={vy} r={4}
+                            fill="#ffffff" stroke={meta.stroke} strokeWidth={1.5}
+                          />
+                        ))}
+                      </g>
+                    );
+                  })()}
                 </svg>
               </div>
             </div>
@@ -1245,7 +2029,7 @@ export default function MapMaker() {
 
           <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border border-border rounded px-2 py-1 pointer-events-none">
             <Hand className="h-3 w-3" />
-            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
+            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">C</kbd> Circle · <kbd className="px-1 bg-muted rounded">G</kbd> Polygon · <kbd className="px-1 bg-muted rounded">P</kbd> Path · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">H</kbd> Pan · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
           </div>
 
           {saveError && (
@@ -1312,7 +2096,7 @@ export default function MapMaker() {
                   spotTypes={spotTypes}
                   onChange={updateSpot}
                   onUploadHeadstone={() => headstoneInputRef.current?.click()}
-                  onClearHeadstone={() => updateSpot({ headstoneImage: undefined })}
+                  onRemoveHeadstone={onRemoveHeadstone}
                   onDelete={() => {
                     setDoc((d) => ({ ...d, spots: d.spots.filter((s) => s.id !== selectedSpot.id), updatedAt: Date.now() }));
                     setSelection(null);
@@ -1324,7 +2108,7 @@ export default function MapMaker() {
                   Click a plot or burial spot on the canvas to edit it. Use the <strong>Plot</strong> tool to draw sections and the <strong>Spot</strong> tool to drop individual burial markers with full details.
                 </p>
               )}
-              <input ref={headstoneInputRef} type="file" accept="image/*" onChange={onUploadHeadstone} className="hidden" data-testid="headstone-input" />
+              <input ref={headstoneInputRef} type="file" accept="image/*" multiple onChange={onUploadHeadstone} className="hidden" data-testid="headstone-input" />
             </div>
 
             <div className="p-3 border-b border-border">
@@ -1426,12 +2210,97 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div><Label className="text-xs">Width</Label><Input type="number" value={Math.round(plot.w)} onChange={(e) => onChange({ w: Math.max(8, +e.target.value) })} className="h-8" /></div>
-        <div><Label className="text-xs">Height</Label><Input type="number" value={Math.round(plot.h)} onChange={(e) => onChange({ h: Math.max(8, +e.target.value) })} className="h-8" /></div>
-        <div><Label className="text-xs">X</Label><Input type="number" value={Math.round(plot.x)} onChange={(e) => onChange({ x: +e.target.value })} className="h-8" /></div>
-        <div><Label className="text-xs">Y</Label><Input type="number" value={Math.round(plot.y)} onChange={(e) => onChange({ y: +e.target.value })} className="h-8" /></div>
-      </div>
+      {/* Path plots edit their thickness via a slider, circles edit radius
+          via a slider, rect/polygon plots keep the legacy bbox numeric inputs.
+          Sliders auto-recompute the bounding box so move/select stay accurate. */}
+      {plot.pathPoints && plot.pathPoints.length >= 2 ? (
+        <div>
+          <Label className="text-xs flex items-center justify-between">
+            <span>Path width</span>
+            <span className="tabular-nums text-muted-foreground">{Math.round(plot.pathWidth ?? DEFAULT_PATH_WIDTH)} px</span>
+          </Label>
+          <Input
+            type="range"
+            min={2} max={60} step={1}
+            value={Math.round(plot.pathWidth ?? DEFAULT_PATH_WIDTH)}
+            onChange={(e) => {
+              const w = Math.max(2, Math.min(60, +e.target.value));
+              const xs = plot.pathPoints!.map((p) => p[0]);
+              const ys = plot.pathPoints!.map((p) => p[1]);
+              const pad = w / 2;
+              onChange({
+                pathWidth: w,
+                x: Math.min(...xs) - pad,
+                y: Math.min(...ys) - pad,
+                w: Math.max(8, Math.max(...xs) - Math.min(...xs) + w),
+                h: Math.max(8, Math.max(...ys) - Math.min(...ys) + w),
+              });
+            }}
+            className="h-8 cursor-ew-resize"
+            data-testid="input-path-width"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1">{plot.pathPoints.length} vertices · drag the path on the canvas to reposition it</p>
+        </div>
+      ) : plot.circle ? (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs flex items-center justify-between">
+              <span>Radius</span>
+              <span className="tabular-nums text-muted-foreground">{Math.round(plot.circle.r)} px</span>
+            </Label>
+            <Input
+              type="range"
+              min={4} max={2000} step={1}
+              value={Math.round(plot.circle.r)}
+              onChange={(e) => {
+                const r = Math.max(4, Math.min(2000, +e.target.value));
+                const c = plot.circle!;
+                onChange({
+                  circle: { cx: c.cx, cy: c.cy, r },
+                  x: c.cx - r, y: c.cy - r, w: r * 2, h: r * 2,
+                });
+              }}
+              className="h-8 cursor-ew-resize"
+              data-testid="input-circle-radius"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Center X</Label>
+              <Input
+                type="number"
+                value={Math.round(plot.circle.cx)}
+                onChange={(e) => {
+                  const cx = +e.target.value;
+                  const c = plot.circle!;
+                  onChange({ circle: { cx, cy: c.cy, r: c.r }, x: cx - c.r, y: c.cy - c.r, w: c.r * 2, h: c.r * 2 });
+                }}
+                className="h-8"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Center Y</Label>
+              <Input
+                type="number"
+                value={Math.round(plot.circle.cy)}
+                onChange={(e) => {
+                  const cy = +e.target.value;
+                  const c = plot.circle!;
+                  onChange({ circle: { cx: c.cx, cy, r: c.r }, x: c.cx - c.r, y: cy - c.r, w: c.r * 2, h: c.r * 2 });
+                }}
+                className="h-8"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-xs">Width</Label><Input type="number" value={Math.round(plot.w)} onChange={(e) => onChange({ w: Math.max(8, +e.target.value) })} className="h-8" /></div>
+          <div><Label className="text-xs">Height</Label><Input type="number" value={Math.round(plot.h)} onChange={(e) => onChange({ h: Math.max(8, +e.target.value) })} className="h-8" /></div>
+          <div><Label className="text-xs">X</Label><Input type="number" value={Math.round(plot.x)} onChange={(e) => onChange({ x: +e.target.value })} className="h-8" /></div>
+          <div><Label className="text-xs">Y</Label><Input type="number" value={Math.round(plot.y)} onChange={(e) => onChange({ y: +e.target.value })} className="h-8" /></div>
+        </div>
+      )}
       <Button size="sm" variant="outline" className="w-full text-destructive hover:text-destructive border-destructive/30" onClick={onDelete} data-testid="delete-plot">
         <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete plot
       </Button>
@@ -1439,13 +2308,15 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
   );
 }
 
-function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onClearHeadstone, onDelete }: {
+function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onRemoveHeadstone, onDelete }: {
   spot: BurialSpot; spotTypes: SpotType[];
   onChange: (patch: Partial<BurialSpot>) => void;
   onUploadHeadstone: () => void;
-  onClearHeadstone: () => void;
+  onRemoveHeadstone: (index: number) => void;
   onDelete: () => void;
 }) {
+  const images = spot.headstoneImages ?? [];
+  const canAddMore = images.length < MAX_HEADSTONE_IMAGES;
   const age = calcAge(spot.dob, spot.dod);
   const meta = spotTypes.find((t) => t.id === spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
   const Icon = SPOT_ICONS[meta.icon] ?? SPOT_ICONS.circle;
@@ -1505,21 +2376,50 @@ function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onClearHeads
       )}
 
       <div>
-        <Label className="text-xs">Headstone photo</Label>
-        {spot.headstoneImage ? (
-          <div className="mt-1 relative rounded-md overflow-hidden border border-border bg-muted">
-            <img src={spot.headstoneImage} alt="Headstone" className="w-full h-32 object-cover" />
-            <div className="absolute top-1 right-1 flex gap-1">
-              <Button size="sm" variant="secondary" className="h-7 px-2" onClick={onUploadHeadstone}>Replace</Button>
-              <Button size="sm" variant="destructive" className="h-7 w-7 p-0" onClick={onClearHeadstone} aria-label="Remove headstone">
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Headstone photos</Label>
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {images.length} / {MAX_HEADSTONE_IMAGES}
+          </span>
+        </div>
+        {images.length > 0 && (
+          <div className="mt-1 grid grid-cols-3 gap-1.5" data-testid="headstone-gallery">
+            {images.map((src, i) => (
+              <div
+                key={`${i}-${src.length}`}
+                className="relative aspect-square rounded-md overflow-hidden border border-border bg-muted group"
+              >
+                <img src={src} alt={`Headstone ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemoveHeadstone(i)}
+                  aria-label={`Remove headstone photo ${i + 1}`}
+                  data-testid={`remove-headstone-${i}`}
+                  className="absolute top-1 right-1 h-6 w-6 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shadow-sm hover:bg-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <div className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-[9px] text-center py-0.5 leading-none">
+                  {i === 0 ? "Primary" : `Photo ${i + 1}`}
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <Button size="sm" variant="outline" className="w-full mt-1" onClick={onUploadHeadstone} data-testid="upload-headstone">
-            <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> Upload headstone image
-          </Button>
+        )}
+        <Button
+          size="sm" variant="outline"
+          className="w-full mt-1.5"
+          onClick={onUploadHeadstone}
+          disabled={!canAddMore}
+          data-testid="upload-headstone"
+        >
+          <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+          {images.length === 0 ? "Upload headstone photos" : canAddMore ? "Add more photos" : "Maximum reached"}
+        </Button>
+        {images.length === 0 && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            You can upload several photos at once — front, back, inscription close-up, etc.
+          </p>
         )}
       </div>
 
