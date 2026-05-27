@@ -67,7 +67,7 @@ export default function SaasHome() {
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            MemorialSpace is the all-in-one platform for memorial spaces — cemeteries, columbariums, mausoleums, memorial parks, and remembrance sites — to digitize plots, sell services online, publish memorial pages, and serve families with the dignity they deserve.
+            The all-in-one digital ecosystem for memorial spaces to digitize operations, honor lives, and serve families with dignity.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8 h-12 text-base shadow-lg shadow-primary/20" data-testid="cta-trial">
