@@ -54,14 +54,7 @@ export default function SaasHome() {
       <section className="relative pt-20 pb-32 px-4">
         <AnimatedHeroBackground />
         {/* Seamless header-to-hero blend: darkest at top, green-tinged at bottom */}
-        <div
-          className="absolute inset-0 z-[1] pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background) / 0.88) 18%, hsl(var(--background) / 0.55) 40%, hsl(160 32% 9% / 0.25) 60%, hsl(160 38% 11% / 0.65) 85%, hsl(160 35% 13% / 0.85) 100%)",
-          }}
-          aria-hidden="true"
-        />
+        <div className="hero-blend-overlay" aria-hidden="true" />
         <div className="relative z-10 container mx-auto max-w-6xl text-center">
           <Badge variant="outline" className="mb-6 border-primary/30 bg-primary/5 text-primary px-4 py-1">
             <Sparkles className="h-3 w-3 mr-2" />
