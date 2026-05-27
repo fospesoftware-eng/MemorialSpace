@@ -11,6 +11,7 @@ const navLinks = [
   { href: "/features", label: "Features" },
   { href: "/pricing", label: "Pricing" },
   { href: "/vendors", label: "Marketplace" },
+  { href: "/vendors", label: "Store" },
 ];
 
 const FooterCol = ({
@@ -49,7 +50,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
           <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((l) => (
               <Link
-                key={l.href}
+                key={l.label}
                 href={l.href}
                 className={cn(
                   "text-sm font-medium transition-colors",
@@ -87,7 +88,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             <SheetContent side="right" className="w-72 bg-background">
               <div className="flex flex-col gap-3 mt-8">
                 {navLinks.map((l) => (
-                  <Link key={l.href} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
+                  <Link key={l.label} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
                 ))}
                 <div className="border-t border-border my-3" />
                 <div className="flex items-center gap-3">
