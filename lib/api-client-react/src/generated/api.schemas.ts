@@ -313,6 +313,8 @@ export interface Memorial {
   photos?: string[];
   isPublic?: boolean;
   viewCount?: number;
+  qrCode?: string | null;
+  orgSlug?: string | null;
   createdAt: string;
 }
 

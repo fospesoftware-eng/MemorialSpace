@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
-import { MapPin, X, ArrowRight, ScanLine } from "lucide-react";
+import { MapPin, X, ArrowRight, ScanLine, Search } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicMap, type PublicMapPlot, type PublicSite } from "./api";
 import { BurialDetails } from "@/components/burial-details";

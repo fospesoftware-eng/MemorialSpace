@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { db } from "@workspace/db";
-import { memorialsTable, tributesTable } from "@workspace/db";
+import { memorialsTable, tributesTable, qrCodesTable, organizationsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
 const publicRouter = Router();
@@ -48,11 +48,34 @@ publicRouter.get("/memorials", async (req, res) => {
     })));
   }
   // Signed-in: scope to their org (both public and private)
-  const memorials = await db.select().from(memorialsTable).where(eq(memorialsTable.organizationId, organizationId));
-  return res.json(memorials.map((m) => ({
-    ...m,
-    photos: m.photos ? JSON.parse(m.photos) : [],
-  })));
+  const rows = await db
+    .select({
+      memorial: memorialsTable,
+      qrCode: qrCodesTable.code,
+      orgSlug: organizationsTable.slug,
+    })
+    .from(memorialsTable)
+    .leftJoin(qrCodesTable, and(
+      eq(qrCodesTable.memorialId, memorialsTable.id),
+      eq(qrCodesTable.organizationId, memorialsTable.organizationId),
+    ))
+    .leftJoin(organizationsTable, eq(organizationsTable.id, memorialsTable.organizationId))
+    .where(eq(memorialsTable.organizationId, organizationId));
+
+  // Deduplicate: one memorial row even if multiple QR codes are linked.
+  const seen = new Set<number>();
+  return res.json(rows
+    .filter((r) => {
+      if (seen.has(r.memorial.id)) return false;
+      seen.add(r.memorial.id);
+      return true;
+    })
+    .map((r) => ({
+      ...r.memorial,
+      photos: r.memorial.photos ? JSON.parse(r.memorial.photos) : [],
+      qrCode: r.qrCode ?? null,
+      orgSlug: r.orgSlug ?? null,
+    })));
 });
 
 publicRouter.get("/memorials/:id", async (req, res) => {

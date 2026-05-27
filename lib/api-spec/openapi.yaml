@@ -2486,6 +2486,12 @@ components:
           type: boolean
         viewCount:
           type: integer
+        qrCode:
+          type: string
+          nullable: true
+        orgSlug:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time

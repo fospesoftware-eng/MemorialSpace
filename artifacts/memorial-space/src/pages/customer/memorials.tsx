@@ -84,7 +84,7 @@ export default function CustomerMemorials() {
                   </div>
                   <div className="flex gap-2">
                     <Button asChild variant="outline" size="sm" className="flex-1">
-                      <Link href={`/account/memorial/${m.id}`}>View page</Link>
+                      <Link href={m.qrCode && m.orgSlug && m.isPublic !== false ? `/c/${m.orgSlug}/memorial/${m.qrCode}` : `/account/memorial/${m.id}`}>View page</Link>
                     </Button>
                     <Button variant="ghost" size="sm"><Settings className="h-4 w-4" /></Button>
                   </div>

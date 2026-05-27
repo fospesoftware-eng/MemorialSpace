@@ -651,6 +651,8 @@ export const ListMemorialsResponseItem = zod.object({
   photos: zod.array(zod.string()).optional(),
   isPublic: zod.boolean().optional(),
   viewCount: zod.number().optional(),
+  qrCode: zod.string().nullish(),
+  orgSlug: zod.string().nullish(),
   createdAt: zod.coerce.date(),
 });
 export const ListMemorialsResponse = zod.array(ListMemorialsResponseItem);
@@ -683,6 +685,8 @@ export const GetMemorialResponse = zod.object({
   photos: zod.array(zod.string()).optional(),
   isPublic: zod.boolean().optional(),
   viewCount: zod.number().optional(),
+  qrCode: zod.string().nullish(),
+  orgSlug: zod.string().nullish(),
   createdAt: zod.coerce.date(),
 });
 
@@ -711,6 +715,8 @@ export const UpdateMemorialResponse = zod.object({
   photos: zod.array(zod.string()).optional(),
   isPublic: zod.boolean().optional(),
   viewCount: zod.number().optional(),
+  qrCode: zod.string().nullish(),
+  orgSlug: zod.string().nullish(),
   createdAt: zod.coerce.date(),
 });
 
@@ -963,6 +969,8 @@ export const ResolveQrCodeResponse = zod.object({
       photos: zod.array(zod.string()).optional(),
       isPublic: zod.boolean().optional(),
       viewCount: zod.number().optional(),
+      qrCode: zod.string().nullish(),
+      orgSlug: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     })
     .optional(),
@@ -1942,6 +1950,8 @@ export const PublicGraveSearchResponseItem = zod.object({
       photos: zod.array(zod.string()).optional(),
       isPublic: zod.boolean().optional(),
       viewCount: zod.number().optional(),
+      qrCode: zod.string().nullish(),
+      orgSlug: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     })
     .optional(),

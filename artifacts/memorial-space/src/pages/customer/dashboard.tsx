@@ -5,13 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heart, MessageSquare, ShoppingBag, Calendar, ArrowRight, Sparkles, Bell, MapPin, Loader2 } from "lucide-react";
 
-const stats = [
-  { label: "Memorial Pages", value: 2, icon: Heart, hue: "text-rose-400 bg-rose-500/10" },
-  { label: "Tributes Left", value: 14, icon: MessageSquare, hue: "text-sky-400 bg-sky-500/10" },
-  { label: "Saved Records", value: 5, icon: MapPin, hue: "text-amber-400 bg-amber-500/10" },
-  { label: "Active Orders", value: 3, icon: ShoppingBag, hue: "text-emerald-400 bg-emerald-500/10" },
-];
-
 const upcoming = [
   { date: "May 12", title: "White lilies delivery", subtitle: "To Eleanor's gravesite — weekly subscription", type: "delivery" },
   { date: "May 18", title: "Memorial visit reminder", subtitle: "Eleanor Rose Thompson — 2nd anniversary", type: "remind" },
@@ -27,6 +20,13 @@ const recent = [
 export default function CustomerDashboard() {
   const { data: memorials, isLoading } = useListMemorials();
   const myMemorials = memorials?.slice(0, 2) ?? [];
+
+  const stats = [
+    { label: "Memorial Pages", value: memorials?.length ?? 0, icon: Heart, hue: "text-rose-400 bg-rose-500/10" },
+    { label: "Tributes Left", value: 14, icon: MessageSquare, hue: "text-sky-400 bg-sky-500/10" },
+    { label: "Saved Records", value: 5, icon: MapPin, hue: "text-amber-400 bg-amber-500/10" },
+    { label: "Active Orders", value: 3, icon: ShoppingBag, hue: "text-emerald-400 bg-emerald-500/10" },
+  ];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -124,7 +124,7 @@ export default function CustomerDashboard() {
               {myMemorials.map((m) => {
                 const photos = Array.isArray(m.photos) ? (m.photos as string[]) : [];
                 return (
-                  <Link key={m.id} href={`/account/memorial/${m.id}`}>
+                  <Link key={m.id} href={m.qrCode && m.orgSlug && m.isPublic !== false ? `/c/${m.orgSlug}/memorial/${m.qrCode}` : `/account/memorial/${m.id}`}>
                     <div className="flex items-center gap-4 p-4 rounded-lg border border-border/40 hover:border-primary/30 transition-colors cursor-pointer">
                       <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-rose-500/20 flex items-center justify-center text-primary font-semibold border border-border/40 overflow-hidden shrink-0">
                         {photos[0] ? (

@@ -726,7 +726,7 @@ router.get("/c/:slug/memorial/:code", async (req, res) => {
   const ctx = await resolvePublicSite(req, res);
   if (!ctx) return;
   const code = String(req.params.code ?? "").toUpperCase();
-  if (!/^[A-F0-9]{8,64}$/.test(code)) {
+  if (!/^[A-Z0-9]{8,64}$/.test(code)) {
     res.status(400).json({ error: "Invalid memorial code" });
     return;
   }
@@ -1039,7 +1039,7 @@ router.patch("/c/:slug/memorial/:code/edit", async (req, res) => {
   const ctx = await resolvePublicSite(req, res);
   if (!ctx) return;
   const code = String(req.params.code ?? "").toUpperCase();
-  if (!/^[A-F0-9]{8,64}$/.test(code)) {
+  if (!/^[A-Z0-9]{8,64}$/.test(code)) {
     res.status(400).json({ error: "Invalid memorial code" });
     return;
   }
