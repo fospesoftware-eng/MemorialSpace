@@ -237,9 +237,15 @@ function Router() {
       <Route path="/vendor/signup" component={VendorSignup} />
 
       {/* Public marketplace directory — anyone can browse vendors. */}
-      <Route path="/vendors" component={VendorsDirectory} />
+      <Route path="/vendors">
+        <SaasMarketingRoutes><VendorsDirectory /></SaasMarketingRoutes>
+      </Route>
       <Route path="/vendors/:slug">
-        {(params) => <VendorDetail slug={String(params.slug)} />}
+        {(params) => (
+          <SaasMarketingRoutes>
+            <VendorDetail slug={String(params.slug)} />
+          </SaasMarketingRoutes>
+        )}
       </Route>
 
       {/* Vendor-authed dashboard. Mounted under /vendor (parallel to /app, /account). */}
