@@ -11,7 +11,6 @@ const navLinks = [
   { href: "/features", label: "Features" },
   { href: "/pricing", label: "Pricing" },
   { href: "/vendors", label: "Marketplace" },
-  { href: "/shop", label: "Store" },
 ];
 
 const FooterCol = ({
@@ -173,7 +172,6 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
               title="Partners & Marketplace"
               links={[
                 { label: "Marketplace", href: "/vendors" },
-                { label: "Store", href: "/shop" },
                 { label: "Vendor Registration", href: "/vendor/signup" },
                 { label: "Partner Registration", href: "#" },
                 { label: "Memorial Space Registration", href: "/signup/cemetery" },
