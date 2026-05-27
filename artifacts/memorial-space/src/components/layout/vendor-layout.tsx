@@ -5,6 +5,7 @@
  */
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Inbox, Wrench, Building2, LogOut, Store, Sparkles, Globe2, EyeOff, Receipt, Users } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +44,9 @@ export function VendorLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen w-full bg-background flex">
       <aside className="w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col">
         <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
-          <a href="/" className="flex items-center gap-2 text-primary">
-            <Store className="h-6 w-6" />
-            <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">Vendor portal</span>
+          <a href="/" className="flex items-center gap-2">
+            <Logo height={36} forDarkBg />
+            <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/60 font-semibold">Vendor</span>
           </a>
         </div>
 

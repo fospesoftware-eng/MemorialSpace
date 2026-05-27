@@ -3,7 +3,7 @@ import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SimpleThemeToggle } from "@/components/simple-theme-toggle";
 import { cn } from "@/lib/utils";
 
 export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
@@ -41,7 +41,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <ThemeToggle />
+            <SimpleThemeToggle />
             <Button asChild variant="ghost" size="sm" data-testid="link-signin">
               <Link href="/sign-in">Sign In</Link>
             </Button>
@@ -61,6 +61,11 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
                 {links.map((l) => (
                   <Link key={l.href} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
                 ))}
+                <div className="border-t border-border my-3" />
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Theme</span>
+                  <SimpleThemeToggle />
+                </div>
                 <div className="border-t border-border my-3" />
                 <Button asChild variant="outline"><Link href="/sign-in">Sign In</Link></Button>
                 <Button asChild><Link href="/sign-in/cemetery">Start Free Trial</Link></Button>

@@ -25,7 +25,7 @@ function SidebarContent() {
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
         <a href="/" className="flex items-center">
-          <Logo height={36} />
+          <Logo height={36} forDarkBg />
         </a>
       </div>
 
