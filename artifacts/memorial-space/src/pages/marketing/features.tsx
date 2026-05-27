@@ -12,11 +12,11 @@ import {
 const sections = [
   {
     eyebrow: "Operations",
-    title: "Run the cemetery from one console",
+    title: "Run the memorial space from one console",
     desc: "Plots, burials, services, work orders — everything an operator touches in a day, in a single, calm interface.",
     items: [
       { icon: Map, title: "Plot mapping", desc: "Draw plots on top of an aerial photo or scanned map. Each plot has lifetime status: available / reserved / occupied / maintenance." },
-      { icon: ScanLine, title: "AI map maker", desc: "Upload a hand-drawn or scanned cemetery map. Our AI extracts plot polygons and pre-classifies sections, so you skip weeks of CAD work." },
+      { icon: ScanLine, title: "AI map maker", desc: "Upload a hand-drawn or scanned memorial space map. Our AI extracts plot polygons and pre-classifies sections, so you skip weeks of CAD work." },
       { icon: Building, title: "Columbarium & mausoleum", desc: "First-class modules for niche walls and crypts — track tier, row, column, occupancy, and per-niche pricing." },
       { icon: Database, title: "Burial records", desc: "Searchable lifetime records with relationships, certificates, and source-document attachments. Full historical archive." },
       { icon: Calendar, title: "Bookings & scheduling", desc: "Service bookings, family appointments, and maintenance reminders on one shared calendar with crew assignments." },
@@ -30,14 +30,14 @@ const sections = [
     items: [
       { icon: QrCode, title: "QR memorial codes", desc: "Weatherproof QR codes link the gravesite to a digital memorial page. Visitors scan and instantly see photos, biography, and tributes." },
       { icon: FileText, title: "Obituaries & tributes", desc: "Publish obituaries, accept tribute submissions with moderation, and let loved ones share memories from anywhere in the world." },
-      { icon: Globe, title: "Public cemetery website", desc: "A turnkey website per cemetery: search a grave, browse obituaries, shop services. Hosted on your subdomain or your own domain." },
+      { icon: Globe, title: "Public memorial website", desc: "A turnkey website per memorial space: search a grave, browse obituaries, shop services. Hosted on your subdomain or your own domain." },
       { icon: ShoppingBag, title: "Marketplace & e-commerce", desc: "Sell flowers, urns, plaques, and recurring care services. Customers order directly from a memorial page or your shop." },
     ],
   },
   {
     eyebrow: "Business",
     title: "Run a real business, not a filing cabinet",
-    desc: "Accounting, reporting, and roles tuned for cemetery economics — not generic small-business software.",
+    desc: "Accounting, reporting, and roles tuned for memorial space economics — not generic small-business software.",
     items: [
       { icon: Receipt, title: "Accounting & invoicing", desc: "Quote, invoice, and accept payments for plots, services, and goods. Tax rates per jurisdiction. Customer ledger per family." },
       { icon: BarChart3, title: "Reports & analytics", desc: "Occupancy by section, revenue by service line, average ticket per family, and outstanding A/R — all updated in real time." },
@@ -50,7 +50,7 @@ const sections = [
     title: "Built for groups and municipalities",
     desc: "When you operate more than one cemetery — or steward public records — you need security, scale, and accountability.",
     items: [
-      { icon: Building2, title: "Multi-cemetery groups", desc: "One organization, many cemeteries. Centralized billing and reporting, per-cemetery branding and operations." },
+      { icon: Building2, title: "Multi-site groups", desc: "One organization, many memorial spaces. Centralized billing and reporting, per-site branding and operations." },
       { icon: KeyRound, title: "SSO (SAML / OIDC)", desc: "Plug into Google Workspace, Okta, or Microsoft Entra so staff sign in with their corporate identity." },
       { icon: ShieldCheck, title: "Audit log", desc: "Every write action — billing, plot status, family records — is recorded with actor, timestamp, and a JSON detail blob." },
       { icon: FileCheck, title: "SLA & priority support", desc: "Named success manager, response-time SLAs, and a private Slack channel for production issues." },
@@ -71,13 +71,13 @@ export default function FeaturesPage() {
             Features
           </Badge>
           <h1 className="text-4xl sm:text-6xl font-bold tracking-tight mb-6">
-            Every module a cemetery needs.<br />
+            Every module a memorial space needs.<br />
             <span className="bg-gradient-to-r from-primary via-emerald-400 to-[#d4a843] bg-clip-text text-transparent">
               Nothing it doesn't.
             </span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            MemorialSpace replaces the patchwork of spreadsheets, paper ledgers, and one-off websites that most cemeteries still run on — with a single, modern platform built specifically for this work.
+            MemorialSpace replaces the patchwork of spreadsheets, paper ledgers, and one-off websites that most memorial spaces still run on — with a single, modern platform built specifically for this work.
           </p>
         </div>
       </section>
@@ -115,7 +115,7 @@ export default function FeaturesPage() {
         <div className="container mx-auto max-w-4xl">
           <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/10 via-card to-[#d4a843]/5">
             <CardContent className="relative p-12 text-center">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4">See how it fits your cemetery</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">See how it fits your memorial space</h2>
               <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">A 30-minute demo with a real product specialist — no sales pitch, just a walkthrough on your data.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8">

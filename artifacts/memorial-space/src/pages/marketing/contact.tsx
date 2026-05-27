@@ -44,7 +44,7 @@ export default function ContactPage() {
             Let's see if we're a fit.
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Tell us a little about your cemetery and we'll send a tailored walkthrough — usually within one business day. No pressure, no canned slide deck.
+            Tell us a little about your memorial space and we'll send a tailored walkthrough — usually within one business day. No pressure, no canned slide deck.
           </p>
         </div>
       </section>
@@ -94,7 +94,7 @@ export default function ContactPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="cemetery">Cemetery / organization</Label>
+                        <Label htmlFor="cemetery">Memorial space / organization</Label>
                         <Input
                           id="cemetery"
                           required

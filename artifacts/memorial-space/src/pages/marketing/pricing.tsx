@@ -33,7 +33,7 @@ const faqs = [
   },
   {
     q: "Do you offer a non-profit or municipality discount?",
-    a: "Yes. Reach out via the sales form — we offer meaningful discounts for non-profit cemeteries and municipal operators.",
+    a: "Yes. Reach out via the sales form — we offer meaningful discounts for non-profit memorial spaces and municipal operators.",
   },
 ];
 
@@ -71,7 +71,7 @@ export default function PricingPage() {
             </span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            No per-user fees. No per-plot fees. No surprise overages. Pick a plan based on your cemetery's size, and unlock the modules that match how you actually work.
+            No per-user fees. No per-plot fees. No surprise overages. Pick a plan based on your memorial space's size, and unlock the modules that match how you actually work.
           </p>
         </div>
       </section>
@@ -257,7 +257,7 @@ export default function PricingPage() {
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">Still have questions?</h2>
           <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-            Our team has helped over 300 cemeteries digitize. We've probably seen your situation before — and we can usually quote and onboard within a week.
+            Our team has helped over 300 memorial spaces digitize. We've probably seen your situation before — and we can usually quote and onboard within a week.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8">

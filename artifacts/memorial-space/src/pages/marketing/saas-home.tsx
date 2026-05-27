@@ -11,7 +11,7 @@ import {
 import { MARKETING_PLANS } from "./_plans";
 
 const features = [
-  { icon: Map, title: "Interactive Plot Mapping", desc: "GeoJSON-powered cemetery maps with real-time status: available, reserved, occupied, maintenance.", color: "from-emerald-500/20 to-emerald-500/5" },
+  { icon: Map, title: "Interactive Plot Mapping", desc: "GeoJSON-powered memorial space maps with real-time status: available, reserved, occupied, maintenance.", color: "from-emerald-500/20 to-emerald-500/5" },
   { icon: Calendar, title: "Bookings & Scheduling", desc: "Service bookings, maintenance reminders, and family appointments — all in one calendar.", color: "from-amber-500/20 to-amber-500/5" },
   { icon: QrCode, title: "QR Memorial Codes", desc: "Generate weatherproof QR codes that link to digital memorial pages from the gravesite itself.", color: "from-violet-500/20 to-violet-500/5" },
   { icon: ShoppingBag, title: "Marketplace & E-commerce", desc: "Sell flowers, urns, and care services. Customers order directly from memorial pages.", color: "from-rose-500/20 to-rose-500/5" },
@@ -20,7 +20,7 @@ const features = [
 ];
 
 const stats = [
-  { value: "320+", label: "Cemeteries trust us" },
+  { value: "320+", label: "Memorial spaces trust us" },
   { value: "1.2M", label: "Memorial pages created" },
   { value: "98%", label: "Customer retention" },
   { value: "24/7", label: "Family portal access" },
@@ -42,7 +42,7 @@ const testimonials = [
   {
     quote: "Marketplace alone covered our subscription. Families order flowers for weekly delivery directly from the memorial page.",
     name: "Elena Vasquez",
-    role: "Family Services, Pine Hill Cemetery",
+    role: "Family Services, Pine Hill Memorial Park",
     rating: 5,
   },
 ];
@@ -58,7 +58,7 @@ export default function SaasHome() {
         <div className="relative z-10 container mx-auto max-w-6xl text-center">
           <Badge variant="outline" className="mb-6 border-primary/30 bg-primary/5 text-primary px-4 py-1">
             <Sparkles className="h-3 w-3 mr-2" />
-            The cemetery operating system, reimagined
+            The memorial space operating system, reimagined
           </Badge>
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
             Honor every life.<br />
@@ -67,7 +67,7 @@ export default function SaasHome() {
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            MemorialSpace is the all-in-one platform for cemeteries to digitize plots, sell services online, publish memorial pages, and serve families with the dignity they deserve.
+            MemorialSpace is the all-in-one platform for memorial spaces — cemeteries, columbariums, mausoleums, memorial parks, and remembrance sites — to digitize plots, sell services online, publish memorial pages, and serve families with the dignity they deserve.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8 h-12 text-base shadow-lg shadow-primary/20" data-testid="cta-trial">
@@ -86,7 +86,7 @@ export default function SaasHome() {
                   <Building2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-semibold text-sm">Cemetery Portal</p>
+                  <p className="font-semibold text-sm">Memorial Space Portal</p>
                   <p className="text-xs text-muted-foreground">Operations dashboard</p>
                 </div>
                 <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -140,7 +140,7 @@ export default function SaasHome() {
           <div className="text-center mb-16">
             <Badge variant="outline" className="mb-4">Everything you need</Badge>
             <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4">A modern OS for sacred spaces</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">From plot-level inventory to family-facing services — built for the realities of cemetery operations today.</p>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">From plot-level inventory to family-facing services — built for the realities of memorial space operations today.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((f) => (
@@ -286,7 +286,7 @@ export default function SaasHome() {
             <CardContent className="relative p-12 text-center">
               <BarChart3 className="h-12 w-12 text-primary mx-auto mb-6" />
               <h2 className="text-3xl sm:text-4xl font-bold mb-4">Ready to honor lives at scale?</h2>
-              <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">Join hundreds of cemeteries already running on MemorialSpace. Set up takes 2 weeks. ROI takes 2 months.</p>
+              <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">Join hundreds of memorial spaces already running on MemorialSpace. Set up takes 2 weeks. ROI takes 2 months.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8">
                   <Link href="/sign-in/cemetery">Get started free</Link>

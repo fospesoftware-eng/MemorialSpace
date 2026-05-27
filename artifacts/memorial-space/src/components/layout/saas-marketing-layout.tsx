@@ -87,7 +87,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
               <div className="flex items-center mb-4">
                 <Logo height={48} />
               </div>
-              <p className="text-sm text-muted-foreground max-w-md">The complete platform for cemeteries to manage operations, honor lives, and serve families with dignity.</p>
+              <p className="text-sm text-muted-foreground max-w-md">The complete platform for memorial spaces to manage operations, honor lives, and serve families with dignity.</p>
             </div>
             <div>
               <p className="text-sm font-semibold mb-3">Product</p>
