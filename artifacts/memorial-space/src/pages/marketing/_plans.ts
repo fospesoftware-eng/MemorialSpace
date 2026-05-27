@@ -18,7 +18,10 @@ export type MarketingPlan = {
   trialDays: number;
   /** Limits shown on cards. null/Infinity = "Unlimited". */
   maxUsers: number | null;
-  maxPlots: number | null;
+  maxMaps: number | null;
+  maxSpots: number | null;
+  maxColumbariums: number | null;
+  maxMausoleums: number | null;
   maxStorageGb: number | null;
   /** Bullet points shown on the homepage card. */
   highlights: string[];
@@ -52,18 +55,22 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: "Starter",
     priceUsd: 49,
     cadence: "/mo",
-    tagline: "For small cemeteries getting digitized",
+    tagline: "For small cemeteries starting digital transformation",
     description:
       "Replace your paper records with a clean, searchable digital archive. Everything a single small cemetery needs to go online.",
     trialDays: 14,
     maxUsers: 3,
-    maxPlots: 500,
+    maxMaps: 1,
+    maxSpots: 500,
+    maxColumbariums: 0,
+    maxMausoleums: 0,
     maxStorageGb: 2,
     highlights: [
-      "Up to 500 plots",
+      "1 cemetery map",
+      "Up to 500 spots",
       "3 user accounts",
       "2 GB media storage",
-      "Plot mapping & burial records",
+      "Spot mapping & burial records",
       "QR memorial codes",
       "Public cemetery website",
       "Email support",
@@ -94,15 +101,21 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: "Professional",
     priceUsd: 149,
     cadence: "/mo",
-    tagline: "Most popular for growing cemeteries",
+    tagline: "For growing cemetery, columbarium, and mausoleum operators",
     description:
       "The full module suite — accounting, AI-assisted map building, columbarium and mausoleum management — sized for cemeteries doing real volume.",
     trialDays: 14,
     maxUsers: 15,
-    maxPlots: 5_000,
+    maxMaps: 3,
+    maxSpots: 5_000,
+    maxColumbariums: 1,
+    maxMausoleums: 1,
     maxStorageGb: 20,
     highlights: [
-      "Up to 5,000 plots",
+      "Up to 3 cemetery maps",
+      "Up to 5,000 spots",
+      "1 columbarium",
+      "1 mausoleum",
       "15 user accounts",
       "20 GB media storage",
       "Everything in Starter, plus:",
@@ -139,15 +152,21 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: "Enterprise",
     priceUsd: 499,
     cadence: "/mo",
-    tagline: "For multi-location operators and municipalities",
+    tagline: "For municipalities, cemetery groups, and multi-location memorial operators",
     description:
       "Unlimited everything, multi-cemetery groups, SSO, and a dedicated success manager. Built for operators running several sites under one roof.",
     trialDays: 30,
     maxUsers: null,
-    maxPlots: null,
+    maxMaps: 10,
+    maxSpots: null,
+    maxColumbariums: 5,
+    maxMausoleums: 5,
     maxStorageGb: null,
     highlights: [
-      "Unlimited plots",
+      "Up to 10 cemetery maps",
+      "Unlimited spots",
+      "Up to 5 columbariums",
+      "Up to 5 mausoleums",
       "Unlimited users",
       "Unlimited storage",
       "Everything in Professional, plus:",

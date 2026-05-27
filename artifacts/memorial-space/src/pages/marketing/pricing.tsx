@@ -12,7 +12,7 @@ const faqs = [
     a: "Yes. Starter and Professional come with a 14-day free trial; Enterprise comes with a 30-day pilot. No credit card required to start, and you can cancel any time before the trial ends without being charged.",
   },
   {
-    q: "What happens when I exceed a plan's plot or user limit?",
+    q: "What happens when I exceed a plan's spot or user limit?",
     a: "We'll send a friendly heads-up and give you a 30-day grace window to either upgrade or trim back. We don't lock you out of records you've already entered — your data is always yours.",
   },
   {
@@ -20,16 +20,16 @@ const faqs = [
     a: "Of course. Upgrade and downgrade are both self-serve from the cemetery dashboard. Upgrades are prorated; downgrades take effect at the next billing period.",
   },
   {
-    q: "Do you charge per user or per plot?",
-    a: "No per-user, no per-plot fees within plan limits. The price you see is the price you pay each month.",
+    q: "Do you charge per user or per spot?",
+    a: "No per-user, no per-spot fees within plan limits. The price you see is the price you pay each month.",
   },
   {
     q: "How does data import work?",
-    a: "On every plan, our team imports your existing burial records, plot inventory, and any historical photos at no extra charge. Typical onboarding is 2–3 weeks from kickoff to launch.",
+    a: "On every plan, our team imports your existing burial records, spot inventory, and any historical photos at no extra charge. Typical onboarding is 2–3 weeks from kickoff to launch.",
   },
   {
     q: "What about data ownership and exports?",
-    a: "You own your data. Export every record (plots, burials, families, invoices, media) to CSV or JSON at any time, no questions asked.",
+    a: "You own your data. Export every record (spots, burials, families, invoices, media) to CSV or JSON at any time, no questions asked.",
   },
   {
     q: "Do you offer a non-profit or municipality discount?",
@@ -71,7 +71,7 @@ export default function PricingPage() {
             </span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            No per-user fees. No per-plot fees. No surprise overages. Pick a plan based on your memorial space's size, and unlock the modules that match how you actually work.
+            No per-user fees. No per-spot fees. No surprise overages. Pick a plan based on your memorial space's size, and unlock the modules that match how you actually work.
           </p>
         </div>
       </section>
@@ -155,10 +155,34 @@ export default function PricingPage() {
                     </th>
                   </tr>
                   <tr className="border-b border-border/40">
-                    <th scope="row" className="text-left font-normal px-6 py-3">Plots</th>
+                    <th scope="row" className="text-left font-normal px-6 py-3">Cemetery maps</th>
                     {MARKETING_PLANS.map((p) => (
                       <td key={p.slug} className="px-6 py-3 text-center">
-                        {p.maxPlots === null ? "Unlimited" : p.maxPlots.toLocaleString()}
+                        {p.maxMaps === null ? "Unlimited" : p.maxMaps}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border/40">
+                    <th scope="row" className="text-left font-normal px-6 py-3">Spots</th>
+                    {MARKETING_PLANS.map((p) => (
+                      <td key={p.slug} className="px-6 py-3 text-center">
+                        {p.maxSpots === null ? "Unlimited" : p.maxSpots.toLocaleString()}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border/40">
+                    <th scope="row" className="text-left font-normal px-6 py-3">Columbariums</th>
+                    {MARKETING_PLANS.map((p) => (
+                      <td key={p.slug} className="px-6 py-3 text-center">
+                        {p.maxColumbariums === null ? "Unlimited" : p.maxColumbariums}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-border/40">
+                    <th scope="row" className="text-left font-normal px-6 py-3">Mausoleums</th>
+                    {MARKETING_PLANS.map((p) => (
+                      <td key={p.slug} className="px-6 py-3 text-center">
+                        {p.maxMausoleums === null ? "Unlimited" : p.maxMausoleums}
                       </td>
                     ))}
                   </tr>
