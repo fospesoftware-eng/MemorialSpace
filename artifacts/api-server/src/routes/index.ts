@@ -8,7 +8,7 @@ import plotsRouter from "./plots";
 import burialsRouter from "./burials";
 import burialFamilyLinksRouter from "./burialFamilyLinks";
 import bookingsRouter from "./bookings";
-import memorialsRouter from "./memorials";
+import { publicRouter as memorialPublicRouter, adminRouter as memorialAdminRouter } from "./memorials";
 import workOrdersRouter from "./workOrders";
 import workOrderCommentsRouter from "./workOrderComments";
 import assetsRouter from "./assets";
@@ -50,6 +50,9 @@ router.use(cemeterySignupRouter);
 router.use(publicApiRouter);
 router.use(cemeterySitesRouter);
 router.use(memorialRitualsRouter);
+// Public memorial reads — family users (viewer role) can list and view
+// memorials scoped to their organization. Writes stay behind requireOrgUser.
+router.use(memorialPublicRouter);
 // Public marketplace-vendor surface: signup, directory, public detail,
 // and family request submission. The vendor-authed endpoints sit on a
 // separate router gated by `requireVendor` further down.
@@ -91,7 +94,7 @@ orgRouter.use(plotsRouter);
 orgRouter.use(burialsRouter);
 orgRouter.use(burialFamilyLinksRouter);
 orgRouter.use(bookingsRouter);
-orgRouter.use(memorialsRouter);
+orgRouter.use(memorialAdminRouter);
 orgRouter.use(workOrdersRouter);
 orgRouter.use(workOrderCommentsRouter);
 orgRouter.use(assetsRouter);

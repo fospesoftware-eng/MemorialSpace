@@ -1,8 +1,9 @@
 import { Link } from "wouter";
+import { useListMemorials } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MessageSquare, ShoppingBag, Calendar, ArrowRight, Sparkles, Bell, MapPin } from "lucide-react";
+import { Heart, MessageSquare, ShoppingBag, Calendar, ArrowRight, Sparkles, Bell, MapPin, Loader2 } from "lucide-react";
 
 const stats = [
   { label: "Memorial Pages", value: 2, icon: Heart, hue: "text-rose-400 bg-rose-500/10" },
@@ -24,6 +25,9 @@ const recent = [
 ];
 
 export default function CustomerDashboard() {
+  const { data: memorials, isLoading } = useListMemorials();
+  const myMemorials = memorials?.slice(0, 2) ?? [];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome */}
@@ -105,27 +109,44 @@ export default function CustomerDashboard() {
           <Button asChild variant="outline"><Link href="/memorials">Manage all</Link></Button>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { name: "Eleanor Rose Thompson", years: "1934 — 2021", views: 147, tributes: 12 },
-              { name: "George William Mitchell", years: "1941 — 2022", views: 89, tributes: 8 },
-            ].map((m) => (
-              <div key={m.name} className="flex items-center gap-4 p-4 rounded-lg border border-border/40 hover:border-primary/30 transition-colors">
-                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-rose-500/20 flex items-center justify-center text-primary font-semibold border border-border/40">
-                  {m.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{m.name}</p>
-                  <p className="text-sm text-muted-foreground">{m.years}</p>
-                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{m.views} views</span>
-                    <span>{m.tributes} tributes</span>
-                  </div>
-                </div>
-                <Button size="sm" variant="ghost"><ArrowRight className="h-4 w-4" /></Button>
-              </div>
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : myMemorials.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Heart className="h-8 w-8 mx-auto opacity-40 mb-2" />
+              <p className="font-medium">No memorial pages yet.</p>
+              <p className="text-sm mt-1">Create your first memorial to honor someone you love.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myMemorials.map((m) => {
+                const photos = Array.isArray(m.photos) ? (m.photos as string[]) : [];
+                return (
+                  <Link key={m.id} href={`/account/memorial/${m.id}`}>
+                    <div className="flex items-center gap-4 p-4 rounded-lg border border-border/40 hover:border-primary/30 transition-colors cursor-pointer">
+                      <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary/20 to-rose-500/20 flex items-center justify-center text-primary font-semibold border border-border/40 overflow-hidden shrink-0">
+                        {photos[0] ? (
+                          <img src={photos[0]} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          (m.title || "").split(" ").map(n => n[0]).slice(0, 2).join("")
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold truncate">{m.title || "Untitled Memorial"}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-1">{m.biography || "No biography yet."}</p>
+                        <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>{m.viewCount ?? 0} views</span>
+                        </div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

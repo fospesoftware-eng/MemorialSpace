@@ -9,6 +9,7 @@
     "seed-auth": "tsx ./src/seed-auth.ts",
     "seed-vendors": "tsx ./src/seed-vendors.ts",
     "seed-store": "tsx ./src/seed-store.ts",
+    "seed-memorials": "tsx ./src/seed-memorials.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

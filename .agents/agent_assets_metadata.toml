@@ -84,6 +84,54 @@ uri = "file://artifacts/memorial-space/public/images/store/headstone-restoration
 type = "image"
 title = "headstone restoration"
 
+[[generated]]
+id = "sN1GVsnuzOomtY--VihuT"
+uri = "file://artifacts/memorial-space/public/images/memorials/portrait-eleanor.png"
+type = "image"
+title = "Eleanor memorial portrait"
+
+[[generated]]
+id = "Nz1bL9KZna_siSzVTKXe6"
+uri = "file://artifacts/memorial-space/public/images/memorials/portrait-george.png"
+type = "image"
+title = "George memorial portrait"
+
+[[generated]]
+id = "JsRlDSlEpim6nkR8vmVsm"
+uri = "file://artifacts/memorial-space/public/images/memorials/portrait-robert.png"
+type = "image"
+title = "Robert memorial portrait"
+
+[[generated]]
+id = "ypVEYyz_E3-Na38Tb3xo8"
+uri = "file://artifacts/memorial-space/public/images/memorials/portrait-patricia.png"
+type = "image"
+title = "Patricia memorial portrait"
+
+[[generated]]
+id = "jAYqRy9kdLP7NSEdtozoK"
+uri = "file://artifacts/memorial-space/public/images/memorials/scene-flowers.png"
+type = "image"
+title = "Flower arrangement at grave"
+
+[[generated]]
+id = "kd4TtGTbitXxCkff3BCEK"
+uri = "file://artifacts/memorial-space/public/images/memorials/scene-candles.png"
+type = "image"
+title = "Candlelit memorial scene"
+
+[[generated]]
+id = "T8HYAJGttI-cvKrYuH_NX"
+uri = "file://artifacts/memorial-space/public/images/memorials/scene-family.png"
+type = "image"
+title = "Family memorial gathering"
+
+[[generated]]
+id = "BPiTIohUwkv_0Vc51Yu0A"
+uri = "file://artifacts/memorial-space/public/images/memorials/scene-cemetery.png"
+type = "image"
+title = "Cemetery sunrise aerial"
+
 [[outputs]]
 id = "pWpdYnAvofcdoVbfVzn4j"
 uri = "file://screenshots/team-members.jpg"

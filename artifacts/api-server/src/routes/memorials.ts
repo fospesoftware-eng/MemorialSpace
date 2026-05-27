@@ -1,23 +1,91 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import { db } from "@workspace/db";
 import { memorialsTable, tributesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
-const router = Router();
+const publicRouter = Router();
+const adminRouter = Router();
 
-router.get("/memorials", async (req, res) => {
-  const { organizationId } = req.query;
-  const memorials = organizationId
-    ? await db.select().from(memorialsTable).where(eq(memorialsTable.organizationId, Number(organizationId)))
-    : await db.select().from(memorialsTable);
-  const result = memorials.map((m) => ({
+/* ------------------------------------------------------------------ */
+/*  Scoped read helpers — family users see their org's memorials      */
+/* ------------------------------------------------------------------ */
+
+function orgScopedQuery(req: Parameters<RequestHandler>[0]) {
+  const u = req.session?.user;
+  // If a cemetery user is signed in, force their org scope.
+  if (u?.kind === "cemetery" && u.organizationId) {
+    return { organizationId: u.organizationId };
+  }
+  // If a family user is signed in, scope to their org.
+  if (u?.kind === "family" && u.organizationId) {
+    return { organizationId: u.organizationId };
+  }
+  // Anonymous — no org scope.
+  return { organizationId: undefined };
+}
+
+function isAuthorizedToRead(memorial: typeof memorialsTable.$inferSelect, req: Parameters<RequestHandler>[0]) {
+  const u = req.session?.user;
+  // Public memorials are readable by anyone
+  if (memorial.isPublic) return true;
+  // Signed-in users can read memorials in their own org
+  if (u?.organizationId && memorial.organizationId === u.organizationId) return true;
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Public reads — visibility-gated                                  */
+/* ------------------------------------------------------------------ */
+
+publicRouter.get("/memorials", async (req, res) => {
+  const { organizationId } = orgScopedQuery(req);
+  if (!organizationId) {
+    // Anonymous: only public memorials
+    const memorials = await db.select().from(memorialsTable).where(eq(memorialsTable.isPublic, true));
+    return res.json(memorials.map((m) => ({
+      ...m,
+      photos: m.photos ? JSON.parse(m.photos) : [],
+    })));
+  }
+  // Signed-in: scope to their org (both public and private)
+  const memorials = await db.select().from(memorialsTable).where(eq(memorialsTable.organizationId, organizationId));
+  return res.json(memorials.map((m) => ({
     ...m,
     photos: m.photos ? JSON.parse(m.photos) : [],
-  }));
-  res.json(result);
+  })));
 });
 
-router.post("/memorials", async (req, res) => {
+publicRouter.get("/memorials/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));
+  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
+  if (!isAuthorizedToRead(memorial, req)) { res.status(403).json({ error: "Access denied" }); return; }
+  res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
+});
+
+publicRouter.get("/memorials/:id/tributes", async (req, res) => {
+  const id = Number(req.params.id);
+  const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));
+  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
+  if (!isAuthorizedToRead(memorial, req)) { res.status(403).json({ error: "Access denied" }); return; }
+  const tributes = await db.select().from(tributesTable).where(eq(tributesTable.memorialId, id));
+  res.json(tributes);
+});
+
+publicRouter.post("/memorials/:id/tributes", async (req, res) => {
+  const id = Number(req.params.id);
+  const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));
+  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
+  if (!isAuthorizedToRead(memorial, req)) { res.status(403).json({ error: "Access denied" }); return; }
+  const [tribute] = await db.insert(tributesTable).values({ ...req.body, memorialId: id }).returning();
+  res.status(201).json(tribute);
+});
+
+/* ------------------------------------------------------------------ */
+/*  Admin writes — restricted to cemetery operators (requireOrgUser)    */
+/* ------------------------------------------------------------------ */
+
+adminRouter.post("/memorials", async (req, res) => {
   const { photos, ...rest } = req.body;
   const [memorial] = await db.insert(memorialsTable).values({
     ...rest,
@@ -26,34 +94,20 @@ router.post("/memorials", async (req, res) => {
   res.status(201).json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
 });
 
-router.get("/memorials/:id", async (req, res) => {
+adminRouter.put("/memorials/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));
-  if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
-  res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
-});
-
-router.put("/memorials/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  const u = req.session?.user;
   const { photos, ...rest } = req.body;
+  // Cross-tenant guard: only update rows that belong to the user's org.
+  const whereClause = u?.organizationId
+    ? and(eq(memorialsTable.id, id), eq(memorialsTable.organizationId, u.organizationId))
+    : eq(memorialsTable.id, id);
   const [memorial] = await db.update(memorialsTable).set({
     ...rest,
     photos: photos ? JSON.stringify(photos) : null,
-  }).where(eq(memorialsTable.id, id)).returning();
+  }).where(whereClause).returning();
   if (!memorial) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
 });
 
-router.get("/memorials/:id/tributes", async (req, res) => {
-  const memorialId = Number(req.params.id);
-  const tributes = await db.select().from(tributesTable).where(eq(tributesTable.memorialId, memorialId));
-  res.json(tributes);
-});
-
-router.post("/memorials/:id/tributes", async (req, res) => {
-  const memorialId = Number(req.params.id);
-  const [tribute] = await db.insert(tributesTable).values({ ...req.body, memorialId }).returning();
-  res.status(201).json(tribute);
-});
-
-export default router;
+export { publicRouter, adminRouter };

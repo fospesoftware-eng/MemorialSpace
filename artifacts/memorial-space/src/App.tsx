@@ -178,6 +178,7 @@ function CustomerRoutes() {
         <Route path="/" component={CustomerDashboard} />
         <Route path="/orders" component={CustomerOrders} />
         <Route path="/memorials" component={CustomerMemorials} />
+        <Route path="/memorial/:id" component={PublicMemorial} />
         <Route path="/tributes" component={CustomerTributes} />
         <Route path="/saved" component={CustomerSaved} />
         <Route path="/settings" component={CustomerSettings} />
