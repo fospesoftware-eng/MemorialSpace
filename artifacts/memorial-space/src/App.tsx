@@ -164,6 +164,7 @@ function PublicRoutes() {
         <Route path="/memorial/:id" component={PublicMemorial} />
         <Route path="/obituaries" component={PublicObituaries} />
         <Route path="/shop" component={PublicShop} />
+        <Route path="/store" component={PublicShop} />
         <Route component={NotFound} />
       </Switch>
     </PublicLayout>

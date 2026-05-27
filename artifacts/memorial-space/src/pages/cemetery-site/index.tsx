@@ -13,7 +13,15 @@ import { CemeterySiteMemorialEdit } from "./memorial-edit";
 
 export function CemeterySiteRoutes({ slug }: { slug: string }) {
   const { data: site, isLoading, isError, error } = usePublicSite(slug);
-  const [, productParams] = useRoute<{ productSlug: string }>("/marketplace/:productSlug");
+  const [, productParams] = useRoute<{ productSlug: string }>(
+    "/marketplace/:productSlug",
+  );
+  const [, shopProductParams] = useRoute<{ productSlug: string }>(
+    "/shop/:productSlug",
+  );
+  const [, storeProductParams] = useRoute<{ productSlug: string }>(
+    "/store/:productSlug",
+  );
   const [, orderParams] = useRoute<{ orderNumber: string }>("/order/:orderNumber");
   const [, memorialParams] = useRoute<{ code: string }>("/memorial/:code");
 
@@ -89,12 +97,46 @@ export function CemeterySiteRoutes({ slug }: { slug: string }) {
         <Route path="/marketplace">
           {() => <CemeterySiteMarketplace slug={slug} site={site} />}
         </Route>
+        <Route path="/shop">
+          {() => <CemeterySiteMarketplace slug={slug} site={site} />}
+        </Route>
+        <Route path="/store">
+          {() => <CemeterySiteMarketplace slug={slug} site={site} />}
+        </Route>
         <Route path="/marketplace/:productSlug">
           {(p) => (
             <CemeterySiteProduct
               slug={slug}
               site={site}
               productSlug={p.productSlug ?? productParams?.productSlug ?? ""}
+            />
+          )}
+        </Route>
+        <Route path="/shop/:productSlug">
+          {(p) => (
+            <CemeterySiteProduct
+              slug={slug}
+              site={site}
+              productSlug={
+                p.productSlug ??
+                shopProductParams?.productSlug ??
+                productParams?.productSlug ??
+                ""
+              }
+            />
+          )}
+        </Route>
+        <Route path="/store/:productSlug">
+          {(p) => (
+            <CemeterySiteProduct
+              slug={slug}
+              site={site}
+              productSlug={
+                p.productSlug ??
+                storeProductParams?.productSlug ??
+                productParams?.productSlug ??
+                ""
+              }
             />
           )}
         </Route>

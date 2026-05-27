@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, ShoppingBag, Home, MapPin, Mail, Phone, Clock, Eye, Map as MapIcon } from "lucide-react";
+import { Search, ShoppingBag, Store, Home, MapPin, Mail, Phone, Clock, Eye, Map as MapIcon } from "lucide-react";
 import { THEMES, isThemeKey, applyPrimaryOverride, buildGoogleFontsHref, type ThemeKey } from "./themes";
 import { useCart } from "./cart-store";
 import type { PublicSite } from "./api";
@@ -51,15 +51,23 @@ export function CemeterySiteLayout({ slug, site, children }: Props) {
     { href: `/`, label: "Home", icon: Home },
     { href: `/find-grave`, label: "Find a Grave", icon: Search },
     { href: `/map`, label: "Cemetery Map", icon: MapIcon },
-    { href: `/marketplace`, label: "Marketplace", icon: ShoppingBag },
+    { href: `/shop`, label: "Store", icon: Store },
   ];
+
+  const isStorePath =
+    location === "/shop" ||
+    location.startsWith("/shop/") ||
+    location === "/store" ||
+    location.startsWith("/store/") ||
+    location === "/marketplace" ||
+    location.startsWith("/marketplace/");
 
   const isActive = (href: string) => {
     // `location` is relative to the cemetery-site nest base ("/c/<slug>"),
-    // so it's "/", "/find-grave", "/marketplace", etc. Match exactly for
-    // home; for sub-routes match either the exact path or the path
-    // followed by "/" so "/map" never falsely flags "/map-foo".
+    // so it's "/", "/find-grave", "/shop", etc. Match exactly for home;
+    // for sub-routes match either the exact path or the path followed by "/".
     if (href === `/`) return location === "/" || location === "";
+    if (href === `/shop`) return isStorePath;
     return location === href || location.startsWith(href + "/");
   };
 

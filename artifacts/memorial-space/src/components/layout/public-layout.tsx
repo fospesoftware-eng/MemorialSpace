@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Search, BookOpen, ShoppingBag, LogOut, User } from "lucide-react";
+import { Search, BookOpen, Store, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
@@ -40,11 +40,13 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 href="/shop"
                 className={cn(
                   "flex items-center text-sm font-medium transition-colors hover:text-foreground/80",
-                  location.startsWith("/shop") ? "text-foreground" : "text-foreground/60"
+                  location.startsWith("/shop") || location.startsWith("/store")
+                    ? "text-foreground"
+                    : "text-foreground/60"
                 )}
               >
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                Marketplace
+                <Store className="mr-2 h-4 w-4" />
+                Store
               </Link>
             </nav>
           </div>
