@@ -14,12 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, MapPin, Phone, Globe, Store, Wrench, CheckCircle2, AlertCircle, Loader2, Heart } from "lucide-react";
 import { usePublicVendor, useSubmitVendorRequest } from "../vendor/api";
+import { ImageLightbox } from "@/components/image-lightbox";
 
 export default function VendorDetail({ slug }: { slug: string }) {
   const { data, isLoading, isError } = usePublicVendor(slug);
   const submit = useSubmitVendorRequest(slug);
 
   const [serviceId, setServiceId] = useState<number | undefined>(undefined);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -124,17 +128,51 @@ export default function VendorDetail({ slug }: { slug: string }) {
                   return (
                     <Card
                       key={s.id}
-                      className={`border ${selected ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/30"} cursor-pointer transition-colors`}
+                      className={`border ${selected ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/30"} cursor-pointer transition-colors overflow-hidden`}
                       onClick={() => setServiceId(selected ? undefined : s.id)}
                       data-testid={`service-card-${s.id}`}
                     >
+                      {/* Photo gallery strip */}
+                      {s.photos.length > 0 && (
+                        <div className="flex gap-1 p-2 pb-0 overflow-x-auto">
+                          {s.photos.slice(0, 4).map((src, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxImages(s.photos);
+                                setLightboxIndex(i);
+                                setLightboxOpen(true);
+                              }}
+                              className="shrink-0 rounded-md overflow-hidden border border-border/40 hover:border-primary/50 transition-colors"
+                              aria-label={`Open image ${i + 1} of ${s.photos.length} for ${s.name}`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={src} alt={`${s.name} photo ${i + 1}`} loading="lazy" decoding="async" className="h-16 w-16 object-cover" />
+                            </button>
+                          ))}
+                          {s.photos.length > 4 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxImages(s.photos);
+                                setLightboxIndex(4);
+                                setLightboxOpen(true);
+                              }}
+                              className="shrink-0 h-16 w-16 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground border border-border/40 hover:border-primary/50 transition-colors"
+                              aria-label={`Open gallery for ${s.name} (${s.photos.length} images)`}
+                            >
+                              +{s.photos.length - 4}
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <CardContent className="p-4 flex gap-4">
-                        {s.photos[0] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={s.photos[0]} alt="" className="h-20 w-20 rounded-md object-cover border border-border/40 shrink-0" />
-                        ) : (
-                          <div className="h-20 w-20 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                            <Wrench className="h-7 w-7" />
+                        {s.photos.length === 0 && (
+                          <div className="h-14 w-14 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <Wrench className="h-6 w-6" />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
@@ -228,6 +266,14 @@ export default function VendorDetail({ slug }: { slug: string }) {
           </aside>
         </div>
       </main>
+
+      <ImageLightbox
+        images={lightboxImages}
+        open={lightboxOpen}
+        initialIndex={lightboxIndex}
+        onOpenChange={setLightboxOpen}
+        title="Service photos"
+      />
     </div>
   );
 }

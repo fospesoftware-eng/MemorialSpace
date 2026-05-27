@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Save, Loader2, Wrench, AlertCircle, ImagePlus, X, Repeat } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, Wrench, AlertCircle, ImagePlus, X, Repeat, Images } from "lucide-react";
+import { ImageLightbox } from "@/components/image-lightbox";
 import {
   useVendorServices,
   useCreateService,
@@ -73,6 +74,9 @@ export default function VendorServices() {
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [photoInput, setPhotoInput] = useState("");
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const services = data?.services ?? [];
 
@@ -328,8 +332,21 @@ export default function VendorServices() {
           {services.map((s) => (
             <Card key={s.id} className="border-border/60 overflow-hidden" data-testid={`service-card-${s.id}`}>
               {s.photos[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={s.photos[0]} alt="" className="h-32 w-full object-cover border-b border-border/40" />
+                <button
+                  type="button"
+                  className="relative group block w-full text-left p-0 border-0 bg-transparent"
+                  onClick={() => { setLightboxImages(s.photos); setLightboxIndex(0); setLightboxOpen(true); }}
+                  aria-label={`Open photo gallery for ${s.name} (${s.photos.length} images)`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.photos[0]} alt="" loading="lazy" decoding="async" className="h-32 w-full object-cover border-b border-border/40" />
+                  {s.photos.length > 1 && (
+                    <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Images className="h-3 w-3" />
+                      {s.photos.length}
+                    </div>
+                  )}
+                </button>
               ) : (
                 <div className="h-32 w-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center border-b border-border/40">
                   <Wrench className="h-8 w-8 text-primary/40" />
@@ -374,6 +391,13 @@ export default function VendorServices() {
           ))}
         </div>
       )}
+
+      <ImageLightbox
+        images={lightboxImages}
+        open={lightboxOpen}
+        initialIndex={lightboxIndex}
+        onOpenChange={setLightboxOpen}
+      />
     </div>
   );
 }
