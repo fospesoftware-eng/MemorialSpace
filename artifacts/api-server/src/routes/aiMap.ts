@@ -14,7 +14,7 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
     .limit(1);
   const key = row?.anthropicApiKey;
   if (!key) return null;
-  return new Anthropic({ apiKey: key, maxRetries: 1, timeout: 8000 });
+  return new Anthropic({ apiKey: key, maxRetries: 1, timeout: 30000 });
 }
 
 const router: IRouter = Router();
@@ -125,6 +125,11 @@ const DetectedPlot = z.object({
   // (curved sections, angled blocks, irregular plots) keep their shape.
   // Up to 40 normalised vertices in perimeter order.
   points: z.array(Point01).min(3).max(40).optional(),
+  // Rich text extracted by AI vision from inside the plot marker.
+  textInside: z.string().default(""),
+  birthYear: z.string().default(""),
+  deathYear: z.string().default(""),
+  gridRef: z.string().default(""),
 });
 
 const DetectedSpot = z.object({
@@ -132,12 +137,22 @@ const DetectedSpot = z.object({
   spotTypeId: z.string(),
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
+  // AI-detected symbol category: sign, handicap, manhole, utility, legend, tree, bench, other
+  symbolType: z.string().default(""),
 });
 
 const DetectionResult = z.object({
   plots: z.array(DetectedPlot).default([]),
   spots: z.array(DetectedSpot).default([]),
   notes: z.string().optional(),
+  // Rich metadata from full AI vision detection (populated when Claude does
+  // the primary detection rather than the legacy CV-only fallback).
+  boundary: z.object({ points: z.array(Point01).min(3).max(40) }).optional(),
+  roads: z.array(z.object({ label: z.string().default(""), points: z.array(Point01).min(2).max(40) })).default([]),
+  gridReferences: z.object({ rows: z.array(z.string()).default([]), columns: z.array(z.string()).default([]) }).optional(),
+  scale: z.string().optional(),
+  orientation: z.string().optional(),
+  uncertainText: z.array(z.string()).default([]),
 });
 
 // -------- Claude classification step --------
@@ -254,6 +269,297 @@ Image dimensions: ${imgWidth} x ${imgHeight} pixels.`;
   return {
     colorTypeMap,
     notes: typeof r.notes === "string" ? r.notes.slice(0, 500) : "",
+  };
+}
+
+// -------- Full Claude vision detection (raster images) --------
+//
+// For raster cemetery maps (scanned paper, photographed boards, digital
+// exports without vector text), we send the image directly to Claude with a
+// comprehensive system prompt that asks for boundaries, roads, sections,
+// individual plots, text, names, dates, grid refs, symbols, scale, and
+// orientation. Claude returns structured JSON that we validate against the
+// existing DetectedPlot / DetectedSpot / DetectionResult schemas.
+
+interface AiVisionDetection {
+  plots: Array<{
+    label: string;
+    typeId: string;
+    status: "available" | "reserved" | "occupied";
+    x: number; y: number; w: number; h: number;
+    points?: Array<[number, number]>;
+    textInside?: string;
+    birthYear?: string;
+    deathYear?: string;
+    gridRef?: string;
+  }>;
+  spots: Array<{
+    label: string;
+    spotTypeId: string;
+    x: number; y: number;
+    symbolType?: string;
+  }>;
+  notes?: string;
+  boundary?: { points: Array<[number, number]> };
+  roads?: Array<{ label: string; points: Array<[number, number]> }>;
+  gridReferences?: { rows: string[]; columns: string[] };
+  scale?: string;
+  orientation?: string;
+  uncertainText?: string[];
+}
+
+function buildMapDetectionPrompt(plotTypes: { id: string; code: string; name: string }[],
+                                 spotTypes: { id: string; name: string }[],
+                                 imgWidth: number, imgHeight: number): string {
+  const plotTypeList = plotTypes
+    .map((t) => `  - id="${t.id}", code="${t.code}", name="${t.name}"`)
+    .join("\n");
+  const spotTypeList = spotTypes.length
+    ? spotTypes.map((t) => `  - id="${t.id}", name="${t.name}"`).join("\n")
+    : "  (none configured — use the first plot type id as fallback for spots)";
+
+  return `You are an expert cemetery / memorial-space map digitisation assistant.
+Your task is to analyse the provided map image and return a structured JSON object that fully describes everything visible on the map.
+
+Image dimensions: ${imgWidth} x ${imgHeight} pixels. All coordinates in the JSON must be normalised to 0..1 (fraction of image width/height).
+
+Available plot types (use ONLY these ids):
+${plotTypeList}
+
+Available spot types (for symbols / markers):
+${spotTypeList}
+
+## Detection rules — be precise:
+
+1. OUTER BOUNDARY / FENCING
+   - If the map shows a perimeter fence, wall, or property boundary, return its polygon outline as 
+     "boundary": { "points": [[x1,y1], [x2,y2], ...] }.
+
+2. INTERNAL ROADS AND PATHS
+   - Detect every drivable road, walkway, path, or driveway.
+   - Return each as an entry in "roads": [ { "label": "Main Drive", "points": [[x1,y1], ...] } ].
+   - Roads are polylines (2+ points), not polygons.
+
+3. FAMILY SECTIONS OR GROUPED MEMORIAL AREAS
+   - Large named areas (e.g. "Old Section", "Veterans Garden", "Rose Garden") should be emitted
+     as regular "plots" with a generous bounding box or polygon outline.
+     Use the plot type that best represents "section / area".
+
+4. INDIVIDUAL PLOTS / GRAVES / HEADSTONES / NICHES / CRYPTS / SLABS / MARKERS
+   - Every small rectangular or circular marker that represents a single burial must be emitted
+     as its own plot entry in "plots".
+   - Normalised bounding box: x, y, w, h (0..1).
+   - If the plot has an irregular shape, include "points" (polygon vertices, max 40).
+   - Assign the most appropriate typeId from the list above.
+
+5. TEXT INSIDE EACH MARKER
+   - Read any name, dates, or inscription visible inside the plot marker.
+   - Put the full visible text in "textInside".
+   - If a birth year and/or death year are clearly visible, extract them into "birthYear" and "deathYear".
+   - If the plot carries a grid coordinate (e.g. "A-12", "B-7", "3F"), put it in "gridRef".
+
+6. SYMBOLS, SIGNS, AND UTILITY MARKERS
+   - Signs, HC (handicap) markers, manholes, legends, utility notes, trees, benches, etc.
+   - Emit these as entries in "spots" (not plots).
+   - x, y is the centre of the symbol.
+   - "symbolType" must be one of: sign, handicap, manhole, utility, legend, tree, bench, other.
+
+7. MAP SCALE AND ORIENTATION
+   - If a scale bar or numeric scale is visible, put it in "scale" (free text, e.g. "1:500" or "1 inch = 20 ft").
+   - If a north arrow or compass is visible, describe orientation in "orientation" (free text, e.g. "North at top").
+
+8. UNCERTAIN OR UNREADABLE TEXT
+   - Any text you can partially see but cannot fully read, list it in "uncertainText" as an array of strings.
+
+## Output format — reply with ONLY a JSON object (no markdown, no prose):
+
+{
+  "plots": [
+    {
+      "label": "visible name or inscription",
+      "typeId": "<exact-id-from-list-above>",
+      "status": "available",
+      "x": 0.12, "y": 0.34, "w": 0.015, "h": 0.025,
+      "points": null,
+      "textInside": "John Smith 1920-1995",
+      "birthYear": "1920",
+      "deathYear": "1995",
+      "gridRef": "A-12"
+    }
+  ],
+  "spots": [
+    {
+      "label": "Entrance Sign",
+      "spotTypeId": "<exact-id-from-list-above>",
+      "x": 0.50, "y": 0.10,
+      "symbolType": "sign"
+    }
+  ],
+  "boundary": { "points": [[0.0,0.0], [1.0,0.0], [1.0,1.0], [0.0,1.0]] },
+  "roads": [
+    { "label": "Main Drive", "points": [[0.48,0.0], [0.52,1.0]] }
+  ],
+  "gridReferences": { "rows": ["A","B","C","D","E","F"], "columns": ["1","2","3","4","5","6","7","8"] },
+  "scale": "1:500",
+  "orientation": "North at top",
+  "uncertainText": ["Partially faded name in Section C"],
+  "notes": "1-2 sentence summary of what you found."
+}
+
+## Important constraints:
+- Do NOT invent plot type ids or spot type ids — use ONLY those listed above.
+- If a plot type does not seem to match anything visible, use the first id as a fallback.
+- "plots" array is the primary output — include every single grave, niche, crypt, or marker you can identify. Up to 500 entries.
+- Keep coordinates strictly inside [0,1].
+- If a field is missing or unknown, use empty string "" or null — do not omit the key.`;
+}
+
+async function detectWithClaudeVision(args: {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  plotTypes: { id: string; code: string; name: string }[];
+  spotTypes: { id: string; name: string }[];
+  imgWidth: number;
+  imgHeight: number;
+  anthropicClient: Anthropic;
+}): Promise<AiVisionDetection> {
+  const { base64, mediaType, plotTypes, spotTypes, imgWidth, imgHeight, anthropicClient } = args;
+
+  const systemPrompt = buildMapDetectionPrompt(plotTypes, spotTypes, imgWidth, imgHeight);
+
+  const message = await anthropicClient.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: "Analyse this cemetery / memorial-space map and return the structured JSON exactly as specified in your instructions." },
+        ],
+      },
+    ],
+  });
+
+  const text = message.content
+    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  const jsonText = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(jsonText);
+  } catch {
+    const firstBrace = jsonText.indexOf("{");
+    const lastBrace = jsonText.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      raw = JSON.parse(jsonText.slice(firstBrace, lastBrace + 1));
+    } else {
+      throw new Error("Claude vision detection returned non-JSON content.");
+    }
+  }
+
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const validPlotIds = new Set(plotTypes.map((t) => t.id));
+  const validSpotIds = new Set(spotTypes.map((t) => t.id));
+  const fallbackPlotId = plotTypes[0]?.id ?? "_unknown";
+  const fallbackSpotId = spotTypes[0]?.id ?? "_unknown";
+
+  const isPoint = (v: unknown): v is [number, number] =>
+    Array.isArray(v) && v.length === 2 && typeof v[0] === "number" && typeof v[1] === "number";
+
+  const clampPoint = (p: [number, number]): [number, number] =>
+    [Math.max(0, Math.min(1, p[0])), Math.max(0, Math.min(1, p[1]))];
+
+  const plots: AiVisionDetection["plots"] = [];
+  const rawPlots = Array.isArray(r.plots) ? r.plots : [];
+  for (const rp of rawPlots) {
+    if (plots.length >= 500) break;
+    if (!rp || typeof rp !== "object") continue;
+    const p = rp as Record<string, unknown>;
+    const typeId = typeof p.typeId === "string" && validPlotIds.has(p.typeId) ? p.typeId : fallbackPlotId;
+    const x = clamp01(p.x);
+    const y = clamp01(p.y);
+    const w = Math.max(0, Math.min(1 - x, clamp01(p.w)));
+    const h = Math.max(0, Math.min(1 - y, clamp01(p.h)));
+    if (w <= 0 || h <= 0) continue;
+    const points = Array.isArray(p.points)
+      ? (p.points as unknown[]).filter(isPoint).map(clampPoint).slice(0, 40)
+      : undefined;
+    const label = typeof p.label === "string" ? p.label.slice(0, 200) : "";
+    const status = p.status === "reserved" || p.status === "occupied" ? p.status : "available";
+    plots.push({
+      label, typeId, status, x, y, w, h,
+      points: points && points.length >= 3 ? points : undefined,
+      textInside: typeof p.textInside === "string" ? p.textInside.slice(0, 500) : "",
+      birthYear: typeof p.birthYear === "string" ? p.birthYear.slice(0, 20) : "",
+      deathYear: typeof p.deathYear === "string" ? p.deathYear.slice(0, 20) : "",
+      gridRef: typeof p.gridRef === "string" ? p.gridRef.slice(0, 50) : "",
+    });
+  }
+
+  const spots: AiVisionDetection["spots"] = [];
+  const rawSpots = Array.isArray(r.spots) ? r.spots : [];
+  for (const rs of rawSpots) {
+    if (spots.length >= MAX_SPOTS) break;
+    if (!rs || typeof rs !== "object") continue;
+    const s = rs as Record<string, unknown>;
+    const spotTypeId = typeof s.spotTypeId === "string" && validSpotIds.has(s.spotTypeId)
+      ? s.spotTypeId : fallbackSpotId;
+    const x = clamp01(s.x);
+    const y = clamp01(s.y);
+    const label = typeof s.label === "string" ? s.label.slice(0, 200) : "";
+    const symbolType = typeof s.symbolType === "string" ? s.symbolType.slice(0, 50) : "";
+    spots.push({ label, spotTypeId, x, y, symbolType });
+  }
+
+  const boundaryRaw = r.boundary && typeof r.boundary === "object"
+    ? (r.boundary as Record<string, unknown>) : null;
+  const boundary = boundaryRaw && Array.isArray(boundaryRaw.points)
+    ? { points: (boundaryRaw.points as unknown[]).filter(isPoint).map(clampPoint).slice(0, 40) }
+    : undefined;
+
+  const roadsRaw = Array.isArray(r.roads) ? r.roads : [];
+  const roads = roadsRaw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => ({
+      label: typeof r.label === "string" ? r.label.slice(0, 200) : "",
+      points: Array.isArray(r.points)
+        ? (r.points as unknown[]).filter(isPoint).map(clampPoint).slice(0, 40)
+        : [],
+    }))
+    .filter((r) => r.points.length >= 2);
+
+  const gridRefRaw = r.gridReferences && typeof r.gridReferences === "object"
+    ? (r.gridReferences as Record<string, unknown>) : null;
+  const gridReferences = gridRefRaw
+    ? {
+        rows: Array.isArray(gridRefRaw.rows) ? (gridRefRaw.rows as unknown[]).filter((v): v is string => typeof v === "string") : [],
+        columns: Array.isArray(gridRefRaw.columns) ? (gridRefRaw.columns as unknown[]).filter((v): v is string => typeof v === "string") : [],
+      }
+    : undefined;
+
+  const uncertainText = Array.isArray(r.uncertainText)
+    ? (r.uncertainText as unknown[]).filter((v): v is string => typeof v === "string").map((s) => s.slice(0, 200))
+    : [];
+
+  return {
+    plots,
+    spots,
+    notes: typeof r.notes === "string" ? r.notes.slice(0, 500) : "",
+    boundary: boundary && boundary.points.length >= 3 ? boundary : undefined,
+    roads,
+    gridReferences,
+    scale: typeof r.scale === "string" ? r.scale.slice(0, 100) : undefined,
+    orientation: typeof r.orientation === "string" ? r.orientation.slice(0, 100) : undefined,
+    uncertainText,
   };
 }
 
@@ -433,7 +739,85 @@ router.post("/ai/detect-map", async (req, res) => {
     if (handled) return;
   }
 
-  // ---- Step 1: server-side computer-vision detection (color-section mode) ----
+  // ---- Raster image: try full Claude vision first ----
+  // For scanned maps, photos, or digital exports without vector text, Claude
+  // can detect boundaries, roads, sections, individual plots, text, names,
+  // dates, grid refs, symbols, scale, and orientation in one vision call.
+  // If no Anthropic key is configured or Claude fails, fall back to the legacy
+  // CV + colour-classification pipeline.
+  const anthropicClient = await getAnthropicClient();
+
+  if (anthropicClient) {
+    try {
+      const aiVision = await detectWithClaudeVision({
+        base64, mediaType,
+        plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
+        spotTypes: _spotTypes.map((t) => ({ id: t.id, name: t.name })),
+        imgWidth, imgHeight,
+        anthropicClient,
+      });
+
+      const plots: z.infer<typeof DetectedPlot>[] = [];
+      for (const p of aiVision.plots) {
+        if (plots.length >= MAX_PLOTS) break;
+        const parsed = DetectedPlot.safeParse({
+          label: p.label,
+          typeId: p.typeId,
+          status: p.status,
+          x: p.x, y: p.y, w: p.w, h: p.h,
+          points: p.points,
+          textInside: p.textInside,
+          birthYear: p.birthYear,
+          deathYear: p.deathYear,
+          gridRef: p.gridRef,
+        });
+        if (parsed.success) plots.push(parsed.data);
+      }
+
+      const spots: z.infer<typeof DetectedSpot>[] = [];
+      for (const s of aiVision.spots) {
+        if (spots.length >= MAX_SPOTS) break;
+        const parsed = DetectedSpot.safeParse({
+          label: s.label,
+          spotTypeId: s.spotTypeId,
+          x: s.x, y: s.y,
+          symbolType: s.symbolType,
+        });
+        if (parsed.success) spots.push(parsed.data);
+      }
+
+      const notes = aiVision.notes || `AI vision: ${plots.length} plots, ${spots.length} spots detected.`;
+      const result = DetectionResult.parse({
+        plots,
+        spots,
+        notes,
+        boundary: aiVision.boundary,
+        roads: aiVision.roads,
+        gridReferences: aiVision.gridReferences,
+        scale: aiVision.scale,
+        orientation: aiVision.orientation,
+        uncertainText: aiVision.uncertainText,
+      });
+
+      req.log.info(
+        { mode: "claude-vision", plots: plots.length, spots: spots.length },
+        "ai-map detection complete",
+      );
+      res.json(result);
+      return;
+    } catch (err) {
+      req.log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "claude vision detection failed; falling back to CV pipeline",
+      );
+    }
+  }
+
+  // ---- Fallback: server-side computer-vision (color-section mode) ----
+  // This runs when there is no Anthropic API key or when the Claude vision
+  // call threw an error. It uses classical CV to find coloured sections and
+  // their child grave cells, then optionally classifies colours if a key is
+  // available (the key might be set but the vision call still failed above).
   let detection: CvDetection;
   try {
     detection = await detectMap(imageBuffer);
@@ -447,8 +831,6 @@ router.post("/ai/detect-map", async (req, res) => {
   }
 
   if (detection.sections.length === 0 || detection.palette.length === 0) {
-    // CV found nothing recognisable. Tell the client clearly so they can
-    // fall back to manual editing instead of pretending we found something.
     req.log.warn({ palette: detection.palette.length }, "cv detection returned no sections");
     res.json({
       plots: [],
@@ -461,12 +843,10 @@ router.post("/ai/detect-map", async (req, res) => {
     return;
   }
 
-  // ---- Step 2: ask Claude what each detected colour represents ----
+  // ---- Optional: colour classification (if key exists after vision failure) ----
   let classification: ColorClassification;
   try {
-    const anthropicClient = await getAnthropicClient();
     if (!anthropicClient) {
-      req.log.warn("no anthropic api key configured; defaulting all sections to first plot type");
       classification = { colorTypeMap: {}, notes: "No Anthropic API key configured." };
     } else {
       classification = await classifyPaletteColors({
@@ -480,19 +860,13 @@ router.post("/ai/detect-map", async (req, res) => {
   } catch (err) {
     req.log.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      "claude classification failed; defaulting all sections to first plot type",
+      "claude colour classification failed; defaulting all sections to first plot type",
     );
     classification = { colorTypeMap: {}, notes: "" };
   }
 
-  // ---- Step 3: turn detected sections into plot records ----
+  // ---- Turn CV sections into plot records ----
   const plots: z.infer<typeof DetectedPlot>[] = [];
-
-  // Emit BOTH the section outline AND every grave cell inside it. The user
-  // explicitly wants both: sections as a whole AND each individual grave as
-  // its own clickable plot. Sections come FIRST so they render below the
-  // cells in the editor's z-order (section polygon as boundary, cells as
-  // the actual interactive plots stacked on top).
   let sectionsEmitted = 0;
   let cellsEmitted = 0;
 
@@ -502,7 +876,6 @@ router.post("/ai/detect-map", async (req, res) => {
     const colorIdx = nearestPaletteIndex(section.color, detection.palette);
     const typeId = classification.colorTypeMap[colorIdx] ?? fallbackPlotId;
 
-    // (a) Section outline polygon — draws the section boundary.
     const points = section.points
       .slice(0, 40)
       .map(([px, py]) => [clamp01(px), clamp01(py)] as [number, number]);
@@ -524,7 +897,6 @@ router.post("/ai/detect-map", async (req, res) => {
       }
     }
 
-    // (b) Individual grave cells inside this section — each is its own plot.
     for (const cell of section.cells) {
       if (plots.length >= MAX_PLOTS) break;
       const x = clamp01(cell.x);
@@ -555,7 +927,7 @@ router.post("/ai/detect-map", async (req, res) => {
     notes: summaryParts.join(". "),
   });
   req.log.info(
-    { plots: result.plots.length, sections: detection.sections.length, palette: detection.palette.length },
+    { plots: result.plots.length, sections: detection.sections.length, palette: detection.palette.length, mode: "cv-fallback" },
     "ai-map detection complete",
   );
   res.json(result);

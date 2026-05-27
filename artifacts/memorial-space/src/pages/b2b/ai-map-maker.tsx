@@ -129,16 +129,30 @@ interface DetectedPlot {
   x: number; y: number; w: number; h: number; // normalised 0..1, bounding box
   /** Optional polygon outline (normalised 0..1 vertices, in perimeter order). */
   points?: [number, number][];
+  /** Text extracted from inside the marker (names, dates, inscriptions). */
+  textInside?: string;
+  birthYear?: string;
+  deathYear?: string;
+  gridRef?: string;
 }
 interface DetectedSpot {
   label: string;
   spotTypeId: string;
   x: number; y: number; // normalised 0..1
+  /** AI-detected symbol category: sign, handicap, manhole, utility, legend, tree, bench, other. */
+  symbolType?: string;
 }
 interface DetectionResult {
   plots: DetectedPlot[];
   spots: DetectedSpot[];
   notes?: string;
+  /** Rich metadata from full AI vision detection. */
+  boundary?: { points: [number, number][] };
+  roads?: { label: string; points: [number, number][] }[];
+  gridReferences?: { rows: string[]; columns: string[] };
+  scale?: string;
+  orientation?: string;
+  uncertainText?: string[];
 }
 
 interface SourceImage {
@@ -359,6 +373,10 @@ export default function AiMapMaker() {
             Math.max(0, Math.min(h, py * h)),
           ] as [number, number])
         : undefined,
+      textInside: p.textInside,
+      birthYear: p.birthYear,
+      deathYear: p.deathYear,
+      gridRef: p.gridRef,
     }));
 
     const spots: BurialSpot[] = result.spots.map((s) => ({
@@ -367,6 +385,7 @@ export default function AiMapMaker() {
       y: Math.max(0, Math.min(h, s.y * h)),
       name: s.label || "",
       spotTypeId: spotTypes.find((t) => t.id === s.spotTypeId) ? s.spotTypeId : fallbackSpotId,
+      symbolType: s.symbolType,
     }));
 
     const slug = makeSlug(mapName);
@@ -538,6 +557,21 @@ export default function AiMapMaker() {
                     preserveAspectRatio="none"
                     data-testid="detection-overlay"
                   >
+                    {/* Boundary polygon */}
+                    {result.boundary && result.boundary.points.length >= 3 && (
+                      <polygon
+                        points={result.boundary.points.map(([px, py]) => `${px * source.width},${py * source.height}`).join(" ")}
+                        fill="none" stroke="#22c55e" strokeWidth={3} strokeDasharray="6 4" opacity={0.8}
+                      />
+                    )}
+                    {/* Road / path polylines */}
+                    {result.roads && result.roads.map((r, ri) => r.points.length >= 2 && (
+                      <polyline
+                        key={`road${ri}`}
+                        points={r.points.map(([px, py]) => `${px * source.width},${py * source.height}`).join(" ")}
+                        fill="none" stroke="#a1a1aa" strokeWidth={6} strokeLinecap="round" opacity={0.75}
+                      />
+                    ))}
                     {result.plots.map((p, i) => {
                       const t = getPlotType(p.typeId);
                       const labelX = p.x * source.width + 6;
@@ -562,14 +596,14 @@ export default function AiMapMaker() {
                       return (
                         <g key={`p${i}`}>
                           {shape}
-                          {p.label && (
+                          {(p.label || p.gridRef) && (
                             <text
                               x={labelX} y={labelY}
                               fill="#ffffff" stroke="#000000" strokeWidth={3}
                               paintOrder="stroke"
                               fontSize={14} fontWeight={600}
                             >
-                              {p.label}
+                              {p.gridRef ? `${p.label || ""} [${p.gridRef}]` : p.label}
                             </text>
                           )}
                         </g>
@@ -689,6 +723,41 @@ export default function AiMapMaker() {
               </div>
             )}
 
+            {/* Rich metadata from AI vision */}
+            {(result.scale || result.orientation || result.gridReferences || (result.roads && result.roads.length > 0) || (result.uncertainText && result.uncertainText.length > 0)) && (
+              <div className="rounded-md border border-border bg-card/50 p-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Map metadata (AI-extracted)
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {result.scale && (
+                    <span className="text-muted-foreground"><span className="font-medium text-foreground">Scale:</span> {result.scale}</span>
+                  )}
+                  {result.orientation && (
+                    <span className="text-muted-foreground"><span className="font-medium text-foreground">Orientation:</span> {result.orientation}</span>
+                  )}
+                  {result.gridReferences && (result.gridReferences.rows.length > 0 || result.gridReferences.columns.length > 0) && (
+                    <span className="text-muted-foreground">
+                      <span className="font-medium text-foreground">Grid:</span>{" "}
+                      {result.gridReferences.rows.join(",")} × {result.gridReferences.columns.join(",")}
+                    </span>
+                  )}
+                </div>
+                {result.roads && result.roads.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium text-foreground">Roads / paths:</span>{" "}
+                    <span className="text-muted-foreground">{result.roads.map((r) => r.label || "Unnamed").join(", ")}</span>
+                  </div>
+                )}
+                {result.uncertainText && result.uncertainText.length > 0 && (
+                  <div className="text-sm">
+                    <span className="font-medium text-amber-400">Uncertain text:</span>{" "}
+                    <span className="text-muted-foreground">{result.uncertainText.join("; ")}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
                 Map name
@@ -732,10 +801,49 @@ export default function AiMapMaker() {
               )}
             </div>
 
+            {/* Plots with extracted text */}
+            {result.plots.some((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear) && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Plots with extracted text
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Grid</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Text</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground">Years</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.plots
+                        .filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear)
+                        .slice(0, 50)
+                        .map((p, i) => (
+                          <tr key={i} className="border-t border-border hover:bg-muted/50">
+                            <td className="px-3 py-1.5 text-xs font-mono text-muted-foreground">{p.gridRef || "—"}</td>
+                            <td className="px-3 py-1.5 max-w-[200px] truncate" title={p.textInside}>{p.textInside || p.label || "—"}</td>
+                            <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                              {p.birthYear || p.deathYear ? `${p.birthYear || "?"} – ${p.deathYear || "?"}` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {result.plots.filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear).length > 50 && (
+                    <div className="px-3 py-1.5 text-xs text-muted-foreground border-t border-border">
+                      +{result.plots.filter((p) => p.textInside || p.gridRef || p.birthYear || p.deathYear).length - 50} more with text
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {result.spots.length > 0 && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Detected burial spots
+                  Detected burial spots &amp; symbols
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {result.spots.slice(0, 12).map((s, i) => {
@@ -745,6 +853,7 @@ export default function AiMapMaker() {
                       <Badge key={i} variant="outline" className="gap-1.5">
                         <Icon className="h-3 w-3" style={{ color: t.color }} />
                         {s.label || t.name}
+                        {s.symbolType && <span className="text-[10px] text-muted-foreground">({s.symbolType})</span>}
                       </Badge>
                     );
                   })}

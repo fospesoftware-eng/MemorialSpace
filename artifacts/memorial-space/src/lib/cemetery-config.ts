@@ -81,6 +81,8 @@ export interface BurialSpot {
   lat?: number;
   lon?: number;
   notes?: string;
+  /** AI-detected symbol category (e.g. sign, handicap, manhole, utility, legend, tree, bench). */
+  symbolType?: string;
 }
 
 /** Hard cap so a single spot can't grow without bound and bust localStorage. */

@@ -91,6 +91,11 @@ interface Plot {
    * shapes; ignored for paths (already stroke-only) and circles.
    */
   outline?: boolean;
+  /** Text extracted from inside the marker by AI vision (names, dates, inscriptions). */
+  textInside?: string;
+  birthYear?: string;
+  deathYear?: string;
+  gridRef?: string;
 }
 
 interface MapDoc {
@@ -204,6 +209,10 @@ function migrateDoc(raw: unknown): MapDoc {
         pathWidth,
         circle,
         outline,
+        textInside: safeOptStr((p as LegacyPlot & { textInside?: unknown }).textInside),
+        birthYear: safeOptStr((p as LegacyPlot & { birthYear?: unknown }).birthYear),
+        deathYear: safeOptStr((p as LegacyPlot & { deathYear?: unknown }).deathYear),
+        gridRef: safeOptStr((p as LegacyPlot & { gridRef?: unknown }).gridRef),
       };
     }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
@@ -232,6 +241,7 @@ function migrateDoc(raw: unknown): MapDoc {
         headstoneImages,
         lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
         notes: safeOptStr(s.notes),
+        symbolType: safeOptStr((s as LegacySpot & { symbolType?: unknown }).symbolType),
       };
     }),
     updatedAt: safeNum(d.updatedAt, Date.now()),
