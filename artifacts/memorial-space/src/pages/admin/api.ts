@@ -439,3 +439,32 @@ export function useAdminUserSearch(q: string) {
       http<AdminUserRow[]>(`/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   });
 }
+
+// ---- AI Settings ----
+export interface AiSettingsResponse {
+  id: number;
+  anthropicApiKey: string | null;
+  hasKey: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+export function useAiSettings() {
+  return useQuery<AiSettingsResponse>({
+    queryKey: ["admin", "ai-settings"],
+    queryFn: () => http<AiSettingsResponse>("/ai-settings"),
+  });
+}
+export function useUpdateAiSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { anthropicApiKey?: string | null }) =>
+      http<AiSettingsResponse>("/ai-settings", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "ai-settings"] }),
+  });
+}
+export function useTestAiSettings() {
+  return useMutation({
+    mutationFn: () =>
+      http<{ status: string; message: string }>("/ai-settings/test", { method: "POST" }),
+  });
+}

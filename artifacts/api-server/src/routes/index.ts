@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import cemeterySignupRouter from "./cemeterySignup";
@@ -32,6 +32,7 @@ import cemeterySitesRouter from "./cemeterySites";
 import memorialRitualsRouter from "./memorialRituals";
 import adminRouter from "./admin";
 import paymentGatewayRouter from "./paymentGateway";
+import aiSettingsRouter from "./aiSettings";
 import { vendorPublicRouter, vendorAuthedRouter } from "./vendors";
 import { requireAuth, requireOrgUser, requireVendor } from "../lib/auth";
 
@@ -73,6 +74,9 @@ router.use(adminRouter);
 // with the appropriate middleware internally.
 router.use(paymentGatewayRouter);
 
+// --- AI settings (super admin) ------------------------------------------------
+router.use(aiSettingsRouter);
+
 // --- B2B cemetery operator surface -------------------------------------------
 // Everything below requires a signed-in cemetery user with an organizationId.
 // `enforceOrgScope` (mounted globally in app.ts) then forces the session's
@@ -107,10 +111,24 @@ orgRouter.use(accountingRouter);
 router.use(orgRouter);
 
 // --- AI map detection ---------------------------------------------------------
-// Heavy / cost-bearing endpoint — require any signed-in session. Kept separate
-// because admins may also legitimately call it.
+// Heavy / cost-bearing endpoint — restrict to cemetery operators and platform
+// admins who actually use the map maker. Family/vendor accounts must not burn
+// platform Anthropic credits.
 const aiRouter: IRouter = Router();
-aiRouter.use(requireAuth);
+const requireAiCaller: RequestHandler = (req, res, next) => {
+  const u = req.session?.user;
+  if (!u) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  // Allow cemetery staff and platform admins; block family/vendor.
+  if (u.kind === "cemetery" || u.kind === "admin") {
+    next();
+    return;
+  }
+  res.status(403).json({ error: "Only cemetery operators and platform admins may use the AI Map Maker." });
+};
+aiRouter.use(requireAiCaller);
 aiRouter.use(aiMapRouter);
 router.use(aiRouter);
 

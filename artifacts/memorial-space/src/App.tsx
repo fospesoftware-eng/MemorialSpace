@@ -95,6 +95,7 @@ import AdminOrganizations from "@/pages/admin/organizations";
 import AdminUsers from "@/pages/admin/users";
 import AdminBilling from "@/pages/admin/billing";
 import AdminPaymentGateway from "@/pages/admin/payment-gateway";
+import AdminAiSettings from "@/pages/admin/ai-settings";
 import AdminAnalytics from "@/pages/admin/analytics";
 import AdminSupport from "@/pages/admin/support";
 
@@ -211,6 +212,7 @@ function AdminRoutes() {
         <Route path="/users" component={AdminUsers} />
         <Route path="/billing" component={AdminBilling} />
         <Route path="/payment-gateway" component={AdminPaymentGateway} />
+        <Route path="/ai-settings" component={AdminAiSettings} />
         <Route path="/analytics" component={AdminAnalytics} />
         <Route path="/support" component={AdminSupport} />
         <Route component={NotFound} />

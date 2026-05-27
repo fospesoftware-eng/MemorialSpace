@@ -1,8 +1,21 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import Anthropic from "@anthropic-ai/sdk";
+import { eq } from "drizzle-orm";
 import { detectMap, type CvDetection } from "../lib/cvDetect";
 import { detectGridPlots, type PdfTextItem } from "../lib/gridDetect";
+import { db, platformAiSettingsTable } from "@workspace/db";
+
+async function getAnthropicClient(): Promise<Anthropic | null> {
+  const [row] = await db
+    .select()
+    .from(platformAiSettingsTable)
+    .where(eq(platformAiSettingsTable.id, 1))
+    .limit(1);
+  const key = row?.anthropicApiKey;
+  if (!key) return null;
+  return new Anthropic({ apiKey: key, maxRetries: 1, timeout: 8000 });
+}
 
 const router: IRouter = Router();
 
@@ -154,8 +167,9 @@ async function classifyPaletteColors(args: {
   plotTypes: { id: string; code: string; name: string }[];
   imgWidth: number;
   imgHeight: number;
+  anthropicClient: Anthropic;
 }): Promise<ColorClassification> {
-  const { base64, mediaType, palette, plotTypes, imgWidth, imgHeight } = args;
+  const { base64, mediaType, palette, plotTypes, imgWidth, imgHeight, anthropicClient } = args;
 
   const colorList = palette
     .map((c, i) => `  ${i}: rgb(${c.r}, ${c.g}, ${c.b}) — covers ${(c.coverage * 100).toFixed(1)}% of the map`)
@@ -188,7 +202,7 @@ Reply with ONLY a single JSON object (no prose, no markdown), shape:
 
 Image dimensions: ${imgWidth} x ${imgHeight} pixels.`;
 
-  const message = await anthropic.messages.create({
+  const message = await anthropicClient.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 2048,
     system: systemPrompt,
@@ -450,12 +464,19 @@ router.post("/ai/detect-map", async (req, res) => {
   // ---- Step 2: ask Claude what each detected colour represents ----
   let classification: ColorClassification;
   try {
-    classification = await classifyPaletteColors({
-      base64, mediaType,
-      palette: detection.palette,
-      plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
-      imgWidth, imgHeight,
-    });
+    const anthropicClient = await getAnthropicClient();
+    if (!anthropicClient) {
+      req.log.warn("no anthropic api key configured; defaulting all sections to first plot type");
+      classification = { colorTypeMap: {}, notes: "No Anthropic API key configured." };
+    } else {
+      classification = await classifyPaletteColors({
+        base64, mediaType,
+        palette: detection.palette,
+        plotTypes: plotTypes.map((t) => ({ id: t.id, code: t.code, name: t.name })),
+        imgWidth, imgHeight,
+        anthropicClient,
+      });
+    }
   } catch (err) {
     req.log.warn(
       { err: err instanceof Error ? err.message : String(err) },

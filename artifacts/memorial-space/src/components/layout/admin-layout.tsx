@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Menu, LogOut, Banknote } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Menu, LogOut, Banknote, Sparkles } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ const nav = [
   { name: "Users", href: "/users", key: "users", icon: Users },
   { name: "Billing & MRR", href: "/billing", key: "billing", icon: CreditCard },
   { name: "Payment Gateway", href: "/payment-gateway", key: "payment-gateway", icon: Banknote },
+  { name: "AI Settings", href: "/ai-settings", key: "ai-settings", icon: Sparkles },
   { name: "Analytics", href: "/analytics", key: "analytics", icon: BarChart3 },
   { name: "Support Tickets", href: "/support", key: "support", icon: LifeBuoy },
 ];
