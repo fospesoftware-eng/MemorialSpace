@@ -1,5 +1,88 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "J9b1Eb4aHOy7oeMeHaO12"
+uri = "file://artifacts/memorial-space/public/images/store/white-rose-bouquet.png"
+type = "image"
+title = "white rose bouquet"
+
+[[generated]]
+id = "rKTqLv6s7EAvsujkqcyRV"
+uri = "file://artifacts/memorial-space/public/images/store/sympathy-lilies.png"
+type = "image"
+title = "sympathy lilies"
+
+[[generated]]
+id = "_dVo4L9-Fz3blrB5z_B2P"
+uri = "file://artifacts/memorial-space/public/images/store/chrysanthemum-wreath.png"
+type = "image"
+title = "chrysanthemum wreath"
+
+[[generated]]
+id = "s-VlWPvD_FBAWPG1fLDT6"
+uri = "file://artifacts/memorial-space/public/images/store/forget-me-not-basket.png"
+type = "image"
+title = "forget me not basket"
+
+[[generated]]
+id = "e4a4cAbhioImr6jOmEbeO"
+uri = "file://artifacts/memorial-space/public/images/store/bronze-urn.png"
+type = "image"
+title = "bronze urn"
+
+[[generated]]
+id = "r_EXWmpI0GygJd5_uzpFU"
+uri = "file://artifacts/memorial-space/public/images/store/biodegradable-urn.png"
+type = "image"
+title = "biodegradable urn"
+
+[[generated]]
+id = "JgL2xgqtpN0s7tswZ6FN7"
+uri = "file://artifacts/memorial-space/public/images/store/marble-keepsake-urn.png"
+type = "image"
+title = "marble keepsake urn"
+
+[[generated]]
+id = "nAkbHSNCBIKZhrQfsYjJB"
+uri = "file://artifacts/memorial-space/public/images/store/granite-headstone.png"
+type = "image"
+title = "granite headstone"
+
+[[generated]]
+id = "Xn1_ceEtvHIbv7hc5BTqQ"
+uri = "file://artifacts/memorial-space/public/images/store/bronze-plaque.png"
+type = "image"
+title = "bronze plaque"
+
+[[generated]]
+id = "6Z7ZWpEzzEejXRRPbwpQL"
+uri = "file://attached_assets/generated_images/white_marble_upright_monument_2b30.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "3JIKVAMFnUarT6BKSnsMU"
+uri = "file://artifacts/memorial-space/public/images/store/marble-monument.png"
+type = "image"
+title = "marble monument"
+
+[[generated]]
+id = "8PeW_lVGFerG2Z65py4hY"
+uri = "file://artifacts/memorial-space/public/images/store/grave-care.png"
+type = "image"
+title = "grave care service"
+
+[[generated]]
+id = "qx1bMF4APn7QACFpSEjL1"
+uri = "file://artifacts/memorial-space/public/images/store/memorial-photography.png"
+type = "image"
+title = "memorial photography"
+
+[[generated]]
+id = "dYQlI51_Q2fKgTa-_gDp-"
+uri = "file://artifacts/memorial-space/public/images/store/headstone-restoration.png"
+type = "image"
+title = "headstone restoration"
 
 [[outputs]]
 id = "pWpdYnAvofcdoVbfVzn4j"
