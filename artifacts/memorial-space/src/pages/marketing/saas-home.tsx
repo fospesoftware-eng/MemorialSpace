@@ -53,7 +53,7 @@ export default function SaasHome() {
       {/* Hero */}
       <section className="relative pt-20 pb-32 px-4">
         <AnimatedHeroBackground />
-        <div className="container mx-auto max-w-6xl text-center">
+        <div className="relative z-10 container mx-auto max-w-6xl text-center">
           <Badge variant="outline" className="mb-6 border-primary/30 bg-primary/5 text-primary px-4 py-1">
             <Sparkles className="h-3 w-3 mr-2" />
             The cemetery operating system, reimagined
