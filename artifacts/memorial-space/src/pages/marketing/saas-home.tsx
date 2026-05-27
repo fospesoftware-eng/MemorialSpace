@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { AnimatedHeroBackground } from "@/components/animated-hero-bg";
 import {
   Map, QrCode, Users, ShoppingBag, FileText, Calendar,
-  ArrowRight, Check, Sparkles, Building2, BarChart3,
-  Heart, Search, Shield, Zap, Globe, Star,
+  ArrowRight, Check, Sparkles, BarChart3,
+  Search, Zap, Globe, Star,
 } from "lucide-react";
 import { MARKETING_PLANS } from "./_plans";
 
@@ -69,53 +69,13 @@ export default function SaasHome() {
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
             The all-in-one digital ecosystem for memorial spaces to digitize operations, honor lives, and serve families with dignity.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 px-8 h-12 text-base shadow-lg shadow-primary/20" data-testid="cta-trial">
               <Link href="/sign-in/cemetery">Start 14-day free trial<ArrowRight className="h-4 w-4 ml-2" /></Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 px-8 text-base" data-testid="cta-demo">
               <Link href="/contact">Book a demo</Link>
             </Button>
-          </div>
-
-          {/* Portal selector */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto">
-            <Link href="/sign-in/cemetery" data-testid="portal-cemetery" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <Building2 className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Memorial Space Portal</p>
-                  <p className="text-xs text-muted-foreground">Operations dashboard</p>
-                </div>
-                <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
-              </div>
-            </Link>
-            <Link href="/sign-in/family" data-testid="portal-family" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-primary/40 hover:bg-card transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-rose-500/10 flex items-center justify-center group-hover:bg-rose-500/20 transition-colors">
-                  <Heart className="h-5 w-5 text-rose-400" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Family Portal</p>
-                  <p className="text-xs text-muted-foreground">Manage memorials</p>
-                </div>
-                <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
-              </div>
-            </Link>
-            <Link href="/sign-in/admin" data-testid="portal-admin" className="group rounded-xl border border-border bg-card/50 backdrop-blur p-4 hover:border-[#d4a843]/40 hover:bg-card transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-[#d4a843]/10 flex items-center justify-center group-hover:bg-[#d4a843]/20 transition-colors">
-                  <Shield className="h-5 w-5 text-[#d4a843]" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">Platform Admin</p>
-                  <p className="text-xs text-muted-foreground">Super admin console</p>
-                </div>
-                <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground group-hover:text-foreground transition-colors" />
-              </div>
-            </Link>
           </div>
         </div>
       </section>
