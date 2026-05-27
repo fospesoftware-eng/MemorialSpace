@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/schedule-sync.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/sync-to-github.sh"
+      }
+    ]
+  }
+}

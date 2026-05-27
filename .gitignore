@@ -42,6 +42,8 @@ testem.log
 Thumbs.db
 
 .cursor/rules/nx-rules.mdc
+.cursor/.sync.lock
+.cursor/.sync-schedule.pid
 .github/instructions/nx.instructions.md
 
 # Replit
