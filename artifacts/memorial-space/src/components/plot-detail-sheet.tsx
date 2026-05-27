@@ -21,8 +21,6 @@ import { Cross } from "lucide-react";
 import { BurialDetails } from "@/components/burial-details";
 import { BurialFamilyLinks } from "@/components/burial-family-links";
 
-const ORG_ID = 1;
-
 /**
  * Build a `burialId → QrCode` lookup. When multiple QR rows exist for the
  * same burial (legacy data) we keep the first; the bulk-generate endpoint
@@ -49,31 +47,34 @@ function getStatusColor(status: string) {
 
 export type PlotDetailSheetProps = {
   plotId: number | null;
+  /** When null the sheet is disabled (nothing fetched). */
+  organizationId: number | null;
   onOpenChange: (open: boolean) => void;
 };
 
-export function PlotDetailSheet({ plotId, onOpenChange }: PlotDetailSheetProps) {
+export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDetailSheetProps) {
+  const orgId = organizationId ?? 0;
   // Fetch plot data lazily — list endpoint is already cached by react-query
   // when the page rendering this sheet has called useListPlots/useGetMapData.
-  const { data: plots } = useListPlots({ organizationId: ORG_ID });
+  const { data: plots } = useListPlots({ organizationId: orgId });
   const plot = plots?.find((p) => p.id === plotId);
 
   const burialsParams = plotId != null
-    ? { organizationId: ORG_ID, plotId }
+    ? { organizationId: orgId, plotId }
     : undefined;
   const { data: burials, isLoading: burialsLoading } = useListBurials(
     burialsParams,
     {
       query: {
-        enabled: plotId != null,
+        enabled: plotId != null && organizationId != null,
         queryKey: getListBurialsQueryKey(burialsParams),
       },
     },
   );
 
   // QR codes + org slug for the per-burial memorial QR panel.
-  const { data: qrCodes } = useListQrCodes({ organizationId: ORG_ID });
-  const { data: org } = useGetOrganization(ORG_ID);
+  const { data: qrCodes } = useListQrCodes({ organizationId: orgId });
+  const { data: org } = useGetOrganization(orgId);
   const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
 
   return (
@@ -215,15 +216,18 @@ export type BurialRecord = {
 
 export function BurialDetailSheet({
   burial,
+  organizationId,
   open,
   onOpenChange,
 }: {
   burial: BurialRecord | null;
+  organizationId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: qrCodes } = useListQrCodes({ organizationId: ORG_ID });
-  const { data: org } = useGetOrganization(ORG_ID);
+  const orgId = organizationId;
+  const { data: qrCodes } = useListQrCodes({ organizationId: orgId });
+  const { data: org } = useGetOrganization(orgId);
   const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
   const qr = burial ? qrByBurial.get(burial.id) : undefined;
 

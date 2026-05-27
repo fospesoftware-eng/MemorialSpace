@@ -112,6 +112,7 @@ export default function Plots() {
 
       <PlotDetailSheet
         plotId={selectedPlotId}
+        organizationId={ORG_ID}
         onOpenChange={(open) => !open && setSelectedPlotId(null)}
       />
     </div>

@@ -162,6 +162,7 @@ export default function Burials() {
 
       <BurialDetailSheet
         burial={selectedBurial}
+        organizationId={ORG_ID}
         open={selectedBurial != null}
         onOpenChange={(open) => !open && setSelectedBurial(null)}
       />

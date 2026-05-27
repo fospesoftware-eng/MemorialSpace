@@ -1,12 +1,36 @@
-import { useState } from "react";
-import { useGetMapData } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import { useGetMapData, useListOrganizations, getGetMapDataQueryKey } from "@workspace/api-client-react";
+import { useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlotDetailSheet } from "@/components/plot-detail-sheet";
-
-const ORG_ID = 1;
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MapPin } from "lucide-react";
 
 export default function MapPage() {
-  const { data, isLoading } = useGetMapData(ORG_ID);
+  const { user } = useAuth();
+  const { data: orgs, isLoading: orgsLoading } = useListOrganizations();
+
+  // Pre-select the user's own organization if available; otherwise leave
+  // unselected so the user must pick from the list.
+  const defaultOrgId = user?.organizationId ?? undefined;
+  const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>(defaultOrgId);
+
+  const selectedOrg = useMemo(
+    () => orgs?.find((o) => o.id === selectedOrgId),
+    [orgs, selectedOrgId]
+  );
+
+  const { data, isLoading } = useGetMapData(
+    selectedOrgId ?? 0,
+    { query: { enabled: selectedOrgId != null, queryKey: getGetMapDataQueryKey(selectedOrgId ?? 0) } }
+  );
+
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
 
   const getStatusColor = (status: string) => {
@@ -21,20 +45,50 @@ export default function MapPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Cemetery Map</h1>
-        <p className="text-muted-foreground mt-1">Interactive visual plot layout and assignment status.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Cemetery Map</h1>
+          <p className="text-muted-foreground mt-1">Interactive visual plot layout and assignment status.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-muted-foreground" />
+          <Select
+            value={selectedOrgId?.toString() ?? ""}
+            onValueChange={(v) => {
+              setSelectedOrgId(Number(v));
+              setSelectedPlotId(null);
+            }}
+            disabled={orgsLoading}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select a cemetery" />
+            </SelectTrigger>
+            <SelectContent>
+              {orgs?.map((org) => (
+                <SelectItem key={org.id} value={String(org.id)}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-4 text-sm">
-        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#40916c]"></div> Available</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#d4a843]"></div> Reserved</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#374151]"></div> Occupied</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#ef4444]"></div> Maintenance</div>
-      </div>
+      {selectedOrg && (
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#40916c]"></div> Available</div>
+          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#d4a843]"></div> Reserved</div>
+          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#374151]"></div> Occupied</div>
+          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#ef4444]"></div> Maintenance</div>
+        </div>
+      )}
 
       <div className="bg-card border rounded-xl shadow-sm p-6">
-        {isLoading ? (
+        {!selectedOrgId ? (
+          <div className="text-center py-12 text-muted-foreground">
+            Select a cemetery above to view its plot map.
+          </div>
+        ) : isLoading ? (
           <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-3">
             {Array.from({ length: 20 }).map((_, i) => (
               <Skeleton key={i} className="aspect-square rounded-md" />
@@ -67,6 +121,7 @@ export default function MapPage() {
 
       <PlotDetailSheet
         plotId={selectedPlotId}
+        organizationId={selectedOrgId ?? null}
         onOpenChange={(open) => !open && setSelectedPlotId(null)}
       />
     </div>
