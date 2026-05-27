@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Award, Eye, EyeOff, Loader2, Sparkles, KeyRound, Copy, Check, Wand2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, Sparkles, KeyRound, Copy, Check, Wand2, AlertCircle } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,11 +105,8 @@ export function SignInForm(props: SignInFormProps) {
       {/* Top bar */}
       <header className="w-full border-b border-border/40 bg-background/60 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className={`h-8 w-8 rounded-md ${t.logoBg} flex items-center justify-center shadow-md`}>
-              <Award className="h-4 w-4 text-background" />
-            </div>
-            <span className="font-bold text-sm">MemorialSpace</span>
+          <a href="/" className="flex items-center">
+            <Logo height={32} />
           </a>
           <a href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             ← Back to home

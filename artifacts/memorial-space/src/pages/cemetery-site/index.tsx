@@ -50,11 +50,11 @@ export function CemeterySiteRoutes({ slug }: { slug: string }) {
       >
         <div className="text-center max-w-md">
           <h1 className="text-3xl font-semibold mb-3">Site not found</h1>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             We couldn't find a cemetery website at this address. The site may not be
             published yet, or the URL may be incorrect.
           </p>
-          {msg ? <p className="text-xs text-gray-400 mt-4 font-mono">{msg}</p> : null}
+          {msg ? <p className="text-xs text-muted-foreground/60 mt-4 font-mono">{msg}</p> : null}
         </div>
       </div>
     );

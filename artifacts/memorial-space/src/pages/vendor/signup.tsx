@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Award, Loader2, Store, AlertCircle } from "lucide-react";
+import { Loader2, Store, AlertCircle } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,11 +50,8 @@ export default function VendorSignup() {
     <div className="min-h-screen w-full bg-background flex flex-col">
       <header className="w-full border-b border-border/40 bg-background/60 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-gradient-to-br from-[#d4a843] to-[#a17e25] flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-background" />
-            </div>
-            <span className="font-bold text-sm">MemorialSpace</span>
+          <a href="/" className="flex items-center">
+            <Logo height={32} />
           </a>
           <a href="/sign-in/vendor" className="text-xs text-muted-foreground hover:text-foreground">
             Already have an account? Sign in →

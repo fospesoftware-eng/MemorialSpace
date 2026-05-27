@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
-import logoDark from "@assets/ChatGPT_Image_May_14,_2026,_02_00_07_PM_(1)_(1)_1778747500894.png";
 import { LayoutDashboard, Building2, Users, CreditCard, BarChart3, LifeBuoy, Menu, LogOut, Banknote } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ function SidebarContent() {
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 shrink-0 items-center px-6 bg-sidebar-accent/50 border-b border-sidebar-border">
         <a href="/" className="flex items-center gap-3">
-          <img src={logoDark} alt="MemorialSpace" className="h-9 w-auto select-none" draggable={false} />
+          <Logo height={36} />
           <div className="text-[10px] uppercase tracking-widest text-[#d4a843] font-semibold leading-none">Super<br/>Admin</div>
         </a>
       </div>

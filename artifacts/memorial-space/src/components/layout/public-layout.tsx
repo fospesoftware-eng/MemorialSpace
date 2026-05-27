@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
-import logoMark from "@assets/ChatGPT_Image_May_14,_2026,_02_00_07_PM_(1)_(1)_1778747500894.png";
 import { Search, BookOpen, ShoppingBag, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -13,7 +13,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-6 md:gap-10">
             <a href="/" className="flex items-center">
-              <img src={logoMark} alt="MemorialSpace" className="h-9 w-auto select-none" draggable={false} />
+              <Logo height={36} />
             </a>
             <nav className="hidden md:flex gap-6">
               <Link
@@ -71,7 +71,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:h-24 md:flex-row px-4">
           <div className="flex flex-col items-center gap-2 md:flex-row md:gap-3">
             <span className="text-sm text-muted-foreground">Powered by</span>
-            <img src={logoMark} alt="MemorialSpace" className="h-7 w-auto select-none" draggable={false} />
+            <Logo height={28} />
             <span className="text-sm text-muted-foreground">— Honoring legacies.</span>
           </div>
         </div>

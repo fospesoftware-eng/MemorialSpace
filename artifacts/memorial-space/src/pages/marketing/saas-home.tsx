@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AnimatedHeroBackground } from "@/components/animated-hero-bg";
 import {
   Map, QrCode, Users, ShoppingBag, FileText, Calendar,
   ArrowRight, Check, Sparkles, Building2, BarChart3,
@@ -51,10 +52,7 @@ export default function SaasHome() {
     <div className="overflow-hidden">
       {/* Hero */}
       <section className="relative pt-20 pb-32 px-4">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[600px] w-[1200px] rounded-full bg-primary/10 blur-3xl" />
-          <div className="absolute top-40 right-1/4 h-[400px] w-[400px] rounded-full bg-[#d4a843]/10 blur-3xl" />
-        </div>
+        <AnimatedHeroBackground />
         <div className="container mx-auto max-w-6xl text-center">
           <Badge variant="outline" className="mb-6 border-primary/30 bg-primary/5 text-primary px-4 py-1">
             <Sparkles className="h-3 w-3 mr-2" />

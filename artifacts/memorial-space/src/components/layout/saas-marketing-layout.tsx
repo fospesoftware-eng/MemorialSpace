@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
-import logoMark from "@assets/ChatGPT_Image_May_14,_2026,_02_00_07_PM_(1)_(1)_1778747500894.png";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +22,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center">
-            <img src={logoMark} alt="MemorialSpace" className="h-14 w-auto select-none" draggable={false} />
+            <Logo height={56} />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
@@ -39,7 +40,8 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-3">
+            <ThemeToggle />
             <Button asChild variant="ghost" size="sm" data-testid="link-signin">
               <Link href="/sign-in">Sign In</Link>
             </Button>
@@ -78,7 +80,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2">
               <div className="flex items-center mb-4">
-                <img src={logoMark} alt="MemorialSpace" className="h-12 w-auto select-none" draggable={false} />
+                <Logo height={48} />
               </div>
               <p className="text-sm text-muted-foreground max-w-md">The complete platform for cemeteries to manage operations, honor lives, and serve families with dignity.</p>
             </div>
