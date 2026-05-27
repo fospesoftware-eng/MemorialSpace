@@ -35,6 +35,12 @@ export GIT_TERMINAL_PROMPT=0
 
 git add -A
 
+# Leave Replit env/config to Replit (parallel development)
+REPLIT_EXCLUDE="${REPLIT_EXCLUDE:-.replit .replitignore replit.md}"
+for path in $REPLIT_EXCLUDE; do
+  git reset HEAD -- "$path" 2>/dev/null || true
+done
+
 if git diff --cached --quiet; then
   git push origin "$BRANCH" 2>/dev/null || true
   exit 0

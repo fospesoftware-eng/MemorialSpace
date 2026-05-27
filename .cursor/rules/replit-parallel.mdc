@@ -1,0 +1,26 @@
+---
+description: MemorialSpace runs in Replit in parallel — do not touch Replit-owned files
+alwaysApply: true
+---
+
+# Replit parallel environment
+
+This repo is also developed and deployed on **Replit**. Replit owns its environment and configuration.
+
+## Do not edit (Replit-owned)
+
+- `.replit`
+- `.replitignore`
+- `replit.md`
+- `.cache/` and `.local/` (Replit runtime; already gitignored)
+
+Do not change Replit deployment settings, ports, workflows, `[agent]`, `[postMerge]`, `[nix]`, or module versions in `.replit`.
+
+## Application code with Replit hooks
+
+Vite configs and packages may reference `@replit/*` plugins for the Replit runtime. Avoid changing Replit-specific plugin blocks (e.g. `REPL_ID` guards, `@replit/vite-plugin-*`) unless the user explicitly asks and understands Replit impact.
+
+## Cursor / GitHub workflow
+
+- Develop on `cursor/live` (or feature branches) from Cursor.
+- Let Replit manage its own config on its side; do not “fix” or sync Replit files from Cursor.
