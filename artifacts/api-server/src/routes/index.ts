@@ -21,6 +21,7 @@ import marketplaceRouter, { marketplacePublicRouter, marketplaceAdminRouter } fr
 import dashboardRouter from "./dashboard";
 import publicApiRouter from "./publicApi";
 import aiMapRouter from "./aiMap";
+import headstoneImportRouter from "./headstoneImport";
 import columbariaRouter from "./columbaria";
 import mausoleumsRouter from "./mausoleums";
 import customersRouter from "./customers";
@@ -105,6 +106,7 @@ orgRouter.use(qrCodesRouter);
 orgRouter.use(obituariesRouter);
 orgRouter.use(marketplaceAdminRouter);
 orgRouter.use(dashboardRouter);
+orgRouter.use(headstoneImportRouter);
 orgRouter.use(columbariaRouter);
 orgRouter.use(mausoleumsRouter);
 orgRouter.use(customersRouter);
