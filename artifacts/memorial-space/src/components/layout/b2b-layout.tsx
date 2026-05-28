@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote, CreditCard, ScanText } from "lucide-react";
+import { LayoutDashboard, Map, MapPin, Users, Calendar, Award, Wrench, QrCode, FileText, ShoppingBag, Settings, Building, Building2, Menu, LogOut, Layers, Sliders, Wand2, Box, Receipt, Percent, UserSquare2, BarChart3, Globe, Shield, Boxes, CalendarClock, Banknote, CreditCard, ScanText, Upload } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,19 @@ const navigation = [
       { name: "Map View", href: "/map", icon: Map },
       { name: "Map Maker", href: "/map-maker", icon: Layers },
       { name: "AI Map Maker", href: "/ai-map-maker", icon: Wand2 },
-      { name: "Headstone AI Import", href: "/headstone-import", icon: ScanText },
       { name: "Columbarium", href: "/columbarium", icon: Box },
       { name: "Mausoleum", href: "/mausoleum", icon: Building2 },
       { name: "Plots", href: "/plots", icon: MapPin },
       { name: "Burials", href: "/burials", icon: Users },
       { name: "Bookings", href: "/bookings", icon: Calendar },
       { name: "Work Orders", href: "/work-orders", icon: Wrench },
+    ],
+  },
+  {
+    name: "Import Data",
+    items: [
+      { name: "Import Center", href: "/import-data", icon: Upload },
+      { name: "Headstone AI Import", href: "/import-data/headstones", icon: ScanText },
     ],
   },
   {
@@ -81,6 +87,7 @@ const navigation = [
 
 function SidebarContent() {
   const [location] = useLocation();
+  const isActive = (href: string) => location === href || location.startsWith(`${href}/`);
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -131,7 +138,7 @@ function SidebarContent() {
                       href={item.href}
                       className={cn(
                         "group flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium",
-                        location.startsWith(item.href)
+                        isActive(item.href)
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                       )}
@@ -139,7 +146,7 @@ function SidebarContent() {
                       <item.icon
                         className={cn(
                           "h-5 w-5 shrink-0",
-                          location.startsWith(item.href) ? "text-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground"
+                          isActive(item.href) ? "text-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground"
                         )}
                         aria-hidden="true"
                       />
