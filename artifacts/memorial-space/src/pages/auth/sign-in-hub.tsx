@@ -90,8 +90,8 @@ export default function SignInHub() {
         <div className="container mx-auto max-w-7xl px-6 flex flex-col md:flex-row items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">© 2026 MemorialSpace. Honoring legacies with technology.</p>
           <div className="flex gap-4 text-xs text-muted-foreground">
-            <a href="/" className="hover:text-foreground">Privacy</a>
-            <a href="/" className="hover:text-foreground">Terms</a>
+            <a href="/privacy-policy" className="hover:text-foreground">Privacy</a>
+            <a href="/terms-and-conditions" className="hover:text-foreground">Terms</a>
             <a href="/" className="hover:text-foreground">Security</a>
           </div>
         </div>

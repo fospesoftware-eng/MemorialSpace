@@ -191,10 +191,10 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
             <FooterCol
               title="Terms & Policies"
               links={[
-                { label: "Terms & Conditions", href: "#" },
-                { label: "Privacy Policy", href: "#" },
-                { label: "Cookie Policy", href: "#" },
-                { label: "Refund Policy", href: "#" },
+                { label: "Terms & Conditions", href: "/terms-and-conditions" },
+                { label: "Privacy Policy", href: "/privacy-policy" },
+                { label: "Cookie Policy", href: "/cookie-policy" },
+                { label: "Refund Policy", href: "/refund-policy" },
                 { label: "Data Protection Policy", href: "#" },
                 { label: "User Content Policy", href: "#" },
                 { label: "Memorial Content Policy", href: "#" },
@@ -211,10 +211,10 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
               &copy; 2026 MemorialSpace.app. All rights reserved. Honoring legacies with technology.
             </p>
             <div className="flex gap-4 text-xs text-muted-foreground">
-              <Link href="#" className="hover:text-foreground transition-colors">Privacy</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link href="/privacy-policy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/terms-and-conditions" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="#" className="hover:text-foreground transition-colors">Security</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Cookies</Link>
+              <Link href="/cookie-policy" className="hover:text-foreground transition-colors">Cookies</Link>
             </div>
           </div>
         </div>

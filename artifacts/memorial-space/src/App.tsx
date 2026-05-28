@@ -21,6 +21,12 @@ import ContactPage from "@/pages/marketing/contact";
 import TutorialHubPage from "@/pages/marketing/tutorial-hub";
 import TutorialCemeteryPage from "@/pages/marketing/tutorial-cemetery";
 import TutorialFamilyPage from "@/pages/marketing/tutorial-family";
+import {
+  CookiePolicyPage,
+  PrivacyPolicyPage,
+  RefundPolicyPage,
+  TermsAndConditionsPage,
+} from "@/pages/marketing/policies";
 
 // Auth (sign-in)
 import SignInHub from "@/pages/auth/sign-in-hub";
@@ -286,6 +292,18 @@ function Router() {
       </Route>
       <Route path="/contact">
         <SaasMarketingRoutes><ContactPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/terms-and-conditions">
+        <SaasMarketingRoutes><TermsAndConditionsPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/privacy-policy">
+        <SaasMarketingRoutes><PrivacyPolicyPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/cookie-policy">
+        <SaasMarketingRoutes><CookiePolicyPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/refund-policy">
+        <SaasMarketingRoutes><RefundPolicyPage /></SaasMarketingRoutes>
       </Route>
       <Route path="/signup/cemetery" component={SignupCemetery} />
       <Route path="/tutorial">
