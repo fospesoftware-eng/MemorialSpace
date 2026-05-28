@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Eye, EyeOff, Loader2, Sparkles, KeyRound, Copy, Check, Wand2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +41,6 @@ export interface SignInFormProps {
   theme: SignInTheme;
   /** Which sign-in tier these credentials must satisfy on the server. */
   kind: SessionKind;
-  demoEmail: string;
-  demoPassword: string;
   /** Fallback path used if the server doesn't return one. */
   redirectTo: string;
   signUpHref?: string;
@@ -51,7 +49,7 @@ export interface SignInFormProps {
 }
 
 export function SignInForm(props: SignInFormProps) {
-  const { portalLabel, title, subtitle, theme, kind, demoEmail, demoPassword, redirectTo, signUpHref, signUpLabel, rightPanel } = props;
+  const { portalLabel, title, subtitle, theme, kind, redirectTo, signUpHref, signUpLabel, rightPanel } = props;
   const t = themeMap[theme];
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
@@ -59,7 +57,6 @@ export function SignInForm(props: SignInFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(true);
-  const [copied, setCopied] = useState<"email" | "password" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (emailValue: string, passwordValue: string) => {
@@ -77,27 +74,6 @@ export function SignInForm(props: SignInFormProps) {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     void submit(email, password);
-  };
-
-  const fillDemo = () => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-  };
-
-  const fillDemoAndSubmit = () => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    void submit(demoEmail, demoPassword);
-  };
-
-  const copyToClipboard = async (value: string, kind: "email" | "password") => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(kind);
-      setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1500);
-    } catch {
-      // Clipboard not available — silently ignore.
-    }
   };
 
   return (
@@ -127,53 +103,6 @@ export function SignInForm(props: SignInFormProps) {
                 </div>
                 <h1 className="mt-4 text-2xl font-bold tracking-tight">{title}</h1>
                 <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
-              </div>
-
-              {/* Demo credentials — visible so reviewers can sign in instantly */}
-              <div
-                className={`rounded-lg border border-current/20 bg-current/5 ${t.text} p-3`}
-                data-testid="demo-credentials"
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold min-w-0">
-                    <KeyRound className="h-3 w-3 shrink-0" />
-                    <span className="truncate">Demo · {portalLabel}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={fillDemoAndSubmit}
-                    className={`inline-flex items-center gap-1 rounded ${t.button} px-2.5 py-1 text-[10px] font-semibold shadow-sm whitespace-nowrap shrink-0 transition-opacity hover:opacity-90`}
-                    data-testid="button-instant-demo"
-                  >
-                    <Wand2 className="h-3 w-3" />
-                    Instant sign-in
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-1.5 text-foreground/90">
-                  <CredRow
-                    label="Email"
-                    value={demoEmail}
-                    copied={copied === "email"}
-                    onCopy={() => copyToClipboard(demoEmail, "email")}
-                    testId="demo-email"
-                  />
-                  <CredRow
-                    label="Password"
-                    value={demoPassword}
-                    copied={copied === "password"}
-                    onCopy={() => copyToClipboard(demoPassword, "password")}
-                    testId="demo-password"
-                    mono
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={fillDemo}
-                  className="mt-2 text-[10px] text-foreground/60 hover:text-foreground underline-offset-2 hover:underline"
-                  data-testid="button-fill-only"
-                >
-                  Just fill the form (don't sign in)
-                </button>
               </div>
 
               {error && (
@@ -302,31 +231,6 @@ export function SignInForm(props: SignInFormProps) {
           </div>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function CredRow({ label, value, copied, onCopy, testId, mono }: {
-  label: string; value: string; copied: boolean; onCopy: () => void; testId: string; mono?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-md bg-background/70 border border-border/60 px-2 py-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-16 shrink-0">{label}</span>
-      <code
-        className={`flex-1 min-w-0 truncate text-xs ${mono ? "font-mono" : ""} text-foreground select-all`}
-        data-testid={testId}
-      >
-        {value}
-      </code>
-      <button
-        type="button"
-        onClick={onCopy}
-        className="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        aria-label={`Copy ${label.toLowerCase()}`}
-        data-testid={`${testId}-copy`}
-      >
-        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-      </button>
     </div>
   );
 }

@@ -9,8 +9,6 @@ export default function SignInAdmin() {
       subtitle="Internal MemorialSpace staff only. Multi-factor authentication required."
       theme="gold"
       kind="admin"
-      demoEmail="admin@memorialspace.com"
-      demoPassword="SuperAdmin2026!"
       redirectTo="/admin"
       signUpLabel="Not a staff member?"
       signUpHref="/"

@@ -9,8 +9,6 @@ export default function SignInCemetery() {
       subtitle="Sign in to manage plots, burials, bookings, and memorial pages."
       theme="green"
       kind="cemetery"
-      demoEmail="ops@riversidememorial.com"
-      demoPassword="Cemetery2026!"
       redirectTo="/app/dashboard"
       signUpLabel="Don't have an account yet?"
       signUpHref="/signup/cemetery"

@@ -9,8 +9,6 @@ export default function SignInFamily() {
       subtitle="Sign in to manage memorials, leave tributes, and access your saved records."
       theme="rose"
       kind="family"
-      demoEmail="sarah.chen@email.com"
-      demoPassword="Demo2026!"
       redirectTo="/account"
       signUpLabel="New here?"
       signUpHref="/find"

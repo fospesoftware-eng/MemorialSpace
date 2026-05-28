@@ -4,8 +4,7 @@ import { Store, Inbox, Wrench, Globe2 } from "lucide-react";
 /**
  * Sign-in page for marketplace vendors. Re-uses the shared SignInForm with
  * the gold theme (vendors aren't cemetery operators, so the green B2B brand
- * doesn't fit; gold reads as "merchant"). Demo credentials are seeded by
- * `scripts/src/seed-vendors.ts`.
+ * doesn't fit; gold reads as "merchant").
  */
 export default function SignInVendor() {
   return (
@@ -15,8 +14,6 @@ export default function SignInVendor() {
       subtitle="Manage requests, publish your services, and grow with families across the network."
       theme="gold"
       kind="vendor"
-      demoEmail="florist@test.com"
-      demoPassword="password123"
       redirectTo="/vendor"
       signUpHref="/vendor/signup"
       signUpLabel="New vendor?"
