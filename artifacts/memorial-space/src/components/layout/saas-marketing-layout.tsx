@@ -35,79 +35,84 @@ const FooterCol = ({
   </div>
 );
 
-export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
+export function MarketingHeader() {
   const [location] = useLocation();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center">
-            <Logo height={56} />
-          </Link>
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+      <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
+        <Link href="/" className="flex items-center">
+          <Logo height={56} />
+        </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((l) => (
-              <Link
-                key={l.label}
-                href={l.href}
-                className={cn(
-                  "text-sm font-medium transition-colors",
-                  location === l.href ? "text-foreground" : "text-foreground/60 hover:text-foreground"
-                )}
-              >
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            <SimpleThemeToggle />
-            <Button asChild variant="ghost" size="sm" data-testid="link-signin">
-              <Link href="/sign-in">Sign In</Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="border-primary/40 text-primary hover:bg-primary/10"
-              data-testid="link-create-memorial"
+        <nav className="hidden md:flex items-center gap-8">
+          {navLinks.map((l) => (
+            <Link
+              key={l.label}
+              href={l.href}
+              className={cn(
+                "text-sm font-medium transition-colors",
+                location === l.href ? "text-foreground" : "text-foreground/60 hover:text-foreground"
+              )}
             >
-              <Link href="/sign-in/family">Create Memorial</Link>
-            </Button>
-          </div>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
 
-          {/* Mobile sheet */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-72 bg-background">
-              <div className="flex flex-col gap-3 mt-8">
-                {navLinks.map((l) => (
-                  <Link key={l.label} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
-                ))}
-                <div className="border-t border-border my-3" />
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">Theme</span>
-                  <SimpleThemeToggle />
-                </div>
-                <div className="border-t border-border my-3" />
-                <Button asChild variant="outline"><Link href="/sign-in">Sign In</Link></Button>
-                <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary/10">
-                  <Link href="/sign-in/family">Create Memorial</Link>
-                </Button>
-                <div className="border-t border-border my-3" />
-                <Link href="/account" className="text-sm text-muted-foreground py-1">My Account</Link>
-                <Link href="/admin" className="text-sm text-muted-foreground py-1">Admin Console</Link>
-              </div>
-            </SheetContent>
-          </Sheet>
+        <div className="hidden md:flex items-center gap-3">
+          <SimpleThemeToggle />
+          <Button asChild variant="ghost" size="sm" data-testid="link-signin">
+            <Link href="/sign-in">Sign In</Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="border-primary/40 text-primary hover:bg-primary/10"
+            data-testid="link-create-memorial"
+          >
+            <Link href="/sign-in/family">Create Memorial</Link>
+          </Button>
         </div>
-      </header>
+
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Open navigation</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-72 bg-background">
+            <div className="flex flex-col gap-3 mt-8">
+              {navLinks.map((l) => (
+                <Link key={l.label} href={l.href} className="text-base font-medium py-2 text-foreground/80 hover:text-foreground">{l.label}</Link>
+              ))}
+              <div className="border-t border-border my-3" />
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Theme</span>
+                <SimpleThemeToggle />
+              </div>
+              <div className="border-t border-border my-3" />
+              <Button asChild variant="outline"><Link href="/sign-in">Sign In</Link></Button>
+              <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary/10">
+                <Link href="/sign-in/family">Create Memorial</Link>
+              </Button>
+              <div className="border-t border-border my-3" />
+              <Link href="/account" className="text-sm text-muted-foreground py-1">My Account</Link>
+              <Link href="/admin" className="text-sm text-muted-foreground py-1">Admin Console</Link>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </header>
+  );
+}
+
+export function SaasMarketingLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <MarketingHeader />
 
       <main className="flex-1">{children}</main>
 

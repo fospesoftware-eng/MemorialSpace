@@ -1,12 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Eye, EyeOff, Loader2, Sparkles, AlertCircle } from "lucide-react";
-import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, type SessionKind } from "@/lib/auth";
+import { MarketingHeader } from "@/components/layout/saas-marketing-layout";
 
 export type SignInTheme = "green" | "gold" | "rose";
 
@@ -78,17 +78,7 @@ export function SignInForm(props: SignInFormProps) {
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col">
-      {/* Top bar */}
-      <header className="w-full border-b border-border/40 bg-background/60 backdrop-blur">
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center">
-            <Logo height={32} />
-          </a>
-          <a href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            ← Back to home
-          </a>
-        </div>
-      </header>
+      <MarketingHeader />
 
       <div className="flex-1 grid lg:grid-cols-2">
         {/* Left: form */}

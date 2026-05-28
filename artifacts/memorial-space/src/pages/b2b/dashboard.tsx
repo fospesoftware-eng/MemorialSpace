@@ -9,12 +9,16 @@ import {
   Activity,
   ArrowRight,
   Calendar,
+  CheckCircle2,
+  Clock3,
   DollarSign,
   FileText,
+  Gauge,
   Map,
   MapPin,
   QrCode,
   ScanText,
+  ShieldCheck,
   TrendingUp,
   Users,
   Wrench,
@@ -74,6 +78,8 @@ function StatCard({
   icon: Icon,
   loading,
   tone = "primary",
+  progress,
+  delay = 0,
 }: {
   title: string;
   value: string;
@@ -81,22 +87,30 @@ function StatCard({
   icon: typeof DollarSign;
   loading?: boolean;
   tone?: "primary" | "amber" | "blue" | "rose";
+  progress?: number;
+  delay?: number;
 }) {
-  const toneClass = {
-    primary: "bg-primary/10 text-primary",
-    amber: "bg-amber-500/10 text-amber-600",
-    blue: "bg-sky-500/10 text-sky-600",
-    rose: "bg-rose-500/10 text-rose-600",
+  const toneStyle = {
+    primary: { icon: "bg-primary/10 text-primary", progress: "bg-primary/70" },
+    amber: { icon: "bg-amber-500/10 text-amber-600", progress: "bg-amber-500/70" },
+    blue: { icon: "bg-sky-500/10 text-sky-600", progress: "bg-sky-500/70" },
+    rose: { icon: "bg-rose-500/10 text-rose-600", progress: "bg-rose-500/70" },
   }[tone];
 
   return (
-    <Card className="overflow-hidden border-border/70 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <Card
+      className="group overflow-hidden border-border/70 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="h-1 w-full bg-muted">
+        <div className={`h-full ${toneStyle.progress} transition-all duration-700 group-hover:w-full`} style={{ width: `${progress ?? 42}%` }} />
+      </div>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
         <div className="space-y-1">
           <CardDescription className="text-xs font-medium uppercase tracking-wider">{title}</CardDescription>
           {loading ? <Skeleton className="h-8 w-24" /> : <CardTitle className="text-2xl">{value}</CardTitle>}
         </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-md ${toneClass}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-md ${toneStyle.icon}`}>
           <Icon className="h-5 w-5" />
         </div>
       </CardHeader>
@@ -105,6 +119,16 @@ function StatCard({
       </CardContent>
     </Card>
   );
+}
+
+function ActivityIcon({ type }: { type: string }) {
+  const map = {
+    burial: Users,
+    booking: Calendar,
+    work_order: Wrench,
+  } as const;
+  const Icon = map[type as keyof typeof map] ?? Activity;
+  return <Icon className="h-4 w-4" />;
 }
 
 export default function Dashboard() {
@@ -142,6 +166,12 @@ export default function Dashboard() {
     { label: "Import Data", href: "/import-data", icon: ScanText },
     { label: "Work Orders", href: "/work-orders", icon: Wrench },
   ];
+  const statusTiles = [
+    { label: "System status", value: "Operational", icon: ShieldCheck, tone: "text-primary", bg: "bg-primary/10" },
+    { label: "Grounds used", value: `${utilization}%`, icon: Gauge, tone: "text-sky-600", bg: "bg-sky-500/10" },
+    { label: "Awaiting action", value: formatNumber((summary?.pendingBookings ?? 0) + (summary?.openWorkOrders ?? 0)), icon: Clock3, tone: "text-amber-600", bg: "bg-amber-500/10" },
+    { label: "Records managed", value: formatNumber((summary?.totalBurials ?? 0) + (summary?.totalMemorials ?? 0)), icon: CheckCircle2, tone: "text-emerald-600", bg: "bg-emerald-500/10" },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -168,6 +198,26 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <section className="rounded-md border border-border/70 bg-card/60 p-3 shadow-sm animate-in fade-in slide-in-from-bottom-1 duration-500">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {statusTiles.map((tile, index) => (
+            <div
+              key={tile.label}
+              className="flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-300 hover:bg-muted/50"
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${tile.bg} ${tile.tone}`}>
+                <tile.icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{tile.label}</p>
+                {loadingSummary ? <Skeleton className="mt-1 h-4 w-20" /> : <p className="truncate text-sm font-semibold">{tile.value}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total revenue"
@@ -175,6 +225,8 @@ export default function Dashboard() {
           detail={`${formatCurrency(summary?.monthlyRevenue ?? 0)} estimated this month`}
           icon={DollarSign}
           loading={loadingSummary}
+          progress={72}
+          delay={0}
         />
         <StatCard
           title="Grounds utilization"
@@ -183,6 +235,8 @@ export default function Dashboard() {
           icon={MapPin}
           loading={loadingSummary}
           tone="blue"
+          progress={utilization}
+          delay={80}
         />
         <StatCard
           title="Pending bookings"
@@ -191,6 +245,8 @@ export default function Dashboard() {
           icon={Calendar}
           loading={loadingSummary}
           tone="amber"
+          progress={bookingRate}
+          delay={160}
         />
         <StatCard
           title="Open work orders"
@@ -199,6 +255,8 @@ export default function Dashboard() {
           icon={Wrench}
           loading={loadingSummary}
           tone="rose"
+          progress={Math.min(100, (summary?.openWorkOrders ?? 0) * 12)}
+          delay={240}
         />
       </div>
 
@@ -228,7 +286,13 @@ export default function Dashboard() {
                       cursor={{ fill: "hsl(var(--muted))" }}
                       contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
                     />
-                    <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    <defs>
+                      <linearGradient id="operationsBar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+                      </linearGradient>
+                    </defs>
+                    <Bar dataKey="total" fill="url(#operationsBar)" radius={[4, 4, 0, 0]} animationDuration={650} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -290,7 +354,7 @@ export default function Dashboard() {
               <Link
                 key={item.label}
                 href={item.href}
-                className="group flex items-center justify-between rounded-md border border-border/70 px-3 py-3 transition-all duration-200 hover:border-primary/40 hover:bg-muted/40"
+                className="group flex items-center justify-between rounded-md border border-border/70 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm"
               >
                 <span className="flex items-center gap-3">
                   <span className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground group-hover:text-primary">
@@ -332,9 +396,9 @@ export default function Dashboard() {
                 ))
               ) : recentActivity.length > 0 ? (
                 recentActivity.map((item) => (
-                  <div key={`${item.type}-${item.id}`} className="flex items-center gap-3 rounded-md px-2 py-3 transition-colors duration-200 hover:bg-muted/40">
+                  <div key={`${item.type}-${item.id}`} className="flex items-center gap-3 rounded-md px-2 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:bg-muted/40">
                     <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <Activity className="h-4 w-4" />
+                      <ActivityIcon type={item.type} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{item.description}</p>
