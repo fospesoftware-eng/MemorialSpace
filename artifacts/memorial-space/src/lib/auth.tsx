@@ -47,6 +47,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let body: unknown = undefined;
   try { body = text ? JSON.parse(text) : undefined; } catch { body = text; }
   if (!res.ok) {
+    if ([502, 503, 504].includes(res.status)) {
+      throw new Error("API server is unavailable in this preview. Please restart the Replit project and make sure the API workflow is running.");
+    }
     const msg = (body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string")
       ? (body as { error: string }).error
       : `Request failed (${res.status})`;
