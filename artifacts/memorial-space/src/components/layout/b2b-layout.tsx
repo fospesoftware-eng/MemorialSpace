@@ -304,7 +304,7 @@ function SidebarContent() {
     location === href || location.startsWith(`${href}/`);
 
   return (
-    <div className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+    <div className="flex h-screen max-h-screen min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
       <div className="relative flex h-14 shrink-0 items-center px-5 border-b border-sidebar-border bg-sidebar-accent/55">
         <a href="/" className="flex items-center">
           <Logo height={32} forDarkBg />
@@ -312,7 +312,7 @@ function SidebarContent() {
         <span className="absolute bottom-0 left-5 right-5 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]">
+      <div className="b2b-sidebar-scroll min-h-0 flex-1 overflow-y-scroll overscroll-contain pr-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]">
         <div className="px-4 py-3 border-b border-sidebar-border">
           <div className="flex items-center gap-3 rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
             <Avatar className="h-8 w-8 border border-primary/40 shadow-sm">
@@ -578,12 +578,12 @@ export function B2BLayout({ children }: { children: React.ReactNode }) {
       <div className="b2b-workspace flex min-h-screen w-full bg-background">
         <SheetContent
           side="left"
-          className="h-dvh max-h-dvh w-72 overflow-hidden p-0 bg-sidebar border-r-sidebar-border"
+          className="h-screen max-h-screen w-72 overflow-hidden p-0 bg-sidebar border-r-sidebar-border"
         >
           <SidebarContent />
         </SheetContent>
 
-        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:h-dvh lg:max-h-dvh lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden border-r border-sidebar-border shadow-2xl shadow-black/10">
+        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:h-screen lg:max-h-screen lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden border-r border-sidebar-border shadow-2xl shadow-black/10">
           <SidebarContent />
         </div>
 
