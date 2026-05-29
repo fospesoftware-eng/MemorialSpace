@@ -304,7 +304,7 @@ function SidebarContent() {
     location === href || location.startsWith(`${href}/`);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
       <div className="relative flex h-14 shrink-0 items-center px-5 border-b border-sidebar-border bg-sidebar-accent/55">
         <a href="/" className="flex items-center">
           <Logo height={32} forDarkBg />
@@ -312,26 +312,26 @@ function SidebarContent() {
         <span className="absolute bottom-0 left-5 right-5 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
       </div>
 
-      <div className="shrink-0 px-4 py-3 border-b border-sidebar-border">
-        <div className="flex items-center gap-3 rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
-          <Avatar className="h-8 w-8 border border-primary/40 shadow-sm">
-            <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-semibold">
-              RM
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold leading-tight text-sidebar-foreground truncate">
-              Riverside Memorial
-            </p>
-            <p className="text-[11px] text-sidebar-foreground/60 truncate">
-              ops@riversidememorial.com
-            </p>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]">
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <div className="flex items-center gap-3 rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
+            <Avatar className="h-8 w-8 border border-primary/40 shadow-sm">
+              <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-semibold">
+                RM
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold leading-tight text-sidebar-foreground truncate">
+                Riverside Memorial
+              </p>
+              <p className="text-[11px] text-sidebar-foreground/60 truncate">
+                ops@riversidememorial.com
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto py-3 overscroll-contain">
-        <nav className="space-y-3 px-3 pb-3">
+        <nav className="space-y-3 px-3 py-3">
           <Link
             href={dashboardItem.href}
             className={cn(
@@ -408,23 +408,23 @@ function SidebarContent() {
             </div>
           ))}
         </nav>
-      </div>
 
-      <div className="shrink-0 px-4 py-3 border-t border-sidebar-border space-y-2">
-        <div className="flex items-center justify-between rounded-md bg-sidebar-accent/35 px-3 py-2">
-          <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/55 font-semibold">
-            Appearance
-          </span>
-          <ThemeToggle variant="sidebar" />
+        <div className="px-4 py-3 border-t border-sidebar-border space-y-2">
+          <div className="flex items-center justify-between rounded-md bg-sidebar-accent/35 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-widest text-sidebar-foreground/55 font-semibold">
+              Appearance
+            </span>
+            <ThemeToggle variant="sidebar" />
+          </div>
+          <a
+            href="/sign-in/cemetery"
+            data-testid="b2b-sign-out"
+            className="flex items-center gap-x-3 rounded-md px-3 py-1.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground transition-all duration-200 hover:translate-x-0.5"
+          >
+            <LogOut className="h-5 w-5" />
+            Sign Out
+          </a>
         </div>
-        <a
-          href="/sign-in/cemetery"
-          data-testid="b2b-sign-out"
-          className="flex items-center gap-x-3 rounded-md px-3 py-1.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground transition-all duration-200 hover:translate-x-0.5"
-        >
-          <LogOut className="h-5 w-5" />
-          Sign Out
-        </a>
       </div>
     </div>
   );
@@ -578,12 +578,12 @@ export function B2BLayout({ children }: { children: React.ReactNode }) {
       <div className="b2b-workspace flex min-h-screen w-full bg-background">
         <SheetContent
           side="left"
-          className="w-72 p-0 bg-sidebar border-r-sidebar-border"
+          className="h-dvh max-h-dvh w-72 overflow-hidden p-0 bg-sidebar border-r-sidebar-border"
         >
           <SidebarContent />
         </SheetContent>
 
-        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-72 lg:min-h-0 lg:flex-col border-r border-sidebar-border shadow-2xl shadow-black/10">
+        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:h-dvh lg:max-h-dvh lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden border-r border-sidebar-border shadow-2xl shadow-black/10">
           <SidebarContent />
         </div>
 
