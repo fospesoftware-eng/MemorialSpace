@@ -1,12 +1,26 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Bell, Building2, MapPin, Shield, Palette, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  MapPin,
+  Shield,
+  Palette,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const ORG_ID = 1;
@@ -112,15 +126,24 @@ export default function GeneralSettings() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["organizations"] });
-      toast({ title: "Cemetery details saved", description: "Your changes are live across the platform." });
+      toast({
+        title: "Cemetery details saved",
+        description: "Your changes are live across the platform.",
+      });
     },
     onError: (err) => {
-      toast({ title: "Could not save", description: String((err as Error).message), variant: "destructive" });
+      toast({
+        title: "Could not save",
+        description: String((err as Error).message),
+        variant: "destructive",
+      });
     },
   });
 
-  const update = (k: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const update =
+    (k: keyof typeof EMPTY_FORM) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
@@ -134,9 +157,17 @@ export default function GeneralSettings() {
           latitude: pos.coords.latitude.toFixed(6),
           longitude: pos.coords.longitude.toFixed(6),
         }));
-        toast({ title: "Location captured", description: "Don't forget to save changes." });
+        toast({
+          title: "Location captured",
+          description: "Don't forget to save changes.",
+        });
       },
-      (err) => toast({ title: "Could not get location", description: err.message, variant: "destructive" }),
+      (err) =>
+        toast({
+          title: "Could not get location",
+          description: err.message,
+          variant: "destructive",
+        }),
       { enableHighAccuracy: true, timeout: 10000 },
     );
   };
@@ -144,9 +175,10 @@ export default function GeneralSettings() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Cemetery Details</h1>
         <p className="text-muted-foreground mt-1">
-          Manage your cemetery's details and operator preferences.
+          Add and maintain the cemetery location, contacts, map coordinates, and
+          operator preferences.
         </p>
       </div>
 
@@ -157,16 +189,20 @@ export default function GeneralSettings() {
             <CardTitle className="text-base">Cemetery Details</CardTitle>
           </div>
           <CardDescription>
-            Public-facing information used across your dashboard, public site, invoices, and obituaries.
+            Public-facing information used across your dashboard, public site,
+            invoices, and obituaries.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {orgQuery.isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading cemetery details…
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading cemetery
+              details…
             </div>
           ) : !orgQuery.data ? (
-            <p className="text-sm text-destructive">Cemetery record not found.</p>
+            <p className="text-sm text-destructive">
+              Cemetery record not found.
+            </p>
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-2">
@@ -273,7 +309,9 @@ export default function GeneralSettings() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-primary" />
-                    <Label className="font-medium">Geographic coordinates</Label>
+                    <Label className="font-medium">
+                      Geographic coordinates
+                    </Label>
                   </div>
                   <Button
                     type="button"
@@ -286,8 +324,8 @@ export default function GeneralSettings() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Used on the public site map and for "directions to" links. Decimal degrees, e.g.
-                  37.7749, -122.4194.
+                  Used on the public site map and for "directions to" links.
+                  Decimal degrees, e.g. 37.7749, -122.4194.
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -350,18 +388,42 @@ export default function GeneralSettings() {
               <Bell className="h-5 w-5 text-primary" />
               <CardTitle className="text-base">Notifications</CardTitle>
             </div>
-            <CardDescription>Email and system notification preferences</CardDescription>
+            <CardDescription>
+              Email and system notification preferences
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { label: "New booking notifications", id: "notif-booking", defaultChecked: true },
-              { label: "Work order updates", id: "notif-workorder", defaultChecked: true },
-              { label: "QR code scan alerts", id: "notif-qr", defaultChecked: false },
-              { label: "Weekly summary reports", id: "notif-weekly", defaultChecked: true },
+              {
+                label: "New booking notifications",
+                id: "notif-booking",
+                defaultChecked: true,
+              },
+              {
+                label: "Work order updates",
+                id: "notif-workorder",
+                defaultChecked: true,
+              },
+              {
+                label: "QR code scan alerts",
+                id: "notif-qr",
+                defaultChecked: false,
+              },
+              {
+                label: "Weekly summary reports",
+                id: "notif-weekly",
+                defaultChecked: true,
+              },
             ].map((item) => (
               <div key={item.id} className="flex items-center justify-between">
-                <Label htmlFor={item.id} className="cursor-pointer">{item.label}</Label>
-                <Switch id={item.id} defaultChecked={item.defaultChecked} data-testid={`switch-${item.id}`} />
+                <Label htmlFor={item.id} className="cursor-pointer">
+                  {item.label}
+                </Label>
+                <Switch
+                  id={item.id}
+                  defaultChecked={item.defaultChecked}
+                  data-testid={`switch-${item.id}`}
+                />
               </div>
             ))}
           </CardContent>
@@ -373,17 +435,37 @@ export default function GeneralSettings() {
               <Shield className="h-5 w-5 text-primary" />
               <CardTitle className="text-base">Security</CardTitle>
             </div>
-            <CardDescription>Access control and security settings</CardDescription>
+            <CardDescription>
+              Access control and security settings
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { label: "Two-factor authentication", id: "sec-2fa", defaultChecked: false },
-              { label: "Require email verification", id: "sec-email", defaultChecked: true },
-              { label: "Session timeout (8h)", id: "sec-timeout", defaultChecked: true },
+              {
+                label: "Two-factor authentication",
+                id: "sec-2fa",
+                defaultChecked: false,
+              },
+              {
+                label: "Require email verification",
+                id: "sec-email",
+                defaultChecked: true,
+              },
+              {
+                label: "Session timeout (8h)",
+                id: "sec-timeout",
+                defaultChecked: true,
+              },
             ].map((item) => (
               <div key={item.id} className="flex items-center justify-between">
-                <Label htmlFor={item.id} className="cursor-pointer">{item.label}</Label>
-                <Switch id={item.id} defaultChecked={item.defaultChecked} data-testid={`switch-${item.id}`} />
+                <Label htmlFor={item.id} className="cursor-pointer">
+                  {item.label}
+                </Label>
+                <Switch
+                  id={item.id}
+                  defaultChecked={item.defaultChecked}
+                  data-testid={`switch-${item.id}`}
+                />
               </div>
             ))}
           </CardContent>
@@ -396,14 +478,22 @@ export default function GeneralSettings() {
               <CardTitle className="text-base">Appearance</CardTitle>
             </div>
             <CardDescription>
-              Operator dashboard theme. To brand your <strong>public</strong> cemetery site, use{" "}
-              <a href="/app/site-builder" className="text-primary hover:underline">Website Builder</a>.
+              Operator dashboard theme. To brand your <strong>public</strong>{" "}
+              cemetery site, use{" "}
+              <a
+                href="/app/site-builder"
+                className="text-primary hover:underline"
+              >
+                Website Builder
+              </a>
+              .
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Use the sun / moon toggle in the sidebar to switch between light and dark mode for your
-              dashboard. Your preference is saved to this browser.
+              Use the sun / moon toggle in the sidebar to switch between light
+              and dark mode for your dashboard. Your preference is saved to this
+              browser.
             </p>
           </CardContent>
         </Card>

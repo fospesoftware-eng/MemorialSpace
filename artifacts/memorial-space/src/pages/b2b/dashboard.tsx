@@ -8,12 +8,14 @@ import {
 import {
   Activity,
   ArrowRight,
+  Building,
   Calendar,
   CheckCircle2,
   Clock3,
   DollarSign,
   FileText,
   Gauge,
+  Layers,
   Map,
   MapPin,
   QrCode,
@@ -21,6 +23,7 @@ import {
   ShieldCheck,
   TrendingUp,
   Users,
+  Wand2,
   Wrench,
 } from "lucide-react";
 import {
@@ -38,7 +41,13 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -59,7 +68,10 @@ type RecentActivityItem = {
 };
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
 }
 
 function formatNumber(value: number) {
@@ -92,7 +104,10 @@ function StatCard({
 }) {
   const toneStyle = {
     primary: { icon: "bg-primary/10 text-primary", progress: "bg-primary/70" },
-    amber: { icon: "bg-amber-500/10 text-amber-600", progress: "bg-amber-500/70" },
+    amber: {
+      icon: "bg-amber-500/10 text-amber-600",
+      progress: "bg-amber-500/70",
+    },
     blue: { icon: "bg-sky-500/10 text-sky-600", progress: "bg-sky-500/70" },
     rose: { icon: "bg-rose-500/10 text-rose-600", progress: "bg-rose-500/70" },
   }[tone];
@@ -103,19 +118,34 @@ function StatCard({
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="h-1 w-full bg-muted">
-        <div className={`h-full ${toneStyle.progress} transition-all duration-700 group-hover:w-full`} style={{ width: `${progress ?? 42}%` }} />
+        <div
+          className={`h-full ${toneStyle.progress} transition-all duration-700 group-hover:w-full`}
+          style={{ width: `${progress ?? 42}%` }}
+        />
       </div>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
         <div className="space-y-1">
-          <CardDescription className="text-xs font-medium uppercase tracking-wider">{title}</CardDescription>
-          {loading ? <Skeleton className="h-8 w-24" /> : <CardTitle className="text-2xl">{value}</CardTitle>}
+          <CardDescription className="text-xs font-medium uppercase tracking-wider">
+            {title}
+          </CardDescription>
+          {loading ? (
+            <Skeleton className="h-8 w-24" />
+          ) : (
+            <CardTitle className="text-2xl">{value}</CardTitle>
+          )}
         </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-md ${toneStyle.icon}`}>
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-md ${toneStyle.icon}`}
+        >
           <Icon className="h-5 w-5" />
         </div>
       </CardHeader>
       <CardContent>
-        {loading ? <Skeleton className="h-4 w-32" /> : <p className="text-sm text-muted-foreground">{detail}</p>}
+        {loading ? (
+          <Skeleton className="h-4 w-32" />
+        ) : (
+          <p className="text-sm text-muted-foreground">{detail}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -132,9 +162,12 @@ function ActivityIcon({ type }: { type: string }) {
 }
 
 export default function Dashboard() {
-  const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary(ORG_ID);
-  const { data: activity, isLoading: loadingActivity } = useGetRecentActivity(ORG_ID);
-  const { data: plotBreakdown, isLoading: loadingPlot } = useGetPlotStatusBreakdown(ORG_ID);
+  const { data: summary, isLoading: loadingSummary } =
+    useGetDashboardSummary(ORG_ID);
+  const { data: activity, isLoading: loadingActivity } =
+    useGetRecentActivity(ORG_ID);
+  const { data: plotBreakdown, isLoading: loadingPlot } =
+    useGetPlotStatusBreakdown(ORG_ID);
   const recentActivity = (activity ?? []) as RecentActivityItem[];
 
   const totalPlots = summary?.totalPlots ?? 0;
@@ -142,35 +175,87 @@ export default function Dashboard() {
   const reservedPlots = summary?.reservedPlots ?? 0;
   const availablePlots = summary?.availablePlots ?? 0;
   const utilization = percent(occupiedPlots + reservedPlots, totalPlots);
-  const bookingRate = percent(summary?.pendingBookings ?? 0, summary?.totalBookings ?? 0);
+  const bookingRate = percent(
+    summary?.pendingBookings ?? 0,
+    summary?.totalBookings ?? 0,
+  );
 
-  const pieData = plotBreakdown ? [
-    { name: "Available", value: plotBreakdown.available, color: PIE_COLORS.available },
-    { name: "Reserved", value: plotBreakdown.reserved, color: PIE_COLORS.reserved },
-    { name: "Occupied", value: plotBreakdown.occupied, color: PIE_COLORS.occupied },
-    { name: "Maintenance", value: plotBreakdown.maintenance, color: PIE_COLORS.maintenance },
-  ].filter((d) => d.value > 0) : [];
+  const pieData = plotBreakdown
+    ? [
+        {
+          name: "Available",
+          value: plotBreakdown.available,
+          color: PIE_COLORS.available,
+        },
+        {
+          name: "Reserved",
+          value: plotBreakdown.reserved,
+          color: PIE_COLORS.reserved,
+        },
+        {
+          name: "Occupied",
+          value: plotBreakdown.occupied,
+          color: PIE_COLORS.occupied,
+        },
+        {
+          name: "Maintenance",
+          value: plotBreakdown.maintenance,
+          color: PIE_COLORS.maintenance,
+        },
+      ].filter((d) => d.value > 0)
+    : [];
 
-  const operationsData = summary ? [
-    { name: "Plots", total: summary.totalPlots },
-    { name: "Burials", total: summary.totalBurials },
-    { name: "Bookings", total: summary.totalBookings },
-    { name: "Memorials", total: summary.totalMemorials },
-    { name: "QR Codes", total: summary.totalQrCodes },
-    { name: "Work", total: summary.openWorkOrders },
-  ] : [];
+  const operationsData = summary
+    ? [
+        { name: "Burial Spots", total: summary.totalPlots },
+        { name: "Bookings", total: summary.totalBookings },
+        { name: "Memorials", total: summary.totalMemorials },
+        { name: "QR Codes", total: summary.totalQrCodes },
+        { name: "Work", total: summary.openWorkOrders },
+      ]
+    : [];
 
   const quickActions = [
-    { label: "Open Map", href: "/map", icon: Map },
-    { label: "Add Burial", href: "/burials", icon: Users },
+    { label: "Create Cemetery", href: "/organizations", icon: Building },
+    { label: "Map Maker", href: "/map-maker", icon: Layers },
+    { label: "AI Map Maker", href: "/ai-map-maker", icon: Wand2 },
+    { label: "Map View", href: "/map", icon: Map },
+    { label: "Burial Spots", href: "/burial-spots", icon: MapPin },
     { label: "Import Data", href: "/import-data", icon: ScanText },
-    { label: "Work Orders", href: "/work-orders", icon: Wrench },
   ];
   const statusTiles = [
-    { label: "System status", value: "Operational", icon: ShieldCheck, tone: "text-primary", bg: "bg-primary/10" },
-    { label: "Grounds used", value: `${utilization}%`, icon: Gauge, tone: "text-sky-600", bg: "bg-sky-500/10" },
-    { label: "Awaiting action", value: formatNumber((summary?.pendingBookings ?? 0) + (summary?.openWorkOrders ?? 0)), icon: Clock3, tone: "text-amber-600", bg: "bg-amber-500/10" },
-    { label: "Records managed", value: formatNumber((summary?.totalBurials ?? 0) + (summary?.totalMemorials ?? 0)), icon: CheckCircle2, tone: "text-emerald-600", bg: "bg-emerald-500/10" },
+    {
+      label: "System status",
+      value: "Operational",
+      icon: ShieldCheck,
+      tone: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      label: "Grounds used",
+      value: `${utilization}%`,
+      icon: Gauge,
+      tone: "text-sky-600",
+      bg: "bg-sky-500/10",
+    },
+    {
+      label: "Awaiting action",
+      value: formatNumber(
+        (summary?.pendingBookings ?? 0) + (summary?.openWorkOrders ?? 0),
+      ),
+      icon: Clock3,
+      tone: "text-amber-600",
+      bg: "bg-amber-500/10",
+    },
+    {
+      label: "Records managed",
+      value: formatNumber(
+        (summary?.totalBurials ?? 0) + (summary?.totalMemorials ?? 0),
+      ),
+      icon: CheckCircle2,
+      tone: "text-emerald-600",
+      bg: "bg-emerald-500/10",
+    },
   ];
 
   return (
@@ -181,14 +266,22 @@ export default function Dashboard() {
             <Activity className="h-4 w-4" />
             Cemetery operator
           </div>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Operations Dashboard</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+            Operations Dashboard
+          </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            A live view of revenue, grounds availability, bookings, work orders, and recent cemetery activity.
+            A live view of revenue, grounds availability, bookings, work orders,
+            and recent cemetery activity.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {quickActions.map((action) => (
-            <Button key={action.href} asChild variant="outline" className="gap-2 transition-all duration-200 hover:-translate-y-0.5">
+            <Button
+              key={action.href}
+              asChild
+              variant="outline"
+              className="gap-2 transition-all duration-200 hover:-translate-y-0.5"
+            >
               <Link href={action.href}>
                 <action.icon className="h-4 w-4" />
                 {action.label}
@@ -206,12 +299,20 @@ export default function Dashboard() {
               className="flex items-center gap-3 rounded-md px-3 py-2 transition-all duration-300 hover:bg-muted/50"
               style={{ animationDelay: `${index * 70}ms` }}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${tile.bg} ${tile.tone}`}>
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${tile.bg} ${tile.tone}`}
+              >
                 <tile.icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{tile.label}</p>
-                {loadingSummary ? <Skeleton className="mt-1 h-4 w-20" /> : <p className="truncate text-sm font-semibold">{tile.value}</p>}
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {tile.label}
+                </p>
+                {loadingSummary ? (
+                  <Skeleton className="mt-1 h-4 w-20" />
+                ) : (
+                  <p className="truncate text-sm font-semibold">{tile.value}</p>
+                )}
               </div>
             </div>
           ))}
@@ -231,7 +332,7 @@ export default function Dashboard() {
         <StatCard
           title="Grounds utilization"
           value={`${utilization}%`}
-          detail={`${formatNumber(availablePlots)} available of ${formatNumber(totalPlots)} plots`}
+          detail={`${formatNumber(availablePlots)} available of ${formatNumber(totalPlots)} burial spots`}
           icon={MapPin}
           loading={loadingSummary}
           tone="blue"
@@ -265,7 +366,9 @@ export default function Dashboard() {
           <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Operations Snapshot</CardTitle>
-              <CardDescription>Current record volume across core cemetery workflows</CardDescription>
+              <CardDescription>
+                Current record volume across core cemetery workflows
+              </CardDescription>
             </div>
             <Badge variant="outline" className="w-fit gap-1.5">
               <TrendingUp className="h-3.5 w-3.5" />
@@ -278,21 +381,63 @@ export default function Dashboard() {
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={operationsData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <BarChart
+                    data={operationsData}
+                    margin={{ left: -20, right: 12, top: 8, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="hsl(var(--border))"
+                    />
+                    <XAxis
+                      dataKey="name"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
                     <RechartsTooltip
                       cursor={{ fill: "hsl(var(--muted))" }}
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        borderColor: "hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
                     />
                     <defs>
-                      <linearGradient id="operationsBar" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+                      <linearGradient
+                        id="operationsBar"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0.95}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={0.45}
+                        />
                       </linearGradient>
                     </defs>
-                    <Bar dataKey="total" fill="url(#operationsBar)" radius={[4, 4, 0, 0]} animationDuration={650} />
+                    <Bar
+                      dataKey="total"
+                      fill="url(#operationsBar)"
+                      radius={[4, 4, 0, 0]}
+                      animationDuration={650}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -302,8 +447,10 @@ export default function Dashboard() {
 
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
-            <CardTitle>Plot Status</CardTitle>
-            <CardDescription>Availability and occupancy across the grounds</CardDescription>
+            <CardTitle>Burial Spot Status</CardTitle>
+            <CardDescription>
+              Availability and occupancy across the grounds
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="h-[220px] w-full">
@@ -312,19 +459,33 @@ export default function Dashboard() {
               ) : pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="48%" innerRadius={58} outerRadius={82} paddingAngle={2} dataKey="value">
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="48%"
+                      innerRadius={58}
+                      outerRadius={82}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
                       {pieData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
                     <RechartsTooltip
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        borderColor: "hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
                     />
                     <Legend iconType="circle" />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No plot data available</div>
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  No plot data available
+                </div>
               )}
             </div>
             <div className="space-y-2">
@@ -342,14 +503,36 @@ export default function Dashboard() {
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Today's Focus</CardTitle>
-            <CardDescription>High-signal items for the operations team</CardDescription>
+            <CardDescription>
+              High-signal items for the operations team
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { label: "Pending bookings", value: summary?.pendingBookings ?? 0, icon: Calendar, href: "/bookings" },
-              { label: "Open work orders", value: summary?.openWorkOrders ?? 0, icon: Wrench, href: "/work-orders" },
-              { label: "Memorial pages", value: summary?.totalMemorials ?? 0, icon: FileText, href: "/memorials" },
-              { label: "QR codes", value: summary?.totalQrCodes ?? 0, icon: QrCode, href: "/qr-codes" },
+              {
+                label: "Pending bookings",
+                value: summary?.pendingBookings ?? 0,
+                icon: Calendar,
+                href: "/bookings",
+              },
+              {
+                label: "Open work orders",
+                value: summary?.openWorkOrders ?? 0,
+                icon: Wrench,
+                href: "/work-orders",
+              },
+              {
+                label: "Memorial pages",
+                value: summary?.totalMemorials ?? 0,
+                icon: FileText,
+                href: "/memorials",
+              },
+              {
+                label: "QR codes",
+                value: summary?.totalQrCodes ?? 0,
+                icon: QrCode,
+                href: "/qr-codes",
+              },
             ].map((item) => (
               <Link
                 key={item.label}
@@ -361,12 +544,20 @@ export default function Dashboard() {
                     <item.icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-medium">{item.label}</span>
-                    <span className="text-xs text-muted-foreground">Open workspace</span>
+                    <span className="block text-sm font-medium">
+                      {item.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Open workspace
+                    </span>
                   </span>
                 </span>
                 <span className="flex items-center gap-2 text-sm font-semibold">
-                  {loadingSummary ? <Skeleton className="h-5 w-8" /> : formatNumber(item.value)}
+                  {loadingSummary ? (
+                    <Skeleton className="h-5 w-8" />
+                  ) : (
+                    formatNumber(item.value)
+                  )}
                   <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
                 </span>
               </Link>
@@ -380,13 +571,18 @@ export default function Dashboard() {
               <CardTitle>Recent Activity</CardTitle>
               <CardDescription>Latest operations and updates</CardDescription>
             </div>
-            <Badge variant="secondary" className="w-fit">Last 10 items</Badge>
+            <Badge variant="secondary" className="w-fit">
+              Last 10 items
+            </Badge>
           </CardHeader>
           <CardContent>
             <div className="space-y-1">
               {loadingActivity ? (
                 Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="flex items-center gap-3 rounded-md px-2 py-3">
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 rounded-md px-2 py-3"
+                  >
                     <Skeleton className="h-9 w-9 rounded-md" />
                     <div className="flex-1 space-y-2">
                       <Skeleton className="h-4 w-2/3" />
@@ -396,14 +592,22 @@ export default function Dashboard() {
                 ))
               ) : recentActivity.length > 0 ? (
                 recentActivity.map((item) => (
-                  <div key={`${item.type}-${item.id}`} className="flex items-center gap-3 rounded-md px-2 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:bg-muted/40">
+                  <div
+                    key={`${item.type}-${item.id}`}
+                    className="flex items-center gap-3 rounded-md px-2 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:bg-muted/40"
+                  >
                     <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
                       <ActivityIcon type={item.type} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.description}</p>
+                      <p className="truncate text-sm font-medium">
+                        {item.description}
+                      </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {format(new Date(item.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                        {format(
+                          new Date(item.createdAt),
+                          "MMM d, yyyy 'at' h:mm a",
+                        )}
                       </p>
                     </div>
                   </div>

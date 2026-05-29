@@ -12,7 +12,13 @@ import {
   getListBurialsQueryKey,
 } from "@workspace/api-client-react";
 import type { QrCode } from "@workspace/api-client-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -37,11 +43,16 @@ function buildQrByBurialMap(rows: QrCode[] | undefined): Map<number, QrCode> {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case "available": return "bg-[#40916c] hover:bg-[#40916c]/80";
-    case "reserved":  return "bg-[#d4a843] hover:bg-[#d4a843]/80";
-    case "occupied":  return "bg-[#374151] hover:bg-[#374151]/80";
-    case "maintenance": return "bg-[#ef4444] hover:bg-[#ef4444]/80";
-    default: return "bg-secondary hover:bg-secondary/80";
+    case "available":
+      return "bg-[#40916c] hover:bg-[#40916c]/80";
+    case "reserved":
+      return "bg-[#d4a843] hover:bg-[#d4a843]/80";
+    case "occupied":
+      return "bg-[#374151] hover:bg-[#374151]/80";
+    case "maintenance":
+      return "bg-[#ef4444] hover:bg-[#ef4444]/80";
+    default:
+      return "bg-secondary hover:bg-secondary/80";
   }
 }
 
@@ -52,16 +63,19 @@ export type PlotDetailSheetProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDetailSheetProps) {
+export function PlotDetailSheet({
+  plotId,
+  organizationId,
+  onOpenChange,
+}: PlotDetailSheetProps) {
   const orgId = organizationId ?? 0;
   // Fetch plot data lazily — list endpoint is already cached by react-query
   // when the page rendering this sheet has called useListPlots/useGetMapData.
   const { data: plots } = useListPlots({ organizationId: orgId });
   const plot = plots?.find((p) => p.id === plotId);
 
-  const burialsParams = plotId != null
-    ? { organizationId: orgId, plotId }
-    : undefined;
+  const burialsParams =
+    plotId != null ? { organizationId: orgId, plotId } : undefined;
   const { data: burials, isLoading: burialsLoading } = useListBurials(
     burialsParams,
     {
@@ -84,7 +98,7 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
           <div className="p-6">
             <SheetHeader>
               <SheetTitle className="text-2xl text-sidebar-foreground">
-                Plot {plot?.plotNumber ?? "—"}
+                Burial Spot {plot?.plotNumber ?? "—"}
               </SheetTitle>
               <SheetDescription>
                 Section: {plot?.section || "N/A"} • Row: {plot?.row || "N/A"}
@@ -93,10 +107,12 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
 
             {plot && (
               <div className="mt-8 space-y-6">
-                {/* ----- Plot facts ----- */}
+                {/* ----- Burial spot facts ----- */}
                 <section className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-medium text-sidebar-foreground/70 uppercase tracking-wider">Status</h3>
+                    <h3 className="text-sm font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                      Status
+                    </h3>
                     <Badge
                       variant="outline"
                       className={`capitalize border-none text-white ${getStatusColor(plot.status)}`}
@@ -107,29 +123,43 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">Type</div>
+                      <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">
+                        Type
+                      </div>
                       <p className="capitalize">{plot.type || "Standard"}</p>
                     </div>
                     {plot.price != null && (
                       <div>
-                        <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">Price</div>
+                        <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">
+                          Price
+                        </div>
                         <p>${plot.price.toLocaleString()}</p>
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">Owner</div>
-                    <p className="font-medium">{plot.ownerName || "Unassigned"}</p>
+                    <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">
+                      Owner
+                    </div>
+                    <p className="font-medium">
+                      {plot.ownerName || "Unassigned"}
+                    </p>
                     {plot.ownerContact && (
-                      <p className="text-xs text-sidebar-foreground/70 mt-0.5">{plot.ownerContact}</p>
+                      <p className="text-xs text-sidebar-foreground/70 mt-0.5">
+                        {plot.ownerContact}
+                      </p>
                     )}
                   </div>
 
                   {plot.notes && (
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">Plot notes</div>
-                      <p className="text-sm whitespace-pre-line">{plot.notes}</p>
+                      <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mb-1">
+                        Burial spot notes
+                      </div>
+                      <p className="text-sm whitespace-pre-line">
+                        {plot.notes}
+                      </p>
                     </div>
                   )}
                 </section>
@@ -143,7 +173,9 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
                       <Cross className="h-3.5 w-3.5" /> Burial records
                     </h3>
                     {burials && burials.length > 0 && (
-                      <Badge variant="secondary" className="text-[10px]">{burials.length}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {burials.length}
+                      </Badge>
                     )}
                   </div>
 
@@ -154,7 +186,7 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
                     </div>
                   ) : !burials || burials.length === 0 ? (
                     <p className="text-xs text-sidebar-foreground/60 italic py-3 px-3 rounded-md border border-dashed border-sidebar-border bg-sidebar-accent/20">
-                      No burial records linked to this plot yet.
+                      No interment records linked to this burial spot yet.
                     </p>
                   ) : (
                     <ul className="space-y-3" data-testid="burial-list">
@@ -180,7 +212,7 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
                             />
                             <BurialFamilyLinks burialId={b.id} />
                             <div className="px-3 py-1.5 mt-px text-[10px] text-sidebar-foreground/50">
-                              Plot #{b.plotId} · Record #{b.id}
+                              Burial spot #{b.plotId} · Record #{b.id}
                             </div>
                           </li>
                         );
@@ -241,7 +273,8 @@ export function BurialDetailSheet({
                 {burial?.deceasedName ?? "Burial record"}
               </SheetTitle>
               <SheetDescription>
-                Plot #{burial?.plotId ?? "—"} · Record #{burial?.id ?? "—"}
+                Burial spot #{burial?.plotId ?? "—"} · Record #
+                {burial?.id ?? "—"}
               </SheetDescription>
             </SheetHeader>
 

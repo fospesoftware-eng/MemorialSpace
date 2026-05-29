@@ -1,13 +1,20 @@
 import { Link } from "wouter";
 import { ArrowRight, FileSpreadsheet, ScanText, Upload } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const importOptions = [
   {
     title: "Headstone AI Import",
-    description: "Upload headstone photos with a spreadsheet, extract names and dates with Claude, review the results, then write plots and burials to the cemetery map.",
+    description:
+      "Upload headstone photos with a spreadsheet, extract names and dates with Claude, review the results, then write burial spots to the cemetery map.",
     href: "/import-data/headstones",
     icon: ScanText,
     status: "Ready",
@@ -23,9 +30,12 @@ export default function ImportDataPage() {
             <Upload className="h-4 w-4" />
             Import Data
           </div>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Import Center</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+            Import Center
+          </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Bring cemetery records into MemorialSpace with guided review before anything is written to live plots, burials, and map data.
+            Bring cemetery records into MemorialSpace with guided review before
+            anything is written to live burial spots and map data.
           </p>
         </div>
       </div>
@@ -42,7 +52,9 @@ export default function ImportDataPage() {
               </div>
               <div>
                 <CardTitle className="text-lg">{option.title}</CardTitle>
-                <CardDescription className="mt-2">{option.description}</CardDescription>
+                <CardDescription className="mt-2">
+                  {option.description}
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="mt-auto">
@@ -64,21 +76,29 @@ export default function ImportDataPage() {
             Supported source data
           </CardTitle>
           <CardDescription>
-            Current imports support spreadsheet-driven cemetery records with image filenames, spot or plot numbers, latitude, and longitude.
+            Current imports support spreadsheet-driven cemetery records with
+            image filenames, spot numbers, latitude, and longitude.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Spreadsheet rows</p>
-            <p className="mt-1 text-xs text-muted-foreground">XLSX, XLS, or CSV files with flexible column names.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              XLSX, XLS, or CSV files with flexible column names.
+            </p>
           </div>
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Headstone images</p>
-            <p className="mt-1 text-xs text-muted-foreground">Batch photos matched by filename from the spreadsheet.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Batch photos matched by filename from the spreadsheet.
+            </p>
           </div>
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Map placement</p>
-            <p className="mt-1 text-xs text-muted-foreground">Plot number, latitude, and longitude are saved to cemetery plot records.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Spot number, latitude, and longitude are saved to cemetery burial
+              spot records.
+            </p>
           </div>
         </CardContent>
       </Card>

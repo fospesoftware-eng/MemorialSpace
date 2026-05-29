@@ -27,7 +27,6 @@ import {
   Receipt,
   ScanText,
   Search,
-  Settings,
   Shield,
   ShoppingBag,
   Sliders,
@@ -81,23 +80,41 @@ const navigation: NavigationSection[] = [
     name: "Cemetery Operations",
     items: [
       {
-        name: "Map View",
-        href: "/map",
-        icon: Map,
-        description: "Interactive plot map",
+        name: "Create Cemetery",
+        href: "/organizations",
+        icon: Building,
+        description: "Add a cemetery profile",
+      },
+      {
+        name: "Cemetery Details",
+        href: "/settings",
+        icon: MapPin,
+        description: "Location, contacts, coordinates",
       },
       {
         name: "Map Maker",
         href: "/map-maker",
         icon: Layers,
-        description: "Edit grounds layout",
+        description: "Draw a map manually",
       },
       {
         name: "AI Map Maker",
         href: "/ai-map-maker",
         icon: Wand2,
-        description: "Generate maps faster",
+        description: "Generate a map from uploads",
         badge: "AI",
+      },
+      {
+        name: "Map View",
+        href: "/map",
+        icon: Map,
+        description: "View the active cemetery map",
+      },
+      {
+        name: "Burial Spots",
+        href: "/burial-spots",
+        icon: MapPin,
+        description: "Manage plot and spot records",
       },
       {
         name: "Columbarium",
@@ -110,18 +127,6 @@ const navigation: NavigationSection[] = [
         href: "/mausoleum",
         icon: Building2,
         description: "Crypt inventory",
-      },
-      {
-        name: "Plots",
-        href: "/plots",
-        icon: MapPin,
-        description: "Sections, rows, pricing",
-      },
-      {
-        name: "Burials",
-        href: "/burials",
-        icon: Users,
-        description: "Interment records",
       },
       {
         name: "Bookings",
@@ -274,22 +279,10 @@ const navigation: NavigationSection[] = [
     name: "Settings",
     items: [
       {
-        name: "Organizations",
-        href: "/organizations",
-        icon: Building,
-        description: "Cemetery entities",
-      },
-      {
         name: "Cemetery Setup",
         href: "/cemetery-setup",
         icon: Sliders,
         description: "Site configuration",
-      },
-      {
-        name: "General Settings",
-        href: "/settings",
-        icon: Settings,
-        description: "Brand and preferences",
       },
       {
         name: "Payment Gateway",

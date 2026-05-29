@@ -59,7 +59,6 @@ import ImportDataPage from "@/pages/b2b/import-data";
 import HeadstoneImportPage from "@/pages/b2b/headstone-import";
 import Columbarium from "@/pages/b2b/columbarium";
 import Mausoleum from "@/pages/b2b/mausoleum";
-import Burials from "@/pages/b2b/burials";
 import Bookings from "@/pages/b2b/bookings";
 import WorkOrders from "@/pages/b2b/work-orders";
 import Assets from "@/pages/b2b/assets";
@@ -140,8 +139,8 @@ function B2BRoutes() {
         <Route path="/columbarium/:id" component={Columbarium} />
         <Route path="/mausoleum" component={Mausoleum} />
         <Route path="/mausoleum/:id" component={Mausoleum} />
+        <Route path="/burial-spots" component={Plots} />
         <Route path="/plots" component={Plots} />
-        <Route path="/burials" component={Burials} />
         <Route path="/bookings" component={Bookings} />
         <Route path="/work-orders" component={WorkOrders} />
         <Route path="/assets" component={Assets} />
