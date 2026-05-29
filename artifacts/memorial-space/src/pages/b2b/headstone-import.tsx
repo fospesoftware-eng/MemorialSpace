@@ -29,6 +29,10 @@ import { fileToDataUrl, downscaleImage } from "@/lib/cemetery-config";
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const SCAN_BATCH_SIZE = 1;
 const MAX_IMAGE_DATA_URL_BYTES = 1_500_000;
+const COMPATIBILITY_SHEET = {
+  fileName: "headstone-image-only.csv",
+  dataUrl: "data:text/csv;base64,aW1hZ2UgZmlsZW5hbWUK",
+};
 
 type UploadImage = {
   fileName: string;
@@ -156,7 +160,7 @@ export default function HeadstoneImportPage() {
         const batch = images.slice(start, start + SCAN_BATCH_SIZE);
         const result = await api<AnalyzeResponse>("/headstone-import/analyze", {
           method: "POST",
-          body: JSON.stringify({ images: batch }),
+          body: JSON.stringify({ images: batch, sheet: COMPATIBILITY_SHEET }),
         });
         activeFolder = result.folder;
         const scannedRows = result.rows.map((row) => ({
