@@ -6,11 +6,19 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, type SessionKind } from "@/lib/auth";
-import { MarketingHeader } from "@/components/layout/saas-marketing-layout";
 
 export type SignInTheme = "green" | "gold" | "rose";
 
-const themeMap: Record<SignInTheme, { ring: string; text: string; gradient: string; button: string; logoBg: string }> = {
+const themeMap: Record<
+  SignInTheme,
+  {
+    ring: string;
+    text: string;
+    gradient: string;
+    button: string;
+    logoBg: string;
+  }
+> = {
   green: {
     ring: "focus-visible:ring-primary/40",
     text: "text-primary",
@@ -49,7 +57,17 @@ export interface SignInFormProps {
 }
 
 export function SignInForm(props: SignInFormProps) {
-  const { portalLabel, title, subtitle, theme, kind, redirectTo, signUpHref, signUpLabel, rightPanel } = props;
+  const {
+    portalLabel,
+    title,
+    subtitle,
+    theme,
+    kind,
+    redirectTo,
+    signUpHref,
+    signUpLabel,
+    rightPanel,
+  } = props;
   const t = themeMap[theme];
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
@@ -77,150 +95,209 @@ export function SignInForm(props: SignInFormProps) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col">
-      <MarketingHeader />
+    <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
+      {/* Left: form */}
+      <div className="relative flex items-center justify-center p-6 sm:p-12">
+        <div
+          className={`pointer-events-none absolute inset-0 bg-gradient-to-tr ${t.gradient} opacity-50`}
+        />
+        <Card className="relative w-full max-w-md border-border/60 shadow-2xl shadow-black/30">
+          <CardContent className="p-8 space-y-6">
+            <div>
+              <div
+                className={`inline-flex items-center gap-2 rounded-full border ${t.text} border-current/20 bg-current/5 px-3 py-1 text-[11px] uppercase tracking-widest font-semibold`}
+              >
+                <Sparkles className="h-3 w-3" />
+                {portalLabel}
+              </div>
+              <h1 className="mt-4 text-2xl font-bold tracking-tight">
+                {title}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+            </div>
 
-      <div className="flex-1 grid lg:grid-cols-2">
-        {/* Left: form */}
-        <div className="relative flex items-center justify-center p-6 sm:p-12">
-          <div className={`pointer-events-none absolute inset-0 bg-gradient-to-tr ${t.gradient} opacity-50`} />
-          <Card className="relative w-full max-w-md border-border/60 shadow-2xl shadow-black/30">
-            <CardContent className="p-8 space-y-6">
-              <div>
-                <div className={`inline-flex items-center gap-2 rounded-full border ${t.text} border-current/20 bg-current/5 px-3 py-1 text-[11px] uppercase tracking-widest font-semibold`}>
-                  <Sparkles className="h-3 w-3" />
-                  {portalLabel}
-                </div>
-                <h1 className="mt-4 text-2xl font-bold tracking-tight">{title}</h1>
-                <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+            {error && (
+              <div
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 text-rose-300 px-3 py-2 text-xs flex items-center gap-2"
+                data-testid="sign-in-error"
+              >
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4"
+              data-testid="sign-in-form"
+            >
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="email"
+                  className="text-xs uppercase tracking-wider text-muted-foreground"
+                >
+                  Work email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                  className={`h-11 ${t.ring}`}
+                  data-testid="input-email"
+                />
               </div>
 
-              {error && (
-                <div className="rounded-md border border-rose-500/40 bg-rose-500/10 text-rose-300 px-3 py-2 text-xs flex items-center gap-2" data-testid="sign-in-error">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{error}</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="password"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
+                    Password
+                  </Label>
+                  <button
+                    type="button"
+                    className={`text-xs ${t.text} hover:underline`}
+                  >
+                    Forgot?
+                  </button>
                 </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-4" data-testid="sign-in-form">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">Work email</Label>
+                <div className="relative">
                   <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
                     required
-                    autoComplete="email"
-                    className={`h-11 ${t.ring}`}
-                    data-testid="input-email"
+                    autoComplete="current-password"
+                    className={`h-11 pr-10 ${t.ring}`}
+                    data-testid="input-password"
                   />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground">Password</Label>
-                    <button type="button" className={`text-xs ${t.text} hover:underline`}>Forgot?</button>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      autoComplete="current-password"
-                      className={`h-11 pr-10 ${t.ring}`}
-                      data-testid="input-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1.5 rounded"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                    <Checkbox checked={remember} onCheckedChange={(v) => setRemember(!!v)} />
-                    Keep me signed in
-                  </label>
-                </div>
-
-                <Button type="submit" disabled={loading} className={`w-full h-11 ${t.button}`} data-testid="button-submit">
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Signing in…
-                    </>
-                  ) : (
-                    "Sign in"
-                  )}
-                </Button>
-              </form>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border/60" />
-                </div>
-                <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
-                  <span className="bg-card px-3 text-muted-foreground">Or continue with</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1.5 rounded"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" className="h-10" data-testid="button-google">
-                  <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24"><path fill="#4285f4" d="M21.35 11.1H12v3.2h5.35c-.23 1.4-1.6 4.1-5.35 4.1-3.2 0-5.83-2.65-5.83-5.9s2.63-5.9 5.83-5.9c1.83 0 3.05.78 3.75 1.45l2.55-2.45C16.7 4.1 14.6 3.1 12 3.1 6.95 3.1 2.85 7.2 2.85 12.5S6.95 21.9 12 21.9c6.93 0 9.6-4.85 9.6-9.35 0-.62-.07-1.1-.25-1.45z"/></svg>
-                  Google
-                </Button>
-                <Button type="button" variant="outline" className="h-10" data-testid="button-microsoft">
-                  <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24"><path fill="#f35325" d="M2 2h10v10H2z"/><path fill="#81bc06" d="M12 2h10v10H12z"/><path fill="#05a6f0" d="M2 12h10v10H2z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>
-                  Microsoft
-                </Button>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <Checkbox
+                    checked={remember}
+                    onCheckedChange={(v) => setRemember(!!v)}
+                  />
+                  Keep me signed in
+                </label>
               </div>
 
-              <p className="text-center text-xs text-muted-foreground">
-                {signUpLabel ? (
+              <Button
+                type="submit"
+                disabled={loading}
+                className={`w-full h-11 ${t.button}`}
+                data-testid="button-submit"
+              >
+                {loading ? (
                   <>
-                    {signUpLabel}{" "}
-                    <a href={signUpHref ?? "/"} className={`${t.text} hover:underline font-medium`}>
-                      Get started
-                    </a>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Signing in…
                   </>
                 ) : (
-                  <>
-                    New to MemorialSpace?{" "}
-                    <a href="/" className={`${t.text} hover:underline font-medium`}>Talk to sales</a>
-                  </>
+                  "Sign in"
                 )}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+              </Button>
+            </form>
 
-        {/* Right: marketing/visual panel */}
-        <div className="hidden lg:flex relative bg-card/30 border-l border-border/40 items-center justify-center p-12 overflow-hidden">
-          <div className={`pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-gradient-radial ${t.gradient} blur-3xl opacity-60`} />
-          <div className="relative max-w-md">{rightPanel}</div>
-        </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/60" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
+                <span className="bg-card px-3 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10"
+                data-testid="button-google"
+              >
+                <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285f4"
+                    d="M21.35 11.1H12v3.2h5.35c-.23 1.4-1.6 4.1-5.35 4.1-3.2 0-5.83-2.65-5.83-5.9s2.63-5.9 5.83-5.9c1.83 0 3.05.78 3.75 1.45l2.55-2.45C16.7 4.1 14.6 3.1 12 3.1 6.95 3.1 2.85 7.2 2.85 12.5S6.95 21.9 12 21.9c6.93 0 9.6-4.85 9.6-9.35 0-.62-.07-1.1-.25-1.45z"
+                  />
+                </svg>
+                Google
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10"
+                data-testid="button-microsoft"
+              >
+                <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
+                  <path fill="#f35325" d="M2 2h10v10H2z" />
+                  <path fill="#81bc06" d="M12 2h10v10H12z" />
+                  <path fill="#05a6f0" d="M2 12h10v10H2z" />
+                  <path fill="#ffba08" d="M12 12h10v10H12z" />
+                </svg>
+                Microsoft
+              </Button>
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">
+              {signUpLabel ? (
+                <>
+                  {signUpLabel}{" "}
+                  <a
+                    href={signUpHref ?? "/"}
+                    className={`${t.text} hover:underline font-medium`}
+                  >
+                    Get started
+                  </a>
+                </>
+              ) : (
+                <>
+                  New to MemorialSpace?{" "}
+                  <a
+                    href="/"
+                    className={`${t.text} hover:underline font-medium`}
+                  >
+                    Talk to sales
+                  </a>
+                </>
+              )}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      <footer className="border-t border-border/40 py-4">
-        <div className="container mx-auto max-w-7xl px-6 flex flex-col md:flex-row items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">© 2026 MemorialSpace. Honoring legacies with technology.</p>
-          <div className="flex gap-4 text-xs text-muted-foreground">
-            <a href="/privacy-policy" className="hover:text-foreground">Privacy</a>
-            <a href="/terms-and-conditions" className="hover:text-foreground">Terms</a>
-            <a href="/" className="hover:text-foreground">Security</a>
-          </div>
-        </div>
-      </footer>
+      {/* Right: marketing/visual panel */}
+      <div className="hidden lg:flex relative bg-card/30 border-l border-border/40 items-center justify-center p-12 overflow-hidden">
+        <div
+          className={`pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-gradient-radial ${t.gradient} blur-3xl opacity-60`}
+        />
+        <div className="relative max-w-md">{rightPanel}</div>
+      </div>
     </div>
   );
 }

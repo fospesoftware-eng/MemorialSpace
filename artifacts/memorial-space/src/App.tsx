@@ -252,11 +252,31 @@ function SaasMarketingRoutes({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
-      <Route path="/sign-in" component={SignInHub} />
-      <Route path="/sign-in/cemetery" component={SignInCemetery} />
-      <Route path="/sign-in/family" component={SignInFamily} />
-      <Route path="/sign-in/admin" component={SignInAdmin} />
-      <Route path="/sign-in/vendor" component={SignInVendor} />
+      <Route path="/sign-in">
+        <SaasMarketingRoutes>
+          <SignInHub />
+        </SaasMarketingRoutes>
+      </Route>
+      <Route path="/sign-in/cemetery">
+        <SaasMarketingRoutes>
+          <SignInCemetery />
+        </SaasMarketingRoutes>
+      </Route>
+      <Route path="/sign-in/family">
+        <SaasMarketingRoutes>
+          <SignInFamily />
+        </SaasMarketingRoutes>
+      </Route>
+      <Route path="/sign-in/admin">
+        <SaasMarketingRoutes>
+          <SignInAdmin />
+        </SaasMarketingRoutes>
+      </Route>
+      <Route path="/sign-in/vendor">
+        <SaasMarketingRoutes>
+          <SignInVendor />
+        </SaasMarketingRoutes>
+      </Route>
       <Route path="/vendor/signup" component={VendorSignup} />
 
       {/* Public marketplace directory — anyone can browse vendors. */}
