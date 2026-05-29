@@ -583,11 +583,11 @@ export function B2BLayout({ children }: { children: React.ReactNode }) {
           <SidebarContent />
         </SheetContent>
 
-        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:h-screen lg:max-h-screen lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden border-r border-sidebar-border shadow-2xl shadow-black/10">
+        <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:h-screen lg:max-h-screen lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden border-r border-sidebar-border shadow-2xl shadow-black/10">
           <SidebarContent />
         </div>
 
-        <main className="relative flex min-w-0 flex-1 flex-col lg:pl-72">
+        <main className="relative flex min-w-0 flex-1 flex-col lg:ml-72">
           <OperatorHeader mobileMenu={mobileMenu} />
           <div className="b2b-page-stage mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
             {children}
