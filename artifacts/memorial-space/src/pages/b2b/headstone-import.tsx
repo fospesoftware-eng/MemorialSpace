@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fileToDataUrl, downscaleImage } from "@/lib/cemetery-config";
 
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const SCAN_BATCH_SIZE = 8;
 
 type UploadImage = {
   fileName: string;
@@ -127,22 +128,31 @@ export default function HeadstoneImportPage() {
     setAnalyzing(true);
     setError(null);
     setSuccess(null);
+    setRows([]);
+    setFolder(null);
     try {
-      const result = await api<AnalyzeResponse>("/headstone-import/analyze", {
-        method: "POST",
-        body: JSON.stringify({ images }),
-      });
       const previewByName = new Map(
         images.map((image) => [image.fileName, image.dataUrl]),
       );
-      setFolder(result.folder);
-      setRows(
-        result.rows.map((row) => ({
+      const allRows: ReviewRow[] = [];
+      let activeFolder: string | null = null;
+
+      for (let start = 0; start < images.length; start += SCAN_BATCH_SIZE) {
+        const batch = images.slice(start, start + SCAN_BATCH_SIZE);
+        const result = await api<AnalyzeResponse>("/headstone-import/analyze", {
+          method: "POST",
+          body: JSON.stringify({ images: batch }),
+        });
+        activeFolder = result.folder;
+        const scannedRows = result.rows.map((row) => ({
           ...row,
           previewDataUrl: previewByName.get(row.imageFileName),
           people: row.people.length > 0 ? row.people : [{ ...emptyPerson }],
-        })),
-      );
+        }));
+        allRows.push(...scannedRows);
+        setFolder(activeFolder);
+        setRows([...allRows]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI scan failed.");
     } finally {

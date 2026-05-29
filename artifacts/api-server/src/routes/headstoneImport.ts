@@ -18,12 +18,12 @@ const analyzeLimiter = rateLimit({
   message: { error: "Too many headstone AI scans. Please wait a few minutes and try again." },
 });
 
-const MAX_IMAGES = 40;
+const MAX_IMAGES = 20;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 const ImageInput = z.object({
-  fileName: z.string().min(1).max(240),
-  dataUrl: z.string().min(50),
+  fileName: z.string().min(1).max(500),
+  dataUrl: z.string().min(20),
 });
 
 const AnalyzeBody = z.object({
@@ -230,7 +230,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = AnalyzeBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid import payload", details: parsed.error.issues });
+      const issue = parsed.error.issues[0];
+      res.status(400).json({
+        error: issue
+          ? `Invalid import payload: ${issue.path.join(".") || "request"} ${issue.message}`
+          : "Invalid import payload",
+        details: parsed.error.issues,
+      });
       return;
     }
 
