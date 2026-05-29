@@ -1,14 +1,18 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type MouseEvent } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   FolderOpen,
   Image as ImageIcon,
   Loader2,
+  Maximize2,
   Plus,
+  Search,
   Trash2,
   Upload,
   Wand2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +28,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { fileToDataUrl, downscaleImage } from "@/lib/cemetery-config";
 
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
@@ -117,6 +128,10 @@ export default function HeadstoneImportPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<VerifyResponse | null>(null);
+  const [viewerRow, setViewerRow] = useState<ReviewRow | null>(null);
+  const [viewerZoom, setViewerZoom] = useState(1.2);
+  const [magnifierEnabled, setMagnifierEnabled] = useState(false);
+  const [magnifierPos, setMagnifierPos] = useState({ x: 50, y: 50 });
 
   const missingCount = useMemo(
     () =>
@@ -246,6 +261,25 @@ export default function HeadstoneImportPage() {
       }),
     );
   };
+
+  const openViewer = (row: ReviewRow) => {
+    setViewerRow(row);
+    setViewerZoom(1.2);
+    setMagnifierEnabled(false);
+    setMagnifierPos({ x: 50, y: 50 });
+  };
+
+  const updateMagnifier = (event: MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    setMagnifierPos({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    });
+  };
+
+  const viewerImage = viewerRow?.previewDataUrl ?? viewerRow?.storedPath ?? "";
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -382,11 +416,21 @@ export default function HeadstoneImportPage() {
                   <div className="space-y-3">
                     <div className="overflow-hidden rounded-md border border-border/70 bg-muted">
                       {row.previewDataUrl || row.storedPath ? (
-                        <img
-                          src={row.previewDataUrl ?? row.storedPath}
-                          alt={row.imageFileName}
-                          className="aspect-[4/3] w-full object-cover"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => openViewer(row)}
+                          className="group relative block w-full overflow-hidden text-left"
+                          aria-label={`Open ${row.imageFileName} image viewer`}
+                        >
+                          <img
+                            src={row.previewDataUrl ?? row.storedPath}
+                            alt={row.imageFileName}
+                            className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+                          <span className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm backdrop-blur">
+                            <Maximize2 className="h-4 w-4" />
+                          </span>
+                        </button>
                       ) : (
                         <div className="flex aspect-[4/3] items-center justify-center text-muted-foreground">
                           <ImageIcon className="h-8 w-8" />
@@ -525,6 +569,97 @@ export default function HeadstoneImportPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={Boolean(viewerRow)} onOpenChange={(open) => !open && setViewerRow(null)}>
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-border/70 px-5 py-4 pr-12">
+            <DialogTitle className="break-all text-base">
+              {viewerRow?.imageFileName ?? "Headstone image"}
+            </DialogTitle>
+            <DialogDescription>
+              Use zoom or magnify mode to inspect small inscription text.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-5 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setViewerZoom((zoom) => Math.max(0.8, zoom - 0.25))}
+            >
+              <ZoomOut className="h-4 w-4" />
+              Zoom out
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setViewerZoom((zoom) => Math.min(4, zoom + 0.25))}
+            >
+              <ZoomIn className="h-4 w-4" />
+              Zoom in
+            </Button>
+            <Button
+              type="button"
+              variant={magnifierEnabled ? "default" : "outline"}
+              size="sm"
+              className="gap-2"
+              onClick={() => setMagnifierEnabled((enabled) => !enabled)}
+            >
+              <Search className="h-4 w-4" />
+              Magnify
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewerZoom(1.2)}
+            >
+              Reset
+            </Button>
+            <Badge variant="outline">{Math.round(viewerZoom * 100)}%</Badge>
+          </div>
+
+          <div className="max-h-[70vh] overflow-auto bg-muted/40 p-5">
+            {viewerImage ? (
+              <div
+                className="relative mx-auto w-fit"
+                onMouseMove={updateMagnifier}
+                onMouseLeave={() => setMagnifierPos({ x: 50, y: 50 })}
+              >
+                <img
+                  src={viewerImage}
+                  alt={viewerRow?.imageFileName ?? "Headstone image"}
+                  className="max-w-none rounded-md border border-border bg-background shadow-sm"
+                  style={{
+                    width: `${Math.round(820 * viewerZoom)}px`,
+                  }}
+                />
+                {magnifierEnabled && (
+                  <div
+                    className="pointer-events-none absolute h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-background shadow-2xl ring-1 ring-border"
+                    style={{
+                      left: `${magnifierPos.x}%`,
+                      top: `${magnifierPos.y}%`,
+                      backgroundImage: `url(${viewerImage})`,
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: `${Math.round(820 * viewerZoom * 2.4)}px auto`,
+                      backgroundPosition: `${magnifierPos.x}% ${magnifierPos.y}%`,
+                    }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="flex h-64 items-center justify-center rounded-md border border-dashed text-muted-foreground">
+                No image available
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
