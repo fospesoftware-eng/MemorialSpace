@@ -1,15 +1,11 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
-import * as XLSX from "xlsx";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
-import {
-  burialsTable,
-  db,
-  platformAiSettingsTable,
-  plotsTable,
-} from "@workspace/db";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { db, platformAiSettingsTable } from "@workspace/db";
 import { asyncHandler } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -23,7 +19,6 @@ const analyzeLimiter = rateLimit({
 });
 
 const MAX_IMAGES = 40;
-const MAX_SHEET_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 const ImageInput = z.object({
@@ -31,44 +26,30 @@ const ImageInput = z.object({
   dataUrl: z.string().min(50),
 });
 
-const SheetInput = z.object({
-  fileName: z.string().min(1).max(240),
-  dataUrl: z.string().min(20),
-});
-
 const AnalyzeBody = z.object({
   images: z.array(ImageInput).min(1).max(MAX_IMAGES),
-  sheet: SheetInput,
 });
 
 const PersonInput = z.object({
-  name: z.string().min(1).max(240),
+  name: z.string().max(240),
   dateOfBirth: z.string().max(40).nullable().optional(),
   dateOfDeath: z.string().max(40).nullable().optional(),
 });
 
-const CommitRow = z.object({
+const VerifiedRow = z.object({
   imageFileName: z.string().min(1).max(240),
-  plotNumber: z.string().min(1).max(120),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
+  storedPath: z.string().min(1).max(500),
   isFamilyHeadstone: z.boolean().default(false),
-  people: z.array(PersonInput).min(1).max(12),
+  people: z.array(PersonInput).max(12),
+  inscriptionText: z.string().max(5000).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  warnings: z.array(z.string().max(240)).max(12).optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
-const CommitBody = z.object({
-  rows: z.array(CommitRow).min(1).max(500),
+const VerifyBody = z.object({
+  rows: z.array(VerifiedRow).min(1).max(500),
 });
-
-type SheetRow = {
-  imageFileName: string;
-  plotNumber: string;
-  latitude: number | null;
-  longitude: number | null;
-  raw: Record<string, unknown>;
-  rowNumber: number;
-};
 
 type AiPerson = {
   name: string;
@@ -104,93 +85,48 @@ function parseDataUrl(dataUrl: string): { mediaType: string; buffer: Buffer; bas
   return { mediaType, buffer, base64 };
 }
 
-function normalizeKey(key: string): string {
-  return key.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function getCell(row: Record<string, unknown>, candidates: string[]): unknown {
-  const wanted = new Set(candidates.map(normalizeKey));
-  for (const [key, value] of Object.entries(row)) {
-    if (wanted.has(normalizeKey(key))) return value;
-  }
-  return undefined;
-}
-
 function asText(value: unknown): string {
   if (value == null) return "";
   return String(value).trim();
 }
 
-function asNumber(value: unknown): number | null {
-  if (value == null || value === "") return null;
-  const n = Number(String(value).trim());
-  return Number.isFinite(n) ? n : null;
+function safeOriginalFileName(fileName: string): string {
+  const base = fileName.replace(/^.*[\\/]/, "").trim();
+  const cleaned = base.replace(/[\u0000-\u001f\u007f/\\:]+/g, "_");
+  return cleaned || "headstone-image";
 }
 
-function normalizeFileName(name: string): string {
-  return name.trim().toLowerCase().replace(/^.*[\\/]/, "");
+function publicRoot(): string {
+  const cwd = process.cwd();
+  if (cwd.endsWith(path.join("artifacts", "api-server"))) {
+    return path.resolve(cwd, "../memorial-space/public");
+  }
+  return path.resolve(cwd, "artifacts/memorial-space/public");
 }
 
-function stripExtension(name: string): string {
-  return normalizeFileName(name).replace(/\.[^.]+$/, "");
+function headstoneFolder(organizationId: number): { absolute: string; publicBase: string } {
+  const publicBase = `/uploads/cemeteries/${organizationId}/headstones`;
+  return {
+    absolute: path.join(publicRoot(), publicBase),
+    publicBase,
+  };
 }
 
-function parseSheet(sheet: { fileName: string; dataUrl: string }): SheetRow[] {
-  const { buffer, mediaType } = parseDataUrl(sheet.dataUrl);
-  if (buffer.byteLength > MAX_SHEET_BYTES) {
-    throw Object.assign(new Error("Spreadsheet is too large. Please keep it under 2MB."), { code: "BAD_REQUEST" });
+async function storeHeadstoneImage(organizationId: number, image: z.infer<typeof ImageInput>): Promise<string> {
+  const { mediaType, buffer } = parseDataUrl(image.dataUrl);
+  const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  if (!allowed.has(mediaType)) {
+    throw Object.assign(new Error(`Unsupported image type for ${image.fileName}.`), { code: "BAD_REQUEST" });
+  }
+  if (buffer.byteLength > MAX_IMAGE_BYTES) {
+    throw Object.assign(new Error(`${image.fileName} is too large after compression.`), { code: "BAD_REQUEST" });
   }
 
-  let rows: Record<string, unknown>[];
-  const isCsv = mediaType.includes("csv") || /\.csv$/i.test(sheet.fileName);
-  if (isCsv) {
-    const workbook = XLSX.read(buffer.toString("utf8"), { type: "string" });
-    const first = workbook.SheetNames[0];
-    if (!first) throw Object.assign(new Error("Spreadsheet has no worksheets."), { code: "BAD_REQUEST" });
-    rows = XLSX.utils.sheet_to_json(workbook.Sheets[first], { defval: "" }) as Record<string, unknown>[];
-  } else {
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const first = workbook.SheetNames[0];
-    if (!first) throw Object.assign(new Error("Spreadsheet has no worksheets."), { code: "BAD_REQUEST" });
-    rows = XLSX.utils.sheet_to_json(workbook.Sheets[first], { defval: "" }) as Record<string, unknown>[];
-  }
-
-  const parsed: SheetRow[] = [];
-  rows.forEach((row, idx) => {
-    const imageFileName = asText(getCell(row, [
-      "image file name",
-      "image filename",
-      "filename",
-      "file name",
-      "image",
-      "photo",
-      "headstone image",
-    ]));
-    const plotNumber = asText(getCell(row, [
-      "spot number",
-      "spot",
-      "plot number",
-      "plot",
-      "grave number",
-      "grave",
-      "lot",
-      "lot number",
-    ]));
-    const latitude = asNumber(getCell(row, ["lat", "latitude"]));
-    const longitude = asNumber(getCell(row, ["lng", "long", "longitude", "lon"]));
-
-    if (!imageFileName && !plotNumber) return;
-    parsed.push({
-      imageFileName,
-      plotNumber,
-      latitude,
-      longitude,
-      raw: row,
-      rowNumber: idx + 2,
-    });
-  });
-
-  return parsed;
+  const folder = headstoneFolder(organizationId);
+  await mkdir(folder.absolute, { recursive: true });
+  const fileName = safeOriginalFileName(image.fileName);
+  await writeFile(path.join(folder.absolute, fileName), buffer);
+  return `${folder.publicBase}/${encodeURIComponent(fileName)}`;
 }
 
 function dateOrNull(value: unknown): string | null {
@@ -288,16 +224,6 @@ Rules:
   }
 }
 
-function toDbDate(v: string | null | undefined): string | null {
-  const s = asText(v);
-  if (!s) return null;
-  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const d = new Date(s);
-  if (Number.isNaN(d.valueOf())) return null;
-  return d.toISOString().slice(0, 10);
-}
-
 router.post(
   "/headstone-import/analyze",
   analyzeLimiter,
@@ -314,36 +240,15 @@ router.post(
       return;
     }
 
-    const sheetRows = parseSheet(parsed.data.sheet);
-    const imageByName = new Map<string, z.infer<typeof ImageInput>>();
-    for (const image of parsed.data.images) {
-      imageByName.set(normalizeFileName(image.fileName), image);
-      imageByName.set(stripExtension(image.fileName), image);
-    }
+    const organizationId = req.session!.user!.organizationId!;
 
     const results = [];
-    for (const row of sheetRows) {
-      const image = imageByName.get(normalizeFileName(row.imageFileName)) ?? imageByName.get(stripExtension(row.imageFileName));
-      if (!row.plotNumber || !row.imageFileName || !image) {
-        results.push({
-          ...row,
-          status: "needs_review",
-          isFamilyHeadstone: false,
-          people: [],
-          confidence: 0,
-          inscriptionText: "",
-          warnings: [
-            !row.plotNumber ? `Spreadsheet row ${row.rowNumber} is missing a plot/spot number.` : "",
-            !row.imageFileName ? `Spreadsheet row ${row.rowNumber} is missing an image filename.` : "",
-            row.imageFileName && !image ? `No uploaded image matched "${row.imageFileName}".` : "",
-          ].filter(Boolean),
-        });
-        continue;
-      }
-
+    for (const image of parsed.data.images) {
+      const storedPath = await storeHeadstoneImage(organizationId, image);
       const ai = await analyzeHeadstone({ image, anthropicClient });
       results.push({
-        ...row,
+        imageFileName: safeOriginalFileName(image.fileName),
+        storedPath,
         status: ai.people.length > 0 ? "ready" : "needs_review",
         isFamilyHeadstone: ai.isFamilyHeadstone,
         people: ai.people,
@@ -353,85 +258,63 @@ router.post(
       });
     }
 
-    res.json({ rows: results, imageCount: parsed.data.images.length, sheetRowCount: sheetRows.length });
+    res.json({ rows: results, imageCount: parsed.data.images.length, folder: headstoneFolder(organizationId).publicBase });
   }),
 );
 
 router.post(
-  "/headstone-import/commit",
+  "/headstone-import/verify",
   asyncHandler(async (req, res) => {
-    const parsed = CommitBody.safeParse(req.body);
+    const parsed = VerifyBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid reviewed rows", details: parsed.error.issues });
+      res.status(400).json({ error: "Invalid verified rows", details: parsed.error.issues });
       return;
     }
     const organizationId = req.session!.user!.organizationId!;
-    let plotsCreated = 0;
-    let plotsUpdated = 0;
-    let burialsCreated = 0;
-    let burialsUpdated = 0;
-
-    for (const row of parsed.data.rows) {
-      const [existingPlot] = await db
-        .select()
-        .from(plotsTable)
-        .where(and(eq(plotsTable.organizationId, organizationId), eq(plotsTable.plotNumber, row.plotNumber)))
-        .limit(1);
-
-      const plotPatch = {
-        organizationId,
-        plotNumber: row.plotNumber,
-        status: "occupied" as const,
-        type: row.isFamilyHeadstone ? "family" as const : "standard" as const,
-        latitude: row.latitude ?? null,
-        longitude: row.longitude ?? null,
-        notes: [
-          row.notes ?? "",
-          `AI headstone import: ${row.imageFileName}`,
-        ].filter(Boolean).join("\n"),
-      };
-
-      const plot = existingPlot
-        ? (await db.update(plotsTable).set(plotPatch).where(eq(plotsTable.id, existingPlot.id)).returning())[0]
-        : (await db.insert(plotsTable).values(plotPatch).returning())[0];
-      if (existingPlot) plotsUpdated += 1;
-      else plotsCreated += 1;
-
-      for (const person of row.people) {
-        const [existingBurial] = await db
-          .select()
-          .from(burialsTable)
-          .where(and(
-            eq(burialsTable.organizationId, organizationId),
-            eq(burialsTable.plotId, plot.id),
-            eq(burialsTable.deceasedName, person.name),
-          ))
-          .limit(1);
-
-        const burialPatch = {
+    const folder = headstoneFolder(organizationId);
+    await mkdir(folder.absolute, { recursive: true });
+    const verifiedRows = parsed.data.rows.map((row) => ({
+      ...row,
+      imageFileName: safeOriginalFileName(row.imageFileName),
+      people: row.people.filter((person) => asText(person.name)),
+      status: row.people.some((person) => asText(person.name)) ? "verified" : "needs_manual_entry",
+      verifiedAt: new Date().toISOString(),
+    }));
+    await writeFile(
+      path.join(folder.absolute, "headstone-manifest.json"),
+      JSON.stringify(
+        {
           organizationId,
-          plotId: plot.id,
-          deceasedName: person.name,
-          deceasedDob: toDbDate(person.dateOfBirth),
-          deceasedDod: toDbDate(person.dateOfDeath),
-          notes: [
-            row.isFamilyHeadstone ? "Family headstone" : "",
-            row.notes ?? "",
-            `Imported from headstone image: ${row.imageFileName}`,
-          ].filter(Boolean).join("\n"),
-        };
+          folder: folder.publicBase,
+          updatedAt: new Date().toISOString(),
+          images: verifiedRows,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
 
-        if (existingBurial) {
-          await db.update(burialsTable).set(burialPatch).where(eq(burialsTable.id, existingBurial.id));
-          burialsUpdated += 1;
-        } else {
-          await db.insert(burialsTable).values(burialPatch);
-          burialsCreated += 1;
-        }
-      }
-    }
+    res.json({
+      verifiedCount: verifiedRows.filter((row) => row.status === "verified").length,
+      needsManualEntryCount: verifiedRows.filter((row) => row.status === "needs_manual_entry").length,
+      imageCount: verifiedRows.length,
+      folder: folder.publicBase,
+      manifestPath: `${folder.publicBase}/headstone-manifest.json`,
+    });
+  }),
+);
 
-    res.json({ plotsCreated, plotsUpdated, burialsCreated, burialsUpdated });
+router.get(
+  "/headstone-import/library",
+  asyncHandler(async (req, res) => {
+    const organizationId = req.session!.user!.organizationId!;
+    const folder = headstoneFolder(organizationId);
+    res.json({
+      organizationId,
+      folder: folder.publicBase,
+      manifestPath: `${folder.publicBase}/headstone-manifest.json`,
+    });
   }),
 );
 

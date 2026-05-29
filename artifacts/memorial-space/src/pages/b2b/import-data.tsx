@@ -14,7 +14,7 @@ const importOptions = [
   {
     title: "Headstone AI Import",
     description:
-      "Upload headstone photos with a spreadsheet, extract names and dates with Claude, review the results, then write burial spots to the cemetery map.",
+      "Bulk upload headstone photos, extract names and dates with Claude, review missing text manually, then save a cemetery headstone image library for later spreadsheet matching.",
     href: "/import-data/headstones",
     icon: ScanText,
     status: "Ready",
@@ -76,28 +76,30 @@ export default function ImportDataPage() {
             Supported source data
           </CardTitle>
           <CardDescription>
-            Current imports support spreadsheet-driven cemetery records with
-            image filenames, spot numbers, latitude, and longitude.
+            Current imports support image-first headstone scanning and later
+            spreadsheet matching by the original image filename.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Spreadsheet rows</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              XLSX, XLS, or CSV files with flexible column names.
+              XLSX, XLS, or CSV files can be matched by image filename after
+              headstone images are verified.
             </p>
           </div>
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Headstone images</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Batch photos matched by filename from the spreadsheet.
+              Batch photos are stored in the cemetery headstone folder with
+              original filenames preserved.
             </p>
           </div>
           <div className="rounded-md border border-border/70 p-3">
             <p className="text-sm font-medium">Map placement</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Spot number, latitude, and longitude are saved to cemetery burial
-              spot records.
+              Spot number, latitude, longitude, and lot fields can be imported
+              later and matched to verified image names.
             </p>
           </div>
         </CardContent>

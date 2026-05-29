@@ -2,7 +2,7 @@ import { useMemo, useState, type ChangeEvent } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  FileSpreadsheet,
+  FolderOpen,
   Image as ImageIcon,
   Loader2,
   Plus,
@@ -41,9 +41,8 @@ type Person = {
 
 type ReviewRow = {
   imageFileName: string;
-  plotNumber: string;
-  latitude: number | null;
-  longitude: number | null;
+  storedPath: string;
+  previewDataUrl?: string;
   status: string;
   isFamilyHeadstone: boolean;
   people: Person[];
@@ -56,14 +55,15 @@ type ReviewRow = {
 type AnalyzeResponse = {
   rows: ReviewRow[];
   imageCount: number;
-  sheetRowCount: number;
+  folder: string;
 };
 
-type CommitResponse = {
-  plotsCreated: number;
-  plotsUpdated: number;
-  burialsCreated: number;
-  burialsUpdated: number;
+type VerifyResponse = {
+  verifiedCount: number;
+  needsManualEntryCount: number;
+  imageCount: number;
+  folder: string;
+  manifestPath: string;
 };
 
 async function api<T>(path: string, init: RequestInit): Promise<T> {
@@ -81,45 +81,35 @@ async function api<T>(path: string, init: RequestInit): Promise<T> {
   return body as T;
 }
 
-function toNumber(value: string): number | null {
-  if (!value.trim()) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+const emptyPerson: Person = {
+  name: "",
+  dateOfBirth: null,
+  dateOfDeath: null,
+};
 
 export default function HeadstoneImportPage() {
-  const [sheet, setSheet] = useState<{
-    fileName: string;
-    dataUrl: string;
-  } | null>(null);
   const [images, setImages] = useState<UploadImage[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [folder, setFolder] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [committing, setCommitting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<CommitResponse | null>(null);
+  const [success, setSuccess] = useState<VerifyResponse | null>(null);
 
-  const readyRows = useMemo(
+  const missingCount = useMemo(
     () =>
-      rows.filter(
-        (row) => row.plotNumber.trim() && row.people.some((p) => p.name.trim()),
-      ),
+      rows.filter((row) => !row.people.some((person) => person.name.trim()))
+        .length,
     [rows],
   );
-
-  const onSheet = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-    setSuccess(null);
-    setSheet({ fileName: file.name, dataUrl: await fileToDataUrl(file) });
-  };
 
   const onImages = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setError(null);
     setSuccess(null);
+    setRows([]);
+    setFolder(null);
     const next: UploadImage[] = [];
     for (const file of files) {
       const data = await fileToDataUrl(file);
@@ -130,8 +120,8 @@ export default function HeadstoneImportPage() {
   };
 
   const analyze = async () => {
-    if (!sheet || images.length === 0) {
-      setError("Upload one spreadsheet and at least one headstone image.");
+    if (images.length === 0) {
+      setError("Upload at least one headstone image.");
       return;
     }
     setAnalyzing(true);
@@ -140,9 +130,19 @@ export default function HeadstoneImportPage() {
     try {
       const result = await api<AnalyzeResponse>("/headstone-import/analyze", {
         method: "POST",
-        body: JSON.stringify({ sheet, images }),
+        body: JSON.stringify({ images }),
       });
-      setRows(result.rows);
+      const previewByName = new Map(
+        images.map((image) => [image.fileName, image.dataUrl]),
+      );
+      setFolder(result.folder);
+      setRows(
+        result.rows.map((row) => ({
+          ...row,
+          previewDataUrl: previewByName.get(row.imageFileName),
+          people: row.people.length > 0 ? row.people : [{ ...emptyPerson }],
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI scan failed.");
     } finally {
@@ -150,20 +150,23 @@ export default function HeadstoneImportPage() {
     }
   };
 
-  const commit = async () => {
-    setCommitting(true);
+  const saveVerified = async () => {
+    setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const result = await api<CommitResponse>("/headstone-import/commit", {
+      const result = await api<VerifyResponse>("/headstone-import/verify", {
         method: "POST",
-        body: JSON.stringify({ rows: readyRows }),
+        body: JSON.stringify({
+          rows: rows.map(({ previewDataUrl, ...row }) => row),
+        }),
       });
       setSuccess(result);
+      setFolder(result.folder);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed.");
+      setError(err instanceof Error ? err.message : "Could not save review.");
     } finally {
-      setCommitting(false);
+      setSaving(false);
     }
   };
 
@@ -197,10 +200,7 @@ export default function HeadstoneImportPage() {
         i === rowIndex
           ? {
               ...row,
-              people: [
-                ...row.people,
-                { name: "", dateOfBirth: null, dateOfDeath: null },
-              ],
+              people: [...row.people, { ...emptyPerson }],
               isFamilyHeadstone: true,
             }
           : row,
@@ -213,7 +213,7 @@ export default function HeadstoneImportPage() {
       prev.map((row, i) => {
         if (i !== rowIndex) return row;
         const people = row.people.filter((_, p) => p !== personIndex);
-        return { ...row, people };
+        return { ...row, people: people.length > 0 ? people : [{ ...emptyPerson }] };
       }),
     );
   };
@@ -226,16 +226,16 @@ export default function HeadstoneImportPage() {
             Headstone AI Import
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Upload headstone photos with a spreadsheet that includes image
-            filename, plot or spot number, latitude, and longitude. Claude reads
-            inscriptions, flags family headstones, and prepares records for
-            review before writing to the map.
+            Bulk upload headstone images only. MemorialSpace stores each image
+            under the cemetery headstone folder using the original filename,
+            reads names and dates with Claude, then opens a verification screen
+            for manual corrections before spreadsheet matching in Import Center.
           </p>
         </div>
         <Button
           className="gap-2"
           onClick={analyze}
-          disabled={analyzing || !sheet || images.length === 0}
+          disabled={analyzing || images.length === 0}
           data-testid="button-run-headstone-ai"
         >
           {analyzing ? (
@@ -243,14 +243,14 @@ export default function HeadstoneImportPage() {
           ) : (
             <Wand2 className="h-4 w-4" />
           )}
-          {analyzing ? "Scanning..." : "Run AI scan"}
+          {analyzing ? "Scanning..." : "Scan images"}
         </Button>
       </div>
 
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Import needs attention</AlertTitle>
+          <AlertTitle>Headstone import needs attention</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -258,253 +258,241 @@ export default function HeadstoneImportPage() {
       {success && (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>Imported into cemetery records</AlertTitle>
+          <AlertTitle>Headstone verification saved</AlertTitle>
           <AlertDescription>
-            Burial spots created: {success.plotsCreated}. Burial spots updated:{" "}
-            {success.plotsUpdated}. Interments created: {success.burialsCreated}
-            . Interments updated: {success.burialsUpdated}.
+            Saved {success.imageCount} image records in {success.folder}.{" "}
+            {success.verifiedCount} verified,{" "}
+            {success.needsManualEntryCount} still missing names.
           </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileSpreadsheet className="h-5 w-5 text-primary" />
-              Spreadsheet
-            </CardTitle>
-            <CardDescription>
-              Accepted columns include image filename, spot number or plot
-              number, lat, long, latitude, and longitude.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={onSheet}
-              data-testid="input-headstone-sheet"
-            />
-            {sheet && <Badge variant="outline">{sheet.fileName}</Badge>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ImageIcon className="h-5 w-5 text-primary" />
-              Headstone Images
-            </CardTitle>
-            <CardDescription>
-              Filenames must match the spreadsheet image filename column. Images
-              are compressed before scanning.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={onImages}
-              data-testid="input-headstone-images"
-            />
-            <div className="flex flex-wrap gap-2">
-              {images.map((image) => (
-                <Badge key={image.fileName} variant="outline">
-                  {image.fileName}
-                </Badge>
-              ))}
-              {images.length === 0 && (
-                <span className="text-sm text-muted-foreground">
-                  No images selected.
-                </span>
-              )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ImageIcon className="h-5 w-5 text-primary" />
+            Bulk Headstone Images
+          </CardTitle>
+          <CardDescription>
+            Select multiple image files. Filenames are preserved so spreadsheet
+            imports can match rows to these headstone images later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onImages}
+            data-testid="input-headstone-images"
+          />
+          <div className="flex flex-wrap gap-2">
+            {images.map((image) => (
+              <Badge key={image.fileName} variant="outline">
+                {image.fileName}
+              </Badge>
+            ))}
+            {images.length === 0 && (
+              <span className="text-sm text-muted-foreground">
+                No images selected.
+              </span>
+            )}
+          </div>
+          {folder && (
+            <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              <FolderOpen className="h-4 w-4 text-primary" />
+              Cemetery headstone folder: {folder}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {rows.length > 0 && (
         <Card>
           <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Review extracted records</CardTitle>
+              <CardTitle>Verify AI Image Reading</CardTitle>
               <CardDescription>
-                Edit names, dates, plot numbers, and coordinates before
-                importing to the cemetery map.
+                Check every image. If Claude missed a name or date, enter it
+                here before saving the headstone image library.
               </CardDescription>
             </div>
             <Button
               className="gap-2"
-              onClick={commit}
-              disabled={committing || readyRows.length === 0}
-              data-testid="button-commit-headstone-import"
+              onClick={saveVerified}
+              disabled={saving || rows.length === 0}
+              data-testid="button-save-headstone-verification"
             >
-              {committing ? (
+              {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              Import {readyRows.length} ready row
-              {readyRows.length === 1 ? "" : "s"}
+              {saving ? "Saving..." : "Save verification"}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            {rows.map((row, rowIndex) => (
-              <div
-                key={`${row.imageFileName}-${rowIndex}`}
-                className="rounded-lg border border-border/70 bg-background p-4"
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">
-                        {row.imageFileName || "Missing filename"}
-                      </h3>
-                      <Badge
-                        variant={row.status === "ready" ? "default" : "outline"}
-                      >
-                        {row.status}
+            {missingCount > 0 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Manual entry needed</AlertTitle>
+                <AlertDescription>
+                  {missingCount} image{missingCount === 1 ? "" : "s"} have no
+                  person name yet. Add the visible text before final matching.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {rows.map((row, rowIndex) => {
+              const needsName = !row.people.some((person) => person.name.trim());
+              return (
+                <div
+                  key={`${row.imageFileName}-${rowIndex}`}
+                  className="grid gap-4 rounded-lg border border-border/70 bg-background p-4 lg:grid-cols-[220px_1fr]"
+                >
+                  <div className="space-y-3">
+                    <div className="overflow-hidden rounded-md border border-border/70 bg-muted">
+                      {row.previewDataUrl || row.storedPath ? (
+                        <img
+                          src={row.previewDataUrl ?? row.storedPath}
+                          alt={row.imageFileName}
+                          className="aspect-[4/3] w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex aspect-[4/3] items-center justify-center text-muted-foreground">
+                          <ImageIcon className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="break-all text-sm font-semibold">
+                        {row.imageFileName}
+                      </p>
+                      <Badge variant={needsName ? "outline" : "default"}>
+                        {needsName ? "Needs manual entry" : "Ready"}
                       </Badge>
                       <Badge variant="outline">
                         {Math.round((row.confidence ?? 0) * 100)}% confidence
                       </Badge>
                     </div>
-                    {row.inscriptionText && (
-                      <p className="max-w-4xl text-xs text-muted-foreground">
-                        {row.inscriptionText}
-                      </p>
-                    )}
-                    {row.warnings?.length > 0 && (
-                      <p className="text-xs text-amber-500">
-                        {row.warnings.join(" ")}
-                      </p>
-                    )}
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={row.isFamilyHeadstone}
-                      onCheckedChange={(v) =>
-                        patchRow(rowIndex, { isFamilyHeadstone: Boolean(v) })
-                      }
-                    />
-                    Family headstone
-                  </label>
-                </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <div className="space-y-1">
-                    <Label>Burial spot number</Label>
-                    <Input
-                      value={row.plotNumber}
-                      onChange={(e) =>
-                        patchRow(rowIndex, { plotNumber: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Latitude</Label>
-                    <Input
-                      value={row.latitude ?? ""}
-                      onChange={(e) =>
-                        patchRow(rowIndex, {
-                          latitude: toNumber(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Longitude</Label>
-                    <Input
-                      value={row.longitude ?? ""}
-                      onChange={(e) =>
-                        patchRow(rowIndex, {
-                          longitude: toNumber(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Notes</Label>
-                    <Input
-                      value={row.notes ?? ""}
-                      onChange={(e) =>
-                        patchRow(rowIndex, { notes: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">People on headstone</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => addPerson(rowIndex)}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add person
-                    </Button>
-                  </div>
-                  {row.people.length === 0 && (
-                    <Textarea
-                      value={row.inscriptionText}
-                      onChange={(e) =>
-                        patchRow(rowIndex, { inscriptionText: e.target.value })
-                      }
-                      placeholder="No person extracted. Add a person manually, or keep inscription notes here."
-                    />
-                  )}
-                  {row.people.map((person, personIndex) => (
-                    <div
-                      key={personIndex}
-                      className="grid gap-3 md:grid-cols-[1fr_160px_160px_auto]"
-                    >
-                      <Input
-                        value={person.name}
-                        onChange={(e) =>
-                          patchPerson(rowIndex, personIndex, {
-                            name: e.target.value,
-                          })
-                        }
-                        placeholder="Full name"
-                      />
-                      <Input
-                        value={person.dateOfBirth ?? ""}
-                        onChange={(e) =>
-                          patchPerson(rowIndex, personIndex, {
-                            dateOfBirth: e.target.value || null,
-                          })
-                        }
-                        placeholder="Birth date"
-                      />
-                      <Input
-                        value={person.dateOfDeath ?? ""}
-                        onChange={(e) =>
-                          patchPerson(rowIndex, personIndex, {
-                            dateOfDeath: e.target.value || null,
-                          })
-                        }
-                        placeholder="Death date"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => removePerson(rowIndex, personIndex)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove person</span>
-                      </Button>
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        {row.inscriptionText && (
+                          <p className="max-w-4xl whitespace-pre-line text-xs text-muted-foreground">
+                            {row.inscriptionText}
+                          </p>
+                        )}
+                        {row.warnings?.length > 0 && (
+                          <p className="text-xs text-amber-500">
+                            {row.warnings.join(" ")}
+                          </p>
+                        )}
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Checkbox
+                          checked={row.isFamilyHeadstone}
+                          onCheckedChange={(v) =>
+                            patchRow(rowIndex, {
+                              isFamilyHeadstone: Boolean(v),
+                            })
+                          }
+                        />
+                        Family headstone
+                      </label>
                     </div>
-                  ))}
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">
+                          Names and dates on image
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => addPerson(rowIndex)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add person
+                        </Button>
+                      </div>
+                      {row.people.map((person, personIndex) => (
+                        <div
+                          key={personIndex}
+                          className="grid gap-3 md:grid-cols-[1fr_160px_160px_auto]"
+                        >
+                          <Input
+                            value={person.name}
+                            onChange={(e) =>
+                              patchPerson(rowIndex, personIndex, {
+                                name: e.target.value,
+                              })
+                            }
+                            placeholder="Full name"
+                          />
+                          <Input
+                            value={person.dateOfBirth ?? ""}
+                            onChange={(e) =>
+                              patchPerson(rowIndex, personIndex, {
+                                dateOfBirth: e.target.value || null,
+                              })
+                            }
+                            placeholder="Birth date"
+                          />
+                          <Input
+                            value={person.dateOfDeath ?? ""}
+                            onChange={(e) =>
+                              patchPerson(rowIndex, personIndex, {
+                                dateOfDeath: e.target.value || null,
+                              })
+                            }
+                            placeholder="Death date"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => removePerson(rowIndex, personIndex)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Remove person</span>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>Readable inscription text</Label>
+                        <Textarea
+                          value={row.inscriptionText}
+                          onChange={(e) =>
+                            patchRow(rowIndex, {
+                              inscriptionText: e.target.value,
+                            })
+                          }
+                          placeholder="Enter visible text if AI missed it."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Reviewer notes</Label>
+                        <Textarea
+                          value={row.notes ?? ""}
+                          onChange={(e) =>
+                            patchRow(rowIndex, { notes: e.target.value })
+                          }
+                          placeholder="Optional notes for later spreadsheet matching."
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
