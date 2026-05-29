@@ -19,7 +19,7 @@ const analyzeLimiter = rateLimit({
 });
 
 const MAX_IMAGES = 20;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
 const ImageInput = z.object({
   fileName: z.string().min(1).max(500),

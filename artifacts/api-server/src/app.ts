@@ -51,10 +51,10 @@ app.use(
   }),
 );
 
-// Allow up to ~12MB JSON bodies to accommodate base64-encoded map images
-// (sent by the AI Map Maker, downscaled to 1600px webp on the client).
-app.use(express.json({ limit: "12mb" }));
-app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+// Allow larger JSON bodies for image-based tools. Headstone import sends one
+// compressed image per request, while AI Map Maker sends downscaled maps.
+app.use(express.json({ limit: "32mb" }));
+app.use(express.urlencoded({ extended: true, limit: "32mb" }));
 
 // Sessions before any route — every request must have access to req.session.
 app.use(buildSessionMiddleware());

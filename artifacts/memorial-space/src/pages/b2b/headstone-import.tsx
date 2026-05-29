@@ -27,7 +27,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fileToDataUrl, downscaleImage } from "@/lib/cemetery-config";
 
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-const SCAN_BATCH_SIZE = 8;
+const SCAN_BATCH_SIZE = 1;
+const MAX_IMAGE_DATA_URL_BYTES = 1_500_000;
 
 type UploadImage = {
   fileName: string;
@@ -88,6 +89,22 @@ const emptyPerson: Person = {
   dateOfDeath: null,
 };
 
+function dataUrlBytes(dataUrl: string) {
+  const base64 = dataUrl.split(",", 2)[1] ?? "";
+  return Math.ceil((base64.length * 3) / 4);
+}
+
+async function prepareHeadstoneImage(file: File): Promise<UploadImage> {
+  const original = await fileToDataUrl(file);
+  let best = original;
+  for (const maxWidth of [1200, 1000, 800, 640]) {
+    const scaled = await downscaleImage(original, maxWidth, 0.62);
+    best = scaled.data;
+    if (dataUrlBytes(best) <= MAX_IMAGE_DATA_URL_BYTES) break;
+  }
+  return { fileName: file.name, dataUrl: best };
+}
+
 export default function HeadstoneImportPage() {
   const [images, setImages] = useState<UploadImage[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -113,9 +130,7 @@ export default function HeadstoneImportPage() {
     setFolder(null);
     const next: UploadImage[] = [];
     for (const file of files) {
-      const data = await fileToDataUrl(file);
-      const scaled = await downscaleImage(data, 1400, 0.8);
-      next.push({ fileName: file.name, dataUrl: scaled.data });
+      next.push(await prepareHeadstoneImage(file));
     }
     setImages(next);
   };
