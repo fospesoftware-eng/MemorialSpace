@@ -2151,6 +2151,50 @@ export default function MapMaker() {
 
         <Separator orientation="vertical" className="h-7 hidden md:block" />
 
+        <div className="hidden min-w-[220px] max-w-[300px] flex-col gap-1 lg:flex">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Cemetery
+            </span>
+            <Link href="/organizations" className="text-[10px] font-medium text-primary hover:underline">
+              Create
+            </Link>
+          </div>
+          <Select
+            value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
+            onValueChange={(value) =>
+              setDoc((d) => ({
+                ...d,
+                cemeteryId: value === "none" ? null : Number(value),
+                updatedAt: Date.now(),
+              }))
+            }
+          >
+            <SelectTrigger className="h-7 text-xs" data-testid="top-select-map-cemetery">
+              <SelectValue placeholder="Select cemetery" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Select cemetery</SelectItem>
+              {cemeteries.map((cemetery) => (
+                <SelectItem key={cemetery.id} value={String(cemetery.id)}>
+                  {cemetery.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Link href="/organizations" className="lg:hidden">
+          <Button variant={doc.cemeteryId ? "ghost" : "outline"} size="sm" className="h-8 px-2" title="Select or create cemetery">
+            <Database className="h-3.5 w-3.5" />
+            <span className="ml-1.5 hidden sm:inline text-xs">
+              {doc.cemeteryId ? "Cemetery" : "Select cemetery"}
+            </span>
+          </Button>
+        </Link>
+
+        <Separator orientation="vertical" className="h-7 hidden md:block" />
+
         {/* View 2D/3D */}
         <div className="hidden md:flex items-center gap-1">
           <Button size="sm" variant={view === "2d" ? "default" : "outline"} onClick={() => setView("2d")} data-testid="view-2d" className="h-8">
@@ -2295,6 +2339,18 @@ export default function MapMaker() {
                   </div>
                 </div>
                 <Badge variant={doc.projectStatus === "published" ? "default" : "outline"}>{doc.projectStatus}</Badge>
+              </div>
+
+              <div className="mb-2 rounded-md border border-primary/20 bg-primary/5 p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-primary">Cemetery</span>
+                  <Link href="/organizations" className="text-[10px] font-medium text-primary hover:underline">
+                    Create new
+                  </Link>
+                </div>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  Select the global cemetery before importing or publishing map data.
+                </p>
               </div>
 
               <Select
