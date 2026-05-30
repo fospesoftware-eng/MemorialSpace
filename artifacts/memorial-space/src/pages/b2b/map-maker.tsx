@@ -158,6 +158,9 @@ interface Plot {
   birthYear?: string;
   deathYear?: string;
   gridRef?: string;
+  accuracy?: number;
+  sourceCsv?: string;
+  sourceLayer?: string;
 }
 
 interface MapDoc {
@@ -167,6 +170,7 @@ interface MapDoc {
   image: string | null;
   imgWidth: number;
   imgHeight: number;
+  coordinateSystem?: CoordinateSystem;
   plots: Plot[];
   spots: BurialSpot[];
   importSource?: {
@@ -176,6 +180,17 @@ interface MapDoc {
   };
   updatedAt: number;
 }
+
+type CoordinateSystem = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  scale: number;
+  pad: number;
+  width: number;
+  height: number;
+};
 
 type Selection = { kind: "plot"; id: string } | { kind: "spot"; id: string } | null;
 
@@ -188,6 +203,7 @@ const DEFAULT_DOC: MapDoc = {
   image: null,
   imgWidth: 1200,
   imgHeight: 800,
+  coordinateSystem: undefined,
   plots: [],
   spots: [],
   updatedAt: Date.now(),
@@ -203,6 +219,7 @@ type LegacyDoc = {
   image?: string | null;
   imgWidth?: number;
   imgHeight?: number;
+  coordinateSystem?: CoordinateSystem;
   plots?: LegacyPlot[];
   spots?: LegacySpot[];
   importSource?: MapDoc["importSource"];
@@ -324,6 +341,73 @@ function fileBaseName(value: string) {
   return value.split(/[\\/]/).pop()?.trim() ?? value.trim();
 }
 
+function createCoordinateSystem(points: Array<{ x: number; y: number }>): CoordinateSystem {
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const pad = 72;
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const width = Math.max(900, Math.min(2200, spanX * 12 + pad * 2));
+  const height = Math.max(650, Math.min(1800, spanY * 12 + pad * 2));
+  const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+  return { minX, minY, maxX, maxY, scale, pad, width, height };
+}
+
+function projectPoint(system: CoordinateSystem, x: number, y: number) {
+  return {
+    x: system.pad + (x - system.minX) * system.scale,
+    y: system.pad + (y - system.minY) * system.scale,
+  };
+}
+
+function parseWktPolygon(value: string): Array<{ x: number; y: number; z?: number }> {
+  const matches = value.match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi) ?? [];
+  const nums = matches.map(Number).filter(Number.isFinite);
+  const points: Array<{ x: number; y: number; z?: number }> = [];
+  const stride = /\bZ\b/i.test(value) ? 3 : 2;
+  for (let i = 0; i + 1 < nums.length; i += stride) {
+    points.push({ x: nums[i], y: nums[i + 1], z: stride === 3 ? nums[i + 2] : undefined });
+  }
+  return points;
+}
+
+function plotBounds(points: [number, number][]) {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return { x: minX, y: minY, w: Math.max(8, maxX - minX), h: Math.max(8, maxY - minY) };
+}
+
+function fullNameFromRow(row: CsvRow) {
+  return [
+    pick(row, ["first name", "firstname", "first"]),
+    pick(row, ["middle", "middle name", "middlename"]),
+    pick(row, ["last name", "lastname", "family name", "familyname", "last"]),
+  ].filter(Boolean).join(" ").trim() || pick(row, ["name", "deceased name", "deceased", "full name"]);
+}
+
+function burialRecordFromRow(row: CsvRow, index: number, sourceCsv: string): BurialCsvRecord {
+  return {
+    rowNumber: index + 2,
+    name: fullNameFromRow(row),
+    dob: normalizeDateLike(pick(row, ["dob", "date of birth", "birth date", "born"])),
+    dod: normalizeDateLike(pick(row, ["dod", "date of death", "death date", "died"])),
+    veteranStatus: pick(row, ["veteran", "veteran status", "veteranstatus", "military", "service"]),
+    imagePath: pick(row, ["image", "image path", "image filename", "headstone image", "filename", "file name"]),
+    x: pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]),
+    y: pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]),
+    z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
+    lat: pickNumber(row, ["lat", "latitude"]),
+    lon: pickNumber(row, ["lon", "lng", "long", "longitude"]),
+    sourceCsv,
+  };
+}
+
 function migrateDoc(raw: unknown): MapDoc {
   const d = (raw ?? {}) as LegacyDoc;
   return {
@@ -333,6 +417,7 @@ function migrateDoc(raw: unknown): MapDoc {
     image: typeof d.image === "string" ? d.image : null,
     imgWidth:  safeNum(d.imgWidth,  1200),
     imgHeight: safeNum(d.imgHeight, 800),
+    coordinateSystem: d.coordinateSystem,
     plots: (Array.isArray(d.plots) ? d.plots : []).map((p) => {
       // Polygon outline (optional). Accept any array of [x,y] tuples and
       // coerce to finite numbers; drop the field entirely if fewer than 3
@@ -405,6 +490,9 @@ function migrateDoc(raw: unknown): MapDoc {
         birthYear: safeOptStr((p as LegacyPlot & { birthYear?: unknown }).birthYear),
         deathYear: safeOptStr((p as LegacyPlot & { deathYear?: unknown }).deathYear),
         gridRef: safeOptStr((p as LegacyPlot & { gridRef?: unknown }).gridRef),
+        accuracy: safeOptNum((p as LegacyPlot & { accuracy?: unknown }).accuracy),
+        sourceCsv: safeOptStr((p as LegacyPlot & { sourceCsv?: unknown }).sourceCsv),
+        sourceLayer: safeOptStr((p as LegacyPlot & { sourceLayer?: unknown }).sourceLayer),
       };
     }),
     spots: (Array.isArray(d.spots) ? d.spots : []).map((s) => {
@@ -500,6 +588,7 @@ export default function MapMaker() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const gprInputRef = useRef<HTMLInputElement | null>(null);
   const burialInputRef = useRef<HTMLInputElement | null>(null);
+  const datasetInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
   const dragState = useRef<{ mode: "create" | "create-circle" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
@@ -1464,27 +1553,17 @@ export default function MapMaker() {
         return;
       }
 
-      const minX = Math.min(...points.map((point) => point.x));
-      const maxX = Math.max(...points.map((point) => point.x));
-      const minY = Math.min(...points.map((point) => point.y));
-      const maxY = Math.max(...points.map((point) => point.y));
-      const pad = 72;
-      const spanX = Math.max(1, maxX - minX);
-      const spanY = Math.max(1, maxY - minY);
-      const width = Math.max(900, Math.min(1800, spanX * 12 + pad * 2));
-      const height = Math.max(650, Math.min(1400, spanY * 12 + pad * 2));
-      const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+      const coordinateSystem = createCoordinateSystem(points);
       const existingIds = new Set(doc.spots.map((spot) => spot.temporaryId ?? spot.id));
 
       const spots: BurialSpot[] = points.map((point, index) => {
         const temp = `GPR-${String(index + 1).padStart(3, "0")}`;
-        const x = pad + (point.x - minX) * scale;
-        const y = pad + (point.y - minY) * scale;
+        const projected = projectPoint(coordinateSystem, point.x, point.y);
         return {
           id: existingIds.has(temp) ? newId("s") : temp,
           temporaryId: temp,
-          x,
-          y,
+          x: projected.x,
+          y: projected.y,
           name: "",
           spotTypeId: activeSpotTypeId || "civilian",
           lat: pickNumber(point.row, ["lat", "latitude"]),
@@ -1503,8 +1582,9 @@ export default function MapMaker() {
         ...d,
         name: d.name === DEFAULT_DOC.name ? `${file.name.replace(/\.[^.]+$/, "")} Map Project` : d.name,
         projectStatus: "draft",
-        imgWidth: width,
-        imgHeight: height,
+        imgWidth: coordinateSystem.width,
+        imgHeight: coordinateSystem.height,
+        coordinateSystem,
         spots,
         importSource: { ...d.importSource, gprCsv: file.name },
         updatedAt: Date.now(),
@@ -1520,7 +1600,7 @@ export default function MapMaker() {
     }
   };
 
-  const buildMergeReview = (records: BurialCsvRecord[], sourceCsv: string): MergeReview => {
+  const buildMergeReview = (records: BurialCsvRecord[], sourceCsv: string, baseSpots = doc.spots): MergeReview => {
     const usedSpots = new Set<string>();
     const seenNameDate = new Map<string, BurialCsvRecord>();
     const review: MergeReview = {
@@ -1551,7 +1631,7 @@ export default function MapMaker() {
 
       const hasCoordinates = record.x !== undefined && record.y !== undefined;
       const candidates = hasCoordinates
-        ? doc.spots
+        ? baseSpots
             .filter((spot) => !usedSpots.has(spot.id) && spot.gprX !== undefined && spot.gprY !== undefined)
             .map((spot) => ({
               spot,
@@ -1601,7 +1681,7 @@ export default function MapMaker() {
       });
     });
 
-    review.unmatchedGpr = doc.spots.filter(
+    review.unmatchedGpr = baseSpots.filter(
       (spot) => (spot.importFlags ?? []).includes("GPR Imported") && !usedSpots.has(spot.id),
     );
     return review;
@@ -1614,20 +1694,9 @@ export default function MapMaker() {
     try {
       const text = await file.text();
       const rows = parseCsv(text);
-      const records = rows.map((row, index): BurialCsvRecord => ({
-        rowNumber: index + 2,
-        name: pick(row, ["name", "deceased name", "deceased", "full name", "person"]),
-        dob: normalizeDateLike(pick(row, ["dob", "date of birth", "birth date", "born"])),
-        dod: normalizeDateLike(pick(row, ["dod", "date of death", "death date", "died"])),
-        veteranStatus: pick(row, ["veteran", "veteran status", "military", "service"]),
-        imagePath: pick(row, ["image", "image path", "image filename", "headstone image", "filename", "file name"]),
-        x: pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]),
-        y: pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]),
-        z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
-        lat: pickNumber(row, ["lat", "latitude"]),
-        lon: pickNumber(row, ["lon", "lng", "long", "longitude"]),
-        sourceCsv: file.name,
-      })).filter((record) => record.name || record.x !== undefined || record.y !== undefined || record.imagePath);
+      const records = rows
+        .map((row, index) => burialRecordFromRow(row, index, file.name))
+        .filter((record) => record.name || record.x !== undefined || record.y !== undefined || record.imagePath);
 
       if (records.length === 0) {
         setSaveError("Burial.csv needs at least names, image filenames, or coordinates.");
@@ -1642,6 +1711,203 @@ export default function MapMaker() {
     } catch {
       setSaveError("Couldn't read Burial.csv.");
       setTimeout(() => setSaveError(null), 5000);
+    }
+  };
+
+  const onImportDatasetFiles = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    try {
+      const parsed = await Promise.all(
+        files
+          .filter((file) => file.name.toLowerCase().endsWith(".csv"))
+          .map(async (file) => ({ file, rows: parseCsv(await file.text()) })),
+      );
+      const coordinateInputs: Array<{ x: number; y: number }> = [];
+      for (const { file, rows } of parsed) {
+        const lower = file.name.toLowerCase();
+        if (lower.includes("coping")) {
+          rows.forEach((row) => parseWktPolygon(pick(row, ["wkt", "geometry"])).forEach((point) => coordinateInputs.push(point)));
+        } else {
+          rows.forEach((row) => {
+            const x = pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]);
+            const y = pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]);
+            if (x !== undefined && y !== undefined) coordinateInputs.push({ x, y });
+          });
+        }
+      }
+
+      if (coordinateInputs.length === 0) {
+        setSaveError("Dataset CSV files need valid X/Y coordinates or WKT polygons.");
+        setTimeout(() => setSaveError(null), 7000);
+        return;
+      }
+
+      const coordinateSystem = createCoordinateSystem(coordinateInputs);
+      const importedSpots: BurialSpot[] = [];
+      const importedPlots: Plot[] = [];
+      const burialRecords: BurialCsvRecord[] = [];
+      const sourceNames: string[] = [];
+      let gprCount = 0;
+      let cremationCount = 0;
+      let miscCount = 0;
+      let copingCount = 0;
+
+      for (const { file, rows } of parsed) {
+        const lower = file.name.toLowerCase();
+        sourceNames.push(file.name);
+
+        if (lower.includes("gpr")) {
+          rows.forEach((row) => {
+            const x = pickNumber(row, ["x", "gpr x", "gpr_x", "easting", "map x"]);
+            const y = pickNumber(row, ["y", "gpr y", "gpr_y", "northing", "map y"]);
+            if (x === undefined || y === undefined) return;
+            gprCount++;
+            const projected = projectPoint(coordinateSystem, x, y);
+            importedSpots.push({
+              id: `GPR-${String(gprCount).padStart(3, "0")}`,
+              temporaryId: `GPR-${String(gprCount).padStart(3, "0")}`,
+              x: projected.x,
+              y: projected.y,
+              name: "",
+              spotTypeId: pick(row, ["choice", "type"]).toLowerCase().includes("child") ? "child" : "civilian",
+              gprX: x,
+              gprY: y,
+              gprZ: pickNumber(row, ["z", "depth"]),
+              accuracy: pickNumber(row, ["estimatedaccuracy", "estimated accuracy", "accuracy"]),
+              sourceCsv: file.name,
+              notes: pick(row, ["comments", "comment"]),
+              reviewStatus: "gpr_imported",
+              importFlags: ["GPR Imported"],
+            });
+          });
+          continue;
+        }
+
+        if (lower.includes("burial")) {
+          rows
+            .map((row, index) => burialRecordFromRow(row, index, file.name))
+            .filter((record) => record.name || record.x !== undefined || record.y !== undefined || record.imagePath)
+            .forEach((record) => burialRecords.push(record));
+          continue;
+        }
+
+        if (lower.includes("cremation")) {
+          rows.forEach((row) => {
+            const x = pickNumber(row, ["x"]);
+            const y = pickNumber(row, ["y"]);
+            if (x === undefined || y === undefined) return;
+            cremationCount++;
+            const projected = projectPoint(coordinateSystem, x, y);
+            const name = fullNameFromRow(row);
+            importedSpots.push({
+              id: `CREM-${String(cremationCount).padStart(3, "0")}`,
+              temporaryId: `CREM-${String(cremationCount).padStart(3, "0")}`,
+              x: projected.x,
+              y: projected.y,
+              name,
+              dob: normalizeDateLike(pick(row, ["dob"])),
+              dod: normalizeDateLike(pick(row, ["dod"])),
+              spotTypeId: "civilian",
+              gprX: x,
+              gprY: y,
+              gprZ: pickNumber(row, ["z"]),
+              accuracy: pickNumber(row, ["estimatedaccuracy", "estimated accuracy", "accuracy"]),
+              sourceCsv: file.name,
+              imagePath: pick(row, ["image"]),
+              imageFileName: fileBaseName(pick(row, ["image"])),
+              notes: pick(row, ["comment"]),
+              reviewStatus: name ? "burial_matched" : "needs_review",
+              importFlags: name ? ["Burial Data Matched"] : ["Needs Review"],
+            });
+          });
+          continue;
+        }
+
+        if (lower.includes("misc")) {
+          rows.forEach((row) => {
+            const x = pickNumber(row, ["x"]);
+            const y = pickNumber(row, ["y"]);
+            if (x === undefined || y === undefined) return;
+            miscCount++;
+            const projected = projectPoint(coordinateSystem, x, y);
+            const label = pick(row, ["comment", "name", "type"]) || `Misc ${miscCount}`;
+            importedSpots.push({
+              id: `MISC-${String(miscCount).padStart(3, "0")}`,
+              temporaryId: `MISC-${String(miscCount).padStart(3, "0")}`,
+              x: projected.x,
+              y: projected.y,
+              name: label,
+              spotTypeId: "civilian",
+              gprX: x,
+              gprY: y,
+              gprZ: pickNumber(row, ["z"]),
+              accuracy: pickNumber(row, ["estimatedaccuracy", "estimated accuracy", "accuracy"]),
+              sourceCsv: file.name,
+              notes: label,
+              symbolType: label.toLowerCase(),
+              reviewStatus: "verified",
+              importFlags: ["Verified"],
+            });
+          });
+          continue;
+        }
+
+        if (lower.includes("coping")) {
+          rows.forEach((row) => {
+            const raw = parseWktPolygon(pick(row, ["wkt", "geometry"]));
+            if (raw.length < 3) return;
+            copingCount++;
+            const points = raw.map((point) => {
+              const projected = projectPoint(coordinateSystem, point.x, point.y);
+              return [projected.x, projected.y] as [number, number];
+            });
+            const bounds = plotBounds(points);
+            importedPlots.push({
+              id: `COPING-${String(copingCount).padStart(3, "0")}`,
+              typeId: "CON",
+              label: pick(row, ["comment"]) || `Coping Area ${copingCount}`,
+              status: "available",
+              ...bounds,
+              points,
+              outline: true,
+              accuracy: pickNumber(row, ["estimatedaccuracy", "estimated accuracy", "accuracy"]),
+              sourceCsv: file.name,
+              sourceLayer: "Coping Area",
+            });
+          });
+        }
+      }
+
+      const review = burialRecords.length > 0
+        ? buildMergeReview(burialRecords, sourceNames.find((name) => name.toLowerCase().includes("burial")) ?? "Burial.csv", importedSpots)
+        : null;
+
+      setDoc((d) => ({
+        ...d,
+        name: d.name === DEFAULT_DOC.name ? "Imported Cemetery Map Project" : d.name,
+        projectStatus: "draft",
+        imgWidth: coordinateSystem.width,
+        imgHeight: coordinateSystem.height,
+        coordinateSystem,
+        plots: importedPlots,
+        spots: importedSpots,
+        importSource: {
+          ...d.importSource,
+          gprCsv: sourceNames.find((name) => name.toLowerCase().includes("gpr")),
+          burialCsv: sourceNames.find((name) => name.toLowerCase().includes("burial")),
+        },
+        updatedAt: Date.now(),
+      }));
+      setSelection(null);
+      setShowSpots(true);
+      setMergeReview(review);
+      setWorkflowTab(review ? "merge" : "publish");
+      addImportLog(`Imported dataset: ${gprCount} GPR, ${burialRecords.length} burials, ${cremationCount} cremations, ${copingCount} areas, ${miscCount} misc`);
+    } catch {
+      setSaveError("Couldn't import the cemetery dataset.");
+      setTimeout(() => setSaveError(null), 7000);
     }
   };
 
@@ -2004,6 +2270,9 @@ export default function MapMaker() {
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => gprInputRef.current?.click()} title="Upload GPR CSV">
               <Database className="h-4 w-4" />
             </Button>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => datasetInputRef.current?.click()} title="Import cemetery dataset">
+              <FileSpreadsheet className="h-4 w-4" />
+            </Button>
             <Link href="/cemetery-setup">
               <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="Cemetery setup (types &amp; backgrounds)">
                 <SettingsIcon className="h-4 w-4" />
@@ -2012,6 +2281,7 @@ export default function MapMaker() {
             <input ref={fileInputRef} type="file" accept="image/*" onChange={onUploadImage} className="hidden" data-testid="image-input" />
             <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input-mini" />
             <input ref={burialInputRef} type="file" accept=".csv,text/csv" onChange={onUploadBurialCsv} className="hidden" data-testid="burial-input-mini" />
+            <input ref={datasetInputRef} type="file" accept=".csv,text/csv" multiple onChange={onImportDatasetFiles} className="hidden" data-testid="dataset-input-mini" />
           </aside>
         ) : (
         <aside className="w-60 shrink-0 border-r border-border bg-card flex flex-col">
@@ -2079,6 +2349,7 @@ export default function MapMaker() {
                 importLog={importLog}
                 selectedSpot={selectedSpot}
                 onCreateDraft={createDraftProject}
+                onImportDataset={() => datasetInputRef.current?.click()}
                 onUploadGpr={() => gprInputRef.current?.click()}
                 onUploadBurial={() => burialInputRef.current?.click()}
                 onMergeToggle={updateMergeCandidate}
@@ -2091,6 +2362,7 @@ export default function MapMaker() {
 
               <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input" />
               <input ref={burialInputRef} type="file" accept=".csv,text/csv" onChange={onUploadBurialCsv} className="hidden" data-testid="burial-input" />
+              <input ref={datasetInputRef} type="file" accept=".csv,text/csv" multiple onChange={onImportDatasetFiles} className="hidden" data-testid="dataset-input" />
             </div>
 
             <div className="p-3 border-b border-border">
@@ -2880,6 +3152,7 @@ function WorkflowPanel({
   importLog,
   selectedSpot,
   onCreateDraft,
+  onImportDataset,
   onUploadGpr,
   onUploadBurial,
   onMergeToggle,
@@ -2897,6 +3170,7 @@ function WorkflowPanel({
   importLog: string[];
   selectedSpot: BurialSpot | null;
   onCreateDraft: () => void;
+  onImportDataset: () => void;
   onUploadGpr: () => void;
   onUploadBurial: () => void;
   onMergeToggle: (bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">, id: string, apply: boolean) => void;
@@ -2935,6 +3209,10 @@ function WorkflowPanel({
           <p className="text-[11px] text-muted-foreground">
             Upload raw GPR CSV first. X/Y coordinates create unnamed burial spots with temporary IDs.
           </p>
+          <Button size="sm" variant="outline" className="h-8 w-full gap-1.5" onClick={onImportDataset}>
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Import full CSV dataset
+          </Button>
           <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadGpr}>
             <Database className="h-3.5 w-3.5" />
             Upload GPR CSV
@@ -3250,6 +3528,14 @@ function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
           <div><Label className="text-xs">Height</Label><Input type="number" value={Math.round(plot.h)} onChange={(e) => onChange({ h: Math.max(8, +e.target.value) })} className="h-8" /></div>
           <div><Label className="text-xs">X</Label><Input type="number" value={Math.round(plot.x)} onChange={(e) => onChange({ x: +e.target.value })} className="h-8" /></div>
           <div><Label className="text-xs">Y</Label><Input type="number" value={Math.round(plot.y)} onChange={(e) => onChange({ y: +e.target.value })} className="h-8" /></div>
+        </div>
+      )}
+      {(plot.sourceCsv || plot.sourceLayer || plot.accuracy !== undefined) && (
+        <div className="rounded-md border border-border bg-muted/20 p-2 text-[10px] text-muted-foreground">
+          <div className="mb-1 font-semibold uppercase tracking-wider text-foreground">Admin import data</div>
+          {plot.sourceLayer && <div>Layer: {plot.sourceLayer}</div>}
+          {plot.sourceCsv && <div>Source CSV: {plot.sourceCsv}</div>}
+          {plot.accuracy !== undefined && <div>Accuracy: {plot.accuracy}</div>}
         </div>
       )}
       <Button size="sm" variant="outline" className="w-full text-destructive hover:text-destructive border-destructive/30" onClick={onDelete} data-testid="delete-plot">
