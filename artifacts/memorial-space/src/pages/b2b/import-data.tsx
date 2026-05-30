@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, FileSpreadsheet, ScanText, Upload } from "lucide-react";
+import { ArrowRight, FileSpreadsheet, GitMerge, ScanText, Upload } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,9 +12,17 @@ import { Badge } from "@/components/ui/badge";
 
 const importOptions = [
   {
+    title: "Map Maker Import Workflow",
+    description:
+      "Create a draft cemetery map project, upload raw GPR CSV, review the unnamed base map, then merge Burial.csv without silent overwrites.",
+    href: "/map-maker",
+    icon: GitMerge,
+    status: "Primary",
+  },
+  {
     title: "Headstone AI Import",
     description:
-      "Bulk upload headstone photos, extract names and dates with Claude, review missing text manually, then save a cemetery headstone image library for later spreadsheet matching.",
+      "Bulk upload headstone photos, extract names and dates with Claude, review missing text manually, then save a cemetery image library for Map Maker matching.",
     href: "/import-data/headstones",
     icon: ScanText,
     status: "Ready",
@@ -76,8 +84,9 @@ export default function ImportDataPage() {
             Supported source data
           </CardTitle>
           <CardDescription>
-            Current imports support image-first headstone scanning and later
-            spreadsheet matching by the original image filename.
+            GPR and Burial.csv matching now live inside Map Maker so the map
+            project owns every review and publish decision. Headstone import
+            remains image-first and reusable by filename.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">

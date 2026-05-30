@@ -83,6 +83,33 @@ export interface BurialSpot {
   notes?: string;
   /** AI-detected symbol category (e.g. sign, handicap, manhole, utility, legend, tree, bench). */
   symbolType?: string;
+  temporaryId?: string;
+  gprX?: number;
+  gprY?: number;
+  gprZ?: number;
+  accuracy?: number;
+  sourceCsv?: string;
+  imageFileName?: string;
+  imagePath?: string;
+  veteranStatus?: string;
+  aiConfidence?: number;
+  reviewStatus?: "gpr_imported" | "burial_matched" | "image_attached" | "ai_processed" | "needs_review" | "verified" | "published";
+  importFlags?: Array<
+    | "GPR Imported"
+    | "Burial Data Matched"
+    | "Image Attached"
+    | "AI Processed"
+    | "Needs Review"
+    | "Verified"
+    | "Published"
+  >;
+  aiData?: {
+    name?: string;
+    dob?: string;
+    dod?: string;
+    inscription?: string;
+    veteranMarker?: string;
+  };
 }
 
 /** Hard cap so a single spot can't grow without bound and bust localStorage. */

@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useMemo, useCallback, type PointerEvent as ReactPointerEvent, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, type ComponentType, type PointerEvent as ReactPointerEvent, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import { Link } from "wouter";
 import {
   Upload, MousePointer2, Square, Trash2, Save, Download, Image as ImageIcon,
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
-  Spline, Circle as CircleIcon, Hexagon, SquareDashed,
+  Spline, Circle as CircleIcon, Hexagon, SquareDashed, FileSpreadsheet,
+  GitMerge, AlertTriangle, CheckCircle2, Send, Database, ListChecks, ImagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,67 @@ function shapeToTool(shape: PlotShape | undefined): Extract<Tool, "draw" | "circ
   return "draw";
 }
 type View = "2d" | "3d";
+type ProjectStatus = "draft" | "published";
+
+type CemeteryOption = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
+type WorkflowTab = "project" | "gpr" | "burial" | "merge" | "headstones" | "publish";
+
+type CsvRow = Record<string, string>;
+
+type BurialCsvRecord = {
+  rowNumber: number;
+  name: string;
+  dob?: string;
+  dod?: string;
+  veteranStatus?: string;
+  imagePath?: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  lat?: number;
+  lon?: number;
+  sourceCsv: string;
+};
+
+type MergeBucket = "exact" | "nearby" | "new" | "duplicate" | "conflict";
+
+type MergeCandidate = {
+  id: string;
+  bucket: MergeBucket;
+  burial: BurialCsvRecord;
+  spotId?: string;
+  distance?: number;
+  reason: string;
+  apply: boolean;
+};
+
+type MergeReview = {
+  sourceCsv: string;
+  createdAt: number;
+  exact: MergeCandidate[];
+  nearby: MergeCandidate[];
+  newRecords: MergeCandidate[];
+  duplicates: MergeCandidate[];
+  conflicts: MergeCandidate[];
+  unmatchedGpr: BurialSpot[];
+};
+
+type HeadstoneManifest = {
+  folder?: string;
+  images?: Array<{
+    imageFileName?: string;
+    storedPath?: string;
+    status?: string;
+    confidence?: number;
+    people?: Array<{ name?: string; dateOfBirth?: string | null; dateOfDeath?: string | null }>;
+    inscriptionText?: string;
+  }>;
+};
 
 /** Default stroke thickness for new path/road plots, in SVG units. */
 const DEFAULT_PATH_WIDTH = 14;
@@ -100,11 +162,18 @@ interface Plot {
 
 interface MapDoc {
   name: string;
+  cemeteryId: number | null;
+  projectStatus: ProjectStatus;
   image: string | null;
   imgWidth: number;
   imgHeight: number;
   plots: Plot[];
   spots: BurialSpot[];
+  importSource?: {
+    gprCsv?: string;
+    burialCsv?: string;
+    headstoneFolder?: string;
+  };
   updatedAt: number;
 }
 
@@ -114,6 +183,8 @@ const STORAGE_KEY = "memorialspace.map-maker";
 const SAMPLE_MAP_URL = "/sample-cemetery-map.webp";
 const DEFAULT_DOC: MapDoc = {
   name: "Untitled Cemetery Map",
+  cemeteryId: null,
+  projectStatus: "draft",
   image: null,
   imgWidth: 1200,
   imgHeight: 800,
@@ -125,7 +196,18 @@ const DEFAULT_DOC: MapDoc = {
 // Migrate plots that used `type` (old) to `typeId` (new). Tolerant of unknown shapes.
 type LegacyPlot = { id?: string; type?: string; typeId?: string; label?: string; status?: string; x?: number; y?: number; w?: number; h?: number; points?: unknown };
 type LegacySpot = Partial<BurialSpot>;
-type LegacyDoc = { name?: string; image?: string | null; imgWidth?: number; imgHeight?: number; plots?: LegacyPlot[]; spots?: LegacySpot[]; updatedAt?: number };
+type LegacyDoc = {
+  name?: string;
+  cemeteryId?: number | null;
+  projectStatus?: ProjectStatus;
+  image?: string | null;
+  imgWidth?: number;
+  imgHeight?: number;
+  plots?: LegacyPlot[];
+  spots?: LegacySpot[];
+  importSource?: MapDoc["importSource"];
+  updatedAt?: number;
+};
 
 const VALID_STATUS = new Set<PlotStatus>(["available", "reserved", "occupied"]);
 const safeStatus = (s: unknown): PlotStatus => (typeof s === "string" && VALID_STATUS.has(s as PlotStatus) ? (s as PlotStatus) : "available");
@@ -134,10 +216,120 @@ const safeOptNum = (n: unknown): number | undefined => (typeof n === "number" &&
 const safeStr = (s: unknown, fallback = ""): string => (typeof s === "string" ? s : fallback);
 const safeOptStr = (s: unknown): string | undefined => (typeof s === "string" && s.length > 0 ? s : undefined);
 
+const WORKFLOW_TABS: Array<{ id: WorkflowTab; label: string; icon: ComponentType<{ className?: string }> }> = [
+  { id: "project", label: "Project", icon: Database },
+  { id: "gpr", label: "GPR", icon: Upload },
+  { id: "burial", label: "Burial.csv", icon: FileSpreadsheet },
+  { id: "merge", label: "Merge", icon: GitMerge },
+  { id: "headstones", label: "Headstones", icon: ImagePlus },
+  { id: "publish", label: "Publish", icon: Send },
+];
+
+const IMPORT_FLAG_ORDER: NonNullable<BurialSpot["importFlags"]> = [
+  "GPR Imported",
+  "Burial Data Matched",
+  "Image Attached",
+  "AI Processed",
+  "Needs Review",
+  "Verified",
+  "Published",
+];
+
+function withFlag(spot: BurialSpot, flag: NonNullable<BurialSpot["importFlags"]>[number]): BurialSpot {
+  const next = new Set(spot.importFlags ?? []);
+  next.add(flag);
+  return { ...spot, importFlags: IMPORT_FLAG_ORDER.filter((item) => next.has(item)) };
+}
+
+function parseCsv(text: string): CsvRow[] {
+  const rows: string[][] = [];
+  let current = "";
+  let row: string[] = [];
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === "\"" && quoted && next === "\"") {
+      current += "\"";
+      i++;
+    } else if (ch === "\"") {
+      quoted = !quoted;
+    } else if (ch === "," && !quoted) {
+      row.push(current.trim());
+      current = "";
+    } else if ((ch === "\n" || ch === "\r") && !quoted) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(current.trim());
+      if (row.some((cell) => cell.length > 0)) rows.push(row);
+      row = [];
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  row.push(current.trim());
+  if (row.some((cell) => cell.length > 0)) rows.push(row);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(normalizeHeader);
+  return rows.slice(1).map((cells) => {
+    const out: CsvRow = {};
+    headers.forEach((header, index) => {
+      if (header) out[header] = cells[index]?.trim() ?? "";
+    });
+    return out;
+  });
+}
+
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function pick(row: CsvRow, names: string[]) {
+  for (const name of names) {
+    const value = row[normalizeHeader(name)];
+    if (value) return value;
+  }
+  return "";
+}
+
+function pickNumber(row: CsvRow, names: string[]) {
+  const value = pick(row, names);
+  if (!value) return undefined;
+  const parsed = Number(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeDateLike(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const iso = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const mdy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+  if (mdy) {
+    const year = mdy[3].length === 2 ? `20${mdy[3]}` : mdy[3];
+    return `${year}-${mdy[1].padStart(2, "0")}-${mdy[2].padStart(2, "0")}`;
+  }
+  return trimmed;
+}
+
+function normalName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function fileBaseName(value: string) {
+  return value.split(/[\\/]/).pop()?.trim() ?? value.trim();
+}
+
 function migrateDoc(raw: unknown): MapDoc {
   const d = (raw ?? {}) as LegacyDoc;
   return {
     name: safeStr(d.name, "Untitled Cemetery Map"),
+    cemeteryId: typeof d.cemeteryId === "number" ? d.cemeteryId : null,
+    projectStatus: d.projectStatus === "published" ? "published" : "draft",
     image: typeof d.image === "string" ? d.image : null,
     imgWidth:  safeNum(d.imgWidth,  1200),
     imgHeight: safeNum(d.imgHeight, 800),
@@ -242,8 +434,26 @@ function migrateDoc(raw: unknown): MapDoc {
         lat: safeOptNum(s.lat), lon: safeOptNum(s.lon),
         notes: safeOptStr(s.notes),
         symbolType: safeOptStr((s as LegacySpot & { symbolType?: unknown }).symbolType),
+        temporaryId: safeOptStr((s as LegacySpot & { temporaryId?: unknown }).temporaryId),
+        gprX: safeOptNum((s as LegacySpot & { gprX?: unknown }).gprX),
+        gprY: safeOptNum((s as LegacySpot & { gprY?: unknown }).gprY),
+        gprZ: safeOptNum((s as LegacySpot & { gprZ?: unknown }).gprZ),
+        accuracy: safeOptNum((s as LegacySpot & { accuracy?: unknown }).accuracy),
+        sourceCsv: safeOptStr((s as LegacySpot & { sourceCsv?: unknown }).sourceCsv),
+        imageFileName: safeOptStr((s as LegacySpot & { imageFileName?: unknown }).imageFileName),
+        imagePath: safeOptStr((s as LegacySpot & { imagePath?: unknown }).imagePath),
+        veteranStatus: safeOptStr((s as LegacySpot & { veteranStatus?: unknown }).veteranStatus),
+        aiConfidence: safeOptNum((s as LegacySpot & { aiConfidence?: unknown }).aiConfidence),
+        reviewStatus: safeOptStr((s as LegacySpot & { reviewStatus?: unknown }).reviewStatus) as BurialSpot["reviewStatus"],
+        importFlags: Array.isArray((s as LegacySpot & { importFlags?: unknown }).importFlags)
+          ? ((s as LegacySpot & { importFlags?: unknown }).importFlags as string[]).filter(Boolean) as BurialSpot["importFlags"]
+          : undefined,
+        aiData: typeof (s as LegacySpot & { aiData?: unknown }).aiData === "object"
+          ? (s as BurialSpot).aiData
+          : undefined,
       };
     }),
+    importSource: d.importSource,
     updatedAt: safeNum(d.updatedAt, Date.now()),
   };
 }
@@ -278,12 +488,18 @@ export default function MapMaker() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [workflowTab, setWorkflowTab] = useState<WorkflowTab>("project");
+  const [cemeteries, setCemeteries] = useState<CemeteryOption[]>([]);
+  const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
+  const [importLog, setImportLog] = useState<string[]>([]);
 
   // Refs / mode trackers
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const gprInputRef = useRef<HTMLInputElement | null>(null);
+  const burialInputRef = useRef<HTMLInputElement | null>(null);
   const headstoneInputRef = useRef<HTMLInputElement | null>(null);
   const dragState = useRef<{ mode: "create" | "create-circle" | "move" | "resize" | "move-spot" | "pan"; id?: string; offsetX?: number; offsetY?: number; anchorX?: number; anchorY?: number; switchToSelectOnUp?: boolean; panStartClientX?: number; panStartClientY?: number; panStartScrollLeft?: number; panStartScrollTop?: number } | null>(null);
   const draftRectRef = useRef<Plot | null>(null);
@@ -306,6 +522,30 @@ export default function MapMaker() {
   const viewRef = useRef<View>("2d");
 
   useEffect(() => { viewRef.current = view; }, [view]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/organizations", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setCemeteries(
+          data
+            .map((item) => ({
+              id: Number(item.id),
+              name: String(item.name ?? "Untitled cemetery"),
+              slug: String(item.slug ?? item.id),
+            }))
+            .filter((item) => Number.isFinite(item.id)),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCemeteries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Surface background-library persistence failures (e.g. quota) in the canvas toast.
   useEffect(() => {
@@ -1183,6 +1423,373 @@ export default function MapMaker() {
     }));
   };
 
+  const addImportLog = useCallback((message: string) => {
+    setImportLog((items) => [message, ...items].slice(0, 6));
+    flashStatus(message);
+  }, [flashStatus]);
+
+  const createDraftProject = () => {
+    const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
+    setDoc((d) => ({
+      ...d,
+      name: cemetery ? `${cemetery.name} Map Project` : d.name || "Untitled Cemetery Map",
+      projectStatus: "draft",
+      updatedAt: Date.now(),
+    }));
+    addImportLog("Map project is ready as a draft");
+    setWorkflowTab("gpr");
+  };
+
+  const onUploadGprCsv = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      const points = rows
+        .map((row, index) => ({
+          row,
+          index,
+          x: pickNumber(row, ["x", "gpr x", "gpr_x", "easting", "map x", "longitude"]),
+          y: pickNumber(row, ["y", "gpr y", "gpr_y", "northing", "map y", "latitude"]),
+          z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
+          accuracy: pickNumber(row, ["accuracy", "confidence", "quality"]),
+        }))
+        .filter((point): point is typeof point & { x: number; y: number } => point.x !== undefined && point.y !== undefined);
+
+      if (points.length === 0) {
+        setSaveError("GPR CSV needs valid X and Y coordinate columns.");
+        setTimeout(() => setSaveError(null), 6000);
+        return;
+      }
+
+      const minX = Math.min(...points.map((point) => point.x));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxY = Math.max(...points.map((point) => point.y));
+      const pad = 72;
+      const spanX = Math.max(1, maxX - minX);
+      const spanY = Math.max(1, maxY - minY);
+      const width = Math.max(900, Math.min(1800, spanX * 12 + pad * 2));
+      const height = Math.max(650, Math.min(1400, spanY * 12 + pad * 2));
+      const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+      const existingIds = new Set(doc.spots.map((spot) => spot.temporaryId ?? spot.id));
+
+      const spots: BurialSpot[] = points.map((point, index) => {
+        const temp = `GPR-${String(index + 1).padStart(3, "0")}`;
+        const x = pad + (point.x - minX) * scale;
+        const y = pad + (point.y - minY) * scale;
+        return {
+          id: existingIds.has(temp) ? newId("s") : temp,
+          temporaryId: temp,
+          x,
+          y,
+          name: "",
+          spotTypeId: activeSpotTypeId || "civilian",
+          lat: pickNumber(point.row, ["lat", "latitude"]),
+          lon: pickNumber(point.row, ["lon", "lng", "long", "longitude"]),
+          gprX: point.x,
+          gprY: point.y,
+          gprZ: point.z,
+          accuracy: point.accuracy,
+          sourceCsv: file.name,
+          reviewStatus: "gpr_imported",
+          importFlags: ["GPR Imported"],
+        };
+      });
+
+      setDoc((d) => ({
+        ...d,
+        name: d.name === DEFAULT_DOC.name ? `${file.name.replace(/\.[^.]+$/, "")} Map Project` : d.name,
+        projectStatus: "draft",
+        imgWidth: width,
+        imgHeight: height,
+        spots,
+        importSource: { ...d.importSource, gprCsv: file.name },
+        updatedAt: Date.now(),
+      }));
+      setSelection(null);
+      setMergeReview(null);
+      setShowSpots(true);
+      setWorkflowTab("burial");
+      addImportLog(`Imported ${spots.length} unnamed GPR spots from ${file.name}`);
+    } catch {
+      setSaveError("Couldn't read the GPR CSV.");
+      setTimeout(() => setSaveError(null), 5000);
+    }
+  };
+
+  const buildMergeReview = (records: BurialCsvRecord[], sourceCsv: string): MergeReview => {
+    const usedSpots = new Set<string>();
+    const seenNameDate = new Map<string, BurialCsvRecord>();
+    const review: MergeReview = {
+      sourceCsv,
+      createdAt: Date.now(),
+      exact: [],
+      nearby: [],
+      newRecords: [],
+      duplicates: [],
+      conflicts: [],
+      unmatchedGpr: [],
+    };
+
+    records.forEach((record) => {
+      const duplicateKey = `${normalName(record.name)}|${record.dob ?? ""}|${record.dod ?? ""}`;
+      const existingRecord = seenNameDate.get(duplicateKey);
+      if (existingRecord && record.name) {
+        review.duplicates.push({
+          id: `duplicate-${record.rowNumber}`,
+          bucket: "duplicate",
+          burial: record,
+          reason: `Possible duplicate of row ${existingRecord.rowNumber}`,
+          apply: false,
+        });
+        return;
+      }
+      if (record.name) seenNameDate.set(duplicateKey, record);
+
+      const hasCoordinates = record.x !== undefined && record.y !== undefined;
+      const candidates = hasCoordinates
+        ? doc.spots
+            .filter((spot) => !usedSpots.has(spot.id) && spot.gprX !== undefined && spot.gprY !== undefined)
+            .map((spot) => ({
+              spot,
+              rawDistance: distance({ x: record.x!, y: record.y! }, { x: spot.gprX!, y: spot.gprY! }),
+              canvasDistance: distance({ x: record.x!, y: record.y! }, { x: spot.x, y: spot.y }),
+            }))
+            .sort((a, b) => Math.min(a.rawDistance, a.canvasDistance) - Math.min(b.rawDistance, b.canvasDistance))
+        : [];
+      const best = candidates[0];
+
+      if (best && Math.min(best.rawDistance, best.canvasDistance) <= 0.01) {
+        const hasConflict = Boolean(best.spot.name && record.name && normalName(best.spot.name) !== normalName(record.name));
+        const target = hasConflict ? review.conflicts : review.exact;
+        target.push({
+          id: `${hasConflict ? "conflict" : "exact"}-${record.rowNumber}`,
+          bucket: hasConflict ? "conflict" : "exact",
+          burial: record,
+          spotId: best.spot.id,
+          distance: best.rawDistance,
+          reason: hasConflict ? "Existing saved name differs from Burial.csv" : "Exact coordinate match",
+          apply: !hasConflict,
+        });
+        if (!hasConflict) usedSpots.add(best.spot.id);
+        return;
+      }
+
+      if (best && Math.min(best.rawDistance, best.canvasDistance) <= 25) {
+        review.nearby.push({
+          id: `nearby-${record.rowNumber}`,
+          bucket: "nearby",
+          burial: record,
+          spotId: best.spot.id,
+          distance: Math.min(best.rawDistance, best.canvasDistance),
+          reason: "Nearby coordinate match. Confirm before merge.",
+          apply: true,
+        });
+        usedSpots.add(best.spot.id);
+        return;
+      }
+
+      review.newRecords.push({
+        id: `new-${record.rowNumber}`,
+        bucket: "new",
+        burial: record,
+        reason: hasCoordinates ? "No matching GPR spot" : "No coordinates supplied",
+        apply: false,
+      });
+    });
+
+    review.unmatchedGpr = doc.spots.filter(
+      (spot) => (spot.importFlags ?? []).includes("GPR Imported") && !usedSpots.has(spot.id),
+    );
+    return review;
+  };
+
+  const onUploadBurialCsv = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      const records = rows.map((row, index): BurialCsvRecord => ({
+        rowNumber: index + 2,
+        name: pick(row, ["name", "deceased name", "deceased", "full name", "person"]),
+        dob: normalizeDateLike(pick(row, ["dob", "date of birth", "birth date", "born"])),
+        dod: normalizeDateLike(pick(row, ["dod", "date of death", "death date", "died"])),
+        veteranStatus: pick(row, ["veteran", "veteran status", "military", "service"]),
+        imagePath: pick(row, ["image", "image path", "image filename", "headstone image", "filename", "file name"]),
+        x: pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]),
+        y: pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]),
+        z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
+        lat: pickNumber(row, ["lat", "latitude"]),
+        lon: pickNumber(row, ["lon", "lng", "long", "longitude"]),
+        sourceCsv: file.name,
+      })).filter((record) => record.name || record.x !== undefined || record.y !== undefined || record.imagePath);
+
+      if (records.length === 0) {
+        setSaveError("Burial.csv needs at least names, image filenames, or coordinates.");
+        setTimeout(() => setSaveError(null), 6000);
+        return;
+      }
+      const review = buildMergeReview(records, file.name);
+      setMergeReview(review);
+      setDoc((d) => ({ ...d, importSource: { ...d.importSource, burialCsv: file.name }, updatedAt: Date.now() }));
+      setWorkflowTab("merge");
+      addImportLog(`Prepared merge review for ${records.length} Burial.csv rows`);
+    } catch {
+      setSaveError("Couldn't read Burial.csv.");
+      setTimeout(() => setSaveError(null), 5000);
+    }
+  };
+
+  const updateMergeCandidate = (bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">, id: string, apply: boolean) => {
+    setMergeReview((review) => review
+      ? { ...review, [bucket]: review[bucket].map((candidate) => candidate.id === id ? { ...candidate, apply } : candidate) }
+      : review);
+  };
+
+  const applyMergeReview = () => {
+    if (!mergeReview) return;
+    const candidates = [
+      ...mergeReview.exact,
+      ...mergeReview.nearby,
+      ...mergeReview.newRecords,
+      ...mergeReview.conflicts,
+      ...mergeReview.duplicates,
+    ].filter((candidate) => candidate.apply);
+
+    setDoc((d) => {
+      const spots = [...d.spots];
+      candidates.forEach((candidate) => {
+        const record = candidate.burial;
+        const patch = (spot: BurialSpot): BurialSpot => {
+          let next: BurialSpot = {
+            ...spot,
+            name: record.name || spot.name,
+            dob: record.dob ?? spot.dob,
+            dod: record.dod ?? spot.dod,
+            lat: record.lat ?? spot.lat,
+            lon: record.lon ?? spot.lon,
+            gprX: record.x ?? spot.gprX,
+            gprY: record.y ?? spot.gprY,
+            gprZ: record.z ?? spot.gprZ,
+            sourceCsv: record.sourceCsv,
+            imagePath: record.imagePath || spot.imagePath,
+            imageFileName: record.imagePath ? fileBaseName(record.imagePath) : spot.imageFileName,
+            veteranStatus: record.veteranStatus || spot.veteranStatus,
+            reviewStatus: "burial_matched",
+          };
+          next = withFlag(next, "Burial Data Matched");
+          if (record.imagePath) next = withFlag(next, "Image Attached");
+          return next;
+        };
+        if (candidate.spotId) {
+          const index = spots.findIndex((spot) => spot.id === candidate.spotId);
+          if (index >= 0) spots[index] = patch(spots[index]);
+        } else if (record.x !== undefined && record.y !== undefined) {
+          spots.push(patch({
+            id: newId("s"),
+            temporaryId: `CSV-${String(spots.length + 1).padStart(3, "0")}`,
+            x: record.x,
+            y: record.y,
+            name: "",
+            spotTypeId: activeSpotTypeId || "civilian",
+            reviewStatus: "needs_review",
+            importFlags: ["Needs Review"],
+          }));
+        }
+      });
+      return { ...d, spots, updatedAt: Date.now() };
+    });
+    setMergeReview(null);
+    setWorkflowTab("headstones");
+    addImportLog(`Applied ${candidates.length} reviewed Burial.csv updates`);
+  };
+
+  const markSelectedSpot = (flag: NonNullable<BurialSpot["importFlags"]>[number], reviewStatus: BurialSpot["reviewStatus"]) => {
+    if (!selectedSpot) return;
+    setDoc((d) => ({
+      ...d,
+      spots: d.spots.map((spot) => spot.id === selectedSpot.id ? { ...withFlag(spot, flag), reviewStatus } : spot),
+      updatedAt: Date.now(),
+    }));
+  };
+
+  const syncHeadstoneLibrary = async () => {
+    try {
+      const libraryRes = await fetch("/api/headstone-import/library", { credentials: "include" });
+      if (!libraryRes.ok) throw new Error("Headstone library is not available.");
+      const library = await libraryRes.json() as { manifestPath?: string; folder?: string };
+      if (!library.manifestPath) throw new Error("No headstone manifest has been saved yet.");
+      const manifestRes = await fetch(library.manifestPath, { credentials: "include" });
+      if (!manifestRes.ok) throw new Error("Headstone manifest has not been created yet.");
+      const manifest = await manifestRes.json() as HeadstoneManifest;
+      const byFile = new Map<string, NonNullable<HeadstoneManifest["images"]>[number]>();
+      for (const image of manifest.images ?? []) {
+        const key = fileBaseName(image.imageFileName || image.storedPath || "").toLowerCase();
+        if (key) byFile.set(key, image);
+      }
+
+      let matched = 0;
+      let missing = 0;
+      setDoc((d) => ({
+        ...d,
+        spots: d.spots.map((spot) => {
+          const file = fileBaseName(spot.imageFileName || spot.imagePath || "").toLowerCase();
+          if (!file) return spot;
+          const image = byFile.get(file);
+          if (!image) {
+            missing++;
+            return { ...withFlag(spot, "Needs Review"), reviewStatus: "needs_review" };
+          }
+          matched++;
+          let next: BurialSpot = {
+            ...spot,
+            imagePath: image.storedPath ?? spot.imagePath,
+            imageFileName: image.imageFileName ?? spot.imageFileName,
+            aiConfidence: image.confidence ?? spot.aiConfidence,
+            aiData: {
+              name: image.people?.[0]?.name,
+              dob: image.people?.[0]?.dateOfBirth ?? undefined,
+              dod: image.people?.[0]?.dateOfDeath ?? undefined,
+              inscription: image.inscriptionText,
+            },
+            reviewStatus: image.status === "verified" ? "ai_processed" : "needs_review",
+          };
+          next = withFlag(next, "Image Attached");
+          if (image.people?.length || image.inscriptionText) next = withFlag(next, "AI Processed");
+          if (next.reviewStatus === "needs_review") next = withFlag(next, "Needs Review");
+          return next;
+        }),
+        importSource: { ...d.importSource, headstoneFolder: manifest.folder ?? library.folder },
+        updatedAt: Date.now(),
+      }));
+      addImportLog(`Matched ${matched} headstone images${missing ? ` · ${missing} missing` : ""}`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not sync headstone library.");
+      setTimeout(() => setSaveError(null), 6000);
+    }
+  };
+
+  const publishMap = () => {
+    const needsReview = doc.spots.filter((spot) => spot.reviewStatus === "needs_review" || !(spot.importFlags ?? []).includes("Verified"));
+    if (needsReview.length > 0) {
+      setSaveError(`${needsReview.length} burial spots still need review or verification before publishing.`);
+      setTimeout(() => setSaveError(null), 7000);
+      return;
+    }
+    setDoc((d) => ({
+      ...d,
+      projectStatus: "published",
+      spots: d.spots.map((spot) => ({ ...withFlag(spot, "Published"), reviewStatus: "published" })),
+      updatedAt: Date.now(),
+    }));
+    addImportLog("Map published. Public map will use visitor-friendly fields only.");
+  };
+
   // ----- Stats -----
   const counts = useMemo(() => {
     const byPlotType: Record<string, number> = {};
@@ -1195,6 +1802,20 @@ export default function MapMaker() {
     }
     return { totalPlots: doc.plots.length, totalSpots: doc.spots.length, byPlotType, available, reserved, occupied };
   }, [doc.plots, doc.spots]);
+
+  const workflowStats = useMemo(() => {
+    const countFlag = (flag: NonNullable<BurialSpot["importFlags"]>[number]) =>
+      doc.spots.filter((spot) => (spot.importFlags ?? []).includes(flag)).length;
+    return {
+      gpr: countFlag("GPR Imported"),
+      burial: countFlag("Burial Data Matched"),
+      images: countFlag("Image Attached"),
+      ai: countFlag("AI Processed"),
+      needsReview: countFlag("Needs Review") + doc.spots.filter((spot) => spot.reviewStatus === "needs_review").length,
+      verified: countFlag("Verified"),
+      published: countFlag("Published"),
+    };
+  }, [doc.spots]);
 
   const cursorClass =
     isRectTool(tool)   ? "cursor-crosshair" :
@@ -1380,16 +2001,98 @@ export default function MapMaker() {
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={loadSample} title="Load sample map">
               <Sparkles className="h-4 w-4" />
             </Button>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => gprInputRef.current?.click()} title="Upload GPR CSV">
+              <Database className="h-4 w-4" />
+            </Button>
             <Link href="/cemetery-setup">
               <Button variant="ghost" size="sm" className="h-9 w-9 p-0" title="Cemetery setup (types &amp; backgrounds)">
                 <SettingsIcon className="h-4 w-4" />
               </Button>
             </Link>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={onUploadImage} className="hidden" data-testid="image-input" />
+            <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input-mini" />
+            <input ref={burialInputRef} type="file" accept=".csv,text/csv" onChange={onUploadBurialCsv} className="hidden" data-testid="burial-input-mini" />
           </aside>
         ) : (
         <aside className="w-60 shrink-0 border-r border-border bg-card flex flex-col">
           <ScrollArea className="flex-1">
+            <div className="p-3 border-b border-border bg-muted/20">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Workflow</div>
+                  <div className="mt-0.5 text-xs font-medium">
+                    {doc.projectStatus === "published" ? "Published map" : "Draft map project"}
+                  </div>
+                </div>
+                <Badge variant={doc.projectStatus === "published" ? "default" : "outline"}>{doc.projectStatus}</Badge>
+              </div>
+
+              <Select
+                value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
+                onValueChange={(value) =>
+                  setDoc((d) => ({
+                    ...d,
+                    cemeteryId: value === "none" ? null : Number(value),
+                    updatedAt: Date.now(),
+                  }))
+                }
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-map-cemetery">
+                  <SelectValue placeholder="Select cemetery" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select cemetery</SelectItem>
+                  {cemeteries.map((cemetery) => (
+                    <SelectItem key={cemetery.id} value={String(cemetery.id)}>
+                      {cemetery.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="mt-2 grid grid-cols-2 gap-1">
+                {WORKFLOW_TABS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setWorkflowTab(item.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] transition-colors",
+                        workflowTab === item.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <WorkflowPanel
+                tab={workflowTab}
+                doc={doc}
+                cemeteries={cemeteries}
+                workflowStats={workflowStats}
+                mergeReview={mergeReview}
+                importLog={importLog}
+                selectedSpot={selectedSpot}
+                onCreateDraft={createDraftProject}
+                onUploadGpr={() => gprInputRef.current?.click()}
+                onUploadBurial={() => burialInputRef.current?.click()}
+                onMergeToggle={updateMergeCandidate}
+                onApplyMerge={applyMergeReview}
+                onSyncHeadstones={syncHeadstoneLibrary}
+                onMarkAiProcessed={() => markSelectedSpot("AI Processed", "ai_processed")}
+                onMarkVerified={() => markSelectedSpot("Verified", "verified")}
+                onPublish={publishMap}
+              />
+
+              <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input" />
+              <input ref={burialInputRef} type="file" accept=".csv,text/csv" onChange={onUploadBurialCsv} className="hidden" data-testid="burial-input" />
+            </div>
+
             <div className="p-3 border-b border-border">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Tool</div>
               <div className="grid grid-cols-2 gap-1">
@@ -1872,7 +2575,7 @@ export default function MapMaker() {
                           stroke="#ffffff" strokeWidth={2.5}
                           pointerEvents="none"
                         />
-                        {showLabels && s.name && (
+                        {showLabels && (s.name || s.temporaryId) && (
                           <text
                             x={s.x} y={s.y + r + 12}
                             textAnchor="middle" fontSize={11} fontWeight={600}
@@ -1880,7 +2583,7 @@ export default function MapMaker() {
                             stroke="#ffffff" strokeWidth={3} paintOrder="stroke"
                             pointerEvents="none"
                           >
-                            {s.name}
+                            {s.name || s.temporaryId}
                           </text>
                         )}
                       </g>
@@ -2168,6 +2871,254 @@ export default function MapMaker() {
 
 // ===== Subcomponents =====
 
+function WorkflowPanel({
+  tab,
+  doc,
+  cemeteries,
+  workflowStats,
+  mergeReview,
+  importLog,
+  selectedSpot,
+  onCreateDraft,
+  onUploadGpr,
+  onUploadBurial,
+  onMergeToggle,
+  onApplyMerge,
+  onSyncHeadstones,
+  onMarkAiProcessed,
+  onMarkVerified,
+  onPublish,
+}: {
+  tab: WorkflowTab;
+  doc: MapDoc;
+  cemeteries: CemeteryOption[];
+  workflowStats: ReturnType<typeof useWorkflowStatsShape>;
+  mergeReview: MergeReview | null;
+  importLog: string[];
+  selectedSpot: BurialSpot | null;
+  onCreateDraft: () => void;
+  onUploadGpr: () => void;
+  onUploadBurial: () => void;
+  onMergeToggle: (bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">, id: string, apply: boolean) => void;
+  onApplyMerge: () => void;
+  onSyncHeadstones: () => void;
+  onMarkAiProcessed: () => void;
+  onMarkVerified: () => void;
+  onPublish: () => void;
+}) {
+  const selectedCemetery = cemeteries.find((cemetery) => cemetery.id === doc.cemeteryId);
+  const pendingMergeCount = mergeReview
+    ? mergeReview.exact.length + mergeReview.nearby.length + mergeReview.newRecords.length + mergeReview.conflicts.length + mergeReview.duplicates.length
+    : 0;
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-background p-2">
+      {tab === "project" && (
+        <div className="space-y-2">
+          <WorkflowLine done={Boolean(doc.cemeteryId)} label={selectedCemetery ? selectedCemetery.name : "Select cemetery"} />
+          <WorkflowLine done={doc.projectStatus === "draft" || doc.projectStatus === "published"} label="Project starts as Draft" />
+          <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
+            <Link href="/organizations">
+              <Plus className="h-3.5 w-3.5" />
+              Create cemetery
+            </Link>
+          </Button>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onCreateDraft}>
+            <Plus className="h-3.5 w-3.5" />
+            Create map project
+          </Button>
+        </div>
+      )}
+
+      {tab === "gpr" && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Upload raw GPR CSV first. X/Y coordinates create unnamed burial spots with temporary IDs.
+          </p>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadGpr}>
+            <Database className="h-3.5 w-3.5" />
+            Upload GPR CSV
+          </Button>
+          <MiniStat label="GPR spots" value={workflowStats.gpr} />
+        </div>
+      )}
+
+      {tab === "burial" && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Upload Burial.csv later. It is staged for merge review and never overwrites saved spot data silently.
+          </p>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadBurial}>
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Upload Burial.csv
+          </Button>
+          <MiniStat label="Burial matched" value={workflowStats.burial} />
+        </div>
+      )}
+
+      {tab === "merge" && (
+        <div className="space-y-2">
+          {!mergeReview ? (
+            <p className="text-[11px] text-muted-foreground">
+              No pending merge. Upload Burial.csv to review exact matches, nearby matches, new records, duplicates, and conflicts.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-1">
+                <MiniStat label="Exact" value={mergeReview.exact.length} />
+                <MiniStat label="Nearby" value={mergeReview.nearby.length} />
+                <MiniStat label="New" value={mergeReview.newRecords.length} />
+                <MiniStat label="Conflicts" value={mergeReview.conflicts.length} />
+              </div>
+              <MergeBucketList title="Exact coordinate matches" bucket="exact" items={mergeReview.exact} onToggle={onMergeToggle} />
+              <MergeBucketList title="Nearby coordinate matches" bucket="nearby" items={mergeReview.nearby} onToggle={onMergeToggle} />
+              <MergeBucketList title="New burial records" bucket="newRecords" items={mergeReview.newRecords} onToggle={onMergeToggle} />
+              <MergeBucketList title="Possible duplicates" bucket="duplicates" items={mergeReview.duplicates} onToggle={onMergeToggle} />
+              <MergeBucketList title="Conflicts" bucket="conflicts" items={mergeReview.conflicts} onToggle={onMergeToggle} />
+              <div className="rounded border border-border p-2">
+                <div className="text-[11px] font-medium">Unmatched GPR spots</div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">{mergeReview.unmatchedGpr.length} stay unnamed until reviewed.</div>
+              </div>
+              <Button size="sm" className="h-8 w-full gap-1.5" onClick={onApplyMerge} disabled={pendingMergeCount === 0}>
+                <GitMerge className="h-3.5 w-3.5" />
+                Apply confirmed merge
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "headstones" && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Bulk images live in Import Center. Burial.csv image filename fields are matched here; missing or unmatched images remain review work.
+          </p>
+          <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
+            <Link href="/import-data/headstones">
+              <ImagePlus className="h-3.5 w-3.5" />
+              Open headstone image import
+            </Link>
+          </Button>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onSyncHeadstones}>
+            <GitMerge className="h-3.5 w-3.5" />
+            Match saved image filenames
+          </Button>
+          <MiniStat label="Image attached" value={workflowStats.images} />
+          <MiniStat label="AI processed" value={workflowStats.ai} />
+          {selectedSpot ? (
+            <div className="grid grid-cols-2 gap-1">
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkAiProcessed}>AI done</Button>
+              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkVerified}>Verify spot</Button>
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">Select a burial spot to mark AI processed or verified.</p>
+          )}
+        </div>
+      )}
+
+      {tab === "publish" && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-1">
+            <MiniStat label="Needs review" value={workflowStats.needsReview} />
+            <MiniStat label="Verified" value={workflowStats.verified} />
+            <MiniStat label="Published" value={workflowStats.published} />
+            <MiniStat label="Total spots" value={doc.spots.length} />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Public map exposes name, dates, headstone image, and burial location. Admin map keeps GPR coordinates, source CSV, confidence, and review data.
+          </p>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onPublish}>
+            <Send className="h-3.5 w-3.5" />
+            Publish map
+          </Button>
+        </div>
+      )}
+
+      {importLog.length > 0 && (
+        <div className="mt-3 border-t border-border pt-2">
+          <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <ListChecks className="h-3 w-3" />
+            Activity
+          </div>
+          <div className="space-y-1">
+            {importLog.slice(0, 3).map((item) => (
+              <div key={item} className="text-[10px] text-muted-foreground">{item}</div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function useWorkflowStatsShape() {
+  return {
+    gpr: 0,
+    burial: 0,
+    images: 0,
+    ai: 0,
+    needsReview: 0,
+    verified: 0,
+    published: 0,
+  };
+}
+
+function WorkflowLine({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      {done ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
+      <span className={done ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded border border-border bg-muted/20 px-2 py-1">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-xs font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function MergeBucketList({
+  title,
+  bucket,
+  items,
+  onToggle,
+}: {
+  title: string;
+  bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">;
+  items: MergeCandidate[];
+  onToggle: (bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">, id: string, apply: boolean) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="rounded border border-border">
+      <div className="flex items-center justify-between border-b border-border px-2 py-1">
+        <span className="text-[11px] font-medium">{title}</span>
+        <Badge variant="outline" className="h-4 text-[9px]">{items.length}</Badge>
+      </div>
+      <div className="max-h-28 overflow-y-auto">
+        {items.slice(0, 12).map((item) => (
+          <label key={item.id} className="flex gap-2 border-b border-border/60 px-2 py-1.5 last:border-0">
+            <input
+              type="checkbox"
+              checked={item.apply}
+              onChange={(event) => onToggle(bucket, item.id, event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] font-medium">{item.burial.name || `Row ${item.burial.rowNumber}`}</span>
+              <span className="block truncate text-[10px] text-muted-foreground">{item.reason}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PlotEditor({ plot, plotTypes, onChange, onDelete }: {
   plot: Plot; plotTypes: PlotType[];
   onChange: (patch: Partial<Plot>) => void; onDelete: () => void;
@@ -2328,9 +3279,24 @@ function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onRemoveHead
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold truncate">{spot.name || "Unnamed burial"}</div>
-          <div className="text-[10px] text-muted-foreground truncate">{meta.name}{age != null ? ` · age ${age}` : ""}</div>
+          <div className="text-[10px] text-muted-foreground truncate">
+            {spot.temporaryId ? `${spot.temporaryId} · ` : ""}{meta.name}{age != null ? ` · age ${age}` : ""}
+          </div>
         </div>
       </div>
+
+      {(spot.importFlags?.length || spot.reviewStatus) && (
+        <div className="flex flex-wrap gap-1">
+          {(spot.importFlags ?? []).map((flag) => (
+            <Badge key={flag} variant="outline" className="h-5 text-[10px]">{flag}</Badge>
+          ))}
+          {spot.reviewStatus && (
+            <Badge variant="secondary" className="h-5 text-[10px] capitalize">
+              {spot.reviewStatus.replace(/_/g, " ")}
+            </Badge>
+          )}
+        </div>
+      )}
 
       <div>
         <Label className="text-xs">Spot Type</Label>
@@ -2463,6 +3429,20 @@ function SpotEditor({ spot, spotTypes, onChange, onUploadHeadstone, onRemoveHead
           data-testid="input-spot-notes"
         />
       </div>
+
+      {(spot.gprX !== undefined || spot.sourceCsv || spot.imageFileName || spot.aiConfidence !== undefined) && (
+        <div className="rounded-md border border-border bg-muted/20 p-2 text-[10px] text-muted-foreground">
+          <div className="mb-1 font-semibold uppercase tracking-wider text-foreground">Admin import data</div>
+          {spot.gprX !== undefined && spot.gprY !== undefined && (
+            <div>GPR X/Y/Z: {spot.gprX}, {spot.gprY}{spot.gprZ !== undefined ? `, ${spot.gprZ}` : ""}</div>
+          )}
+          {spot.accuracy !== undefined && <div>Accuracy: {spot.accuracy}</div>}
+          {spot.sourceCsv && <div>Source CSV: {spot.sourceCsv}</div>}
+          {spot.imageFileName && <div>Image file: {spot.imageFileName}</div>}
+          {spot.veteranStatus && <div>Veteran: {spot.veteranStatus}</div>}
+          {spot.aiConfidence !== undefined && <div>AI confidence: {Math.round(spot.aiConfidence * 100)}%</div>}
+        </div>
+      )}
 
       <Button size="sm" variant="outline" className="w-full text-destructive hover:text-destructive border-destructive/30" onClick={onDelete} data-testid="delete-spot">
         <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete spot
