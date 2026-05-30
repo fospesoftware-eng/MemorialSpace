@@ -69,16 +69,10 @@ const navigation: NavigationSection[] = [
     name: "Cemetery Operations",
     items: [
       {
-        name: "Create Cemetery",
+        name: "Cemeteries",
         href: "/organizations",
         icon: Building,
-        description: "Add a cemetery profile",
-      },
-      {
-        name: "Cemetery Details",
-        href: "/settings",
-        icon: MapPin,
-        description: "Location, contacts, coordinates",
+        description: "Create and manage cemetery records",
       },
       {
         name: "Map Maker",

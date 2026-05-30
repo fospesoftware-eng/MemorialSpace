@@ -216,7 +216,7 @@ export default function Dashboard() {
     : [];
 
   const quickActions = [
-    { label: "Create Cemetery", href: "/organizations", icon: Building },
+    { label: "Cemeteries", href: "/organizations", icon: Building },
     { label: "Map Maker", href: "/map-maker", icon: Layers },
     { label: "AI Map Maker", href: "/ai-map-maker", icon: Wand2 },
     { label: "Map View", href: "/map", icon: Map },

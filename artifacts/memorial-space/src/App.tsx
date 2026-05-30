@@ -79,7 +79,6 @@ import AccountingInvoiceDetail from "@/pages/b2b/accounting/invoice-detail";
 import Organizations from "@/pages/settings/organizations";
 import TeamPage from "@/pages/team";
 import TeamRolesPage from "@/pages/team/roles";
-import Settings from "@/pages/settings/general";
 import OrgPaymentGateway from "@/pages/settings/payment-gateway";
 import CemeteryTypes from "@/pages/settings/cemetery-types";
 
@@ -168,7 +167,7 @@ function B2BRoutes() {
         <Route path="/team" component={TeamPage} />
         <Route path="/team/roles" component={TeamRolesPage} />
         <Route path="/users" component={TeamPage} />
-        <Route path="/settings" component={Settings} />
+        <Route path="/settings" component={Organizations} />
         <Route path="/settings/payment-gateway" component={OrgPaymentGateway} />
         <Route path="/cemetery-setup" component={CemeteryTypes} />
         <Route component={NotFound} />
