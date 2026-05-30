@@ -54,8 +54,9 @@ function asPositiveId(value: unknown): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function mapUrls(slug: string) {
-  const previewUrl = `/map-maker/preview/${encodeURIComponent(slug)}`;
+function mapUrls(slug: string, projectId?: string) {
+  const projectSuffix = projectId ? `?project=${encodeURIComponent(projectId)}` : "";
+  const previewUrl = `/map-maker/preview/${encodeURIComponent(slug)}${projectSuffix}`;
   return {
     previewUrl,
     permanentUrl: previewUrl,
@@ -73,8 +74,19 @@ function buildPayload(body: unknown, cemetery: { id: number; name: string; slug:
   };
 }
 
+function requestedCemeteryId(req: { query: Record<string, unknown> }): number | null {
+  return asPositiveId(req.query.cemeteryId ?? req.query.organizationId ?? req.query.orgId);
+}
+
+function projectIdFromBody(body: unknown): string {
+  const input = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const doc = (input.doc && typeof input.doc === "object" ? input.doc : {}) as Record<string, unknown>;
+  const raw = String(doc.projectId ?? input.projectId ?? "default").trim();
+  return raw.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "default";
+}
+
 authedRouter.get("/cemetery-maps", async (req, res) => {
-  const organizationId = asPositiveId(req.query.organizationId ?? req.query.orgId);
+  const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
     res.status(400).json({ error: "Valid organizationId is required." });
     return;
@@ -87,19 +99,22 @@ authedRouter.get("/cemetery-maps", async (req, res) => {
   }
 
   const folder = mapFolder(org.id);
-  const draft = await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
-  const published = await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "default";
+  const draft = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-draft-map.json`))
+    ?? await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
+  const published = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
+    ?? await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
   res.json({
     organizationId: org.id,
     slug: org.slug,
     draft,
     published,
-    ...mapUrls(org.slug),
+    ...mapUrls(org.slug, projectId),
   });
 });
 
 authedRouter.put("/cemetery-maps", async (req, res) => {
-  const organizationId = asPositiveId(req.query.organizationId ?? req.query.orgId);
+  const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
     res.status(400).json({ error: "Valid organizationId is required." });
     return;
@@ -114,13 +129,15 @@ authedRouter.put("/cemetery-maps", async (req, res) => {
   const folder = mapFolder(org.id);
   await mkdir(folder.absolute, { recursive: true });
   const cemetery = { id: org.id, name: org.name, slug: org.slug };
+  const projectId = projectIdFromBody(req.body);
   const payload = buildPayload(req.body, cemetery, false);
+  await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
-  res.json({ ok: true, organizationId: org.id, slug: org.slug, ...mapUrls(org.slug), publicBase: folder.publicBase });
+  res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug, projectId), publicBase: folder.publicBase });
 });
 
 authedRouter.post("/cemetery-maps/publish", async (req, res) => {
-  const organizationId = asPositiveId(req.query.organizationId ?? req.query.orgId);
+  const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
     res.status(400).json({ error: "Valid organizationId is required." });
     return;
@@ -135,10 +152,13 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
   const folder = mapFolder(org.id);
   await mkdir(folder.absolute, { recursive: true });
   const cemetery = { id: org.id, name: org.name, slug: org.slug };
+  const projectId = projectIdFromBody(req.body);
   const payload = buildPayload(req.body, cemetery, true);
+  await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
+  await writeFile(path.join(folder.absolute, `${projectId}-published-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(payload, null, 2), "utf8");
-  res.json({ ok: true, organizationId: org.id, slug: org.slug, ...mapUrls(org.slug), publicBase: folder.publicBase });
+  res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug, projectId), publicBase: folder.publicBase });
 });
 
 publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
@@ -149,7 +169,10 @@ publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
   }
 
   const folder = mapFolder(org.id);
-  const published = await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  const projectId = typeof req.query.project === "string" ? req.query.project.replace(/[^a-zA-Z0-9_-]+/g, "-") : "";
+  const published = projectId
+    ? await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
+    : await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
   const draft = published?.doc ? published : await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
   if (!draft?.doc) {
     res.status(404).json({ error: "Cemetery map not found. Save or publish the map first." });
@@ -158,7 +181,7 @@ publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
   res.json({
     ...draft,
     cemetery: { id: org.id, name: org.name, slug: org.slug },
-    ...mapUrls(org.slug),
+    ...mapUrls(org.slug, projectId || undefined),
   });
 });
 

@@ -112,6 +112,13 @@ function headstoneFolder(organizationId: number): { absolute: string; publicBase
   };
 }
 
+function selectedCemeteryId(req: { body?: unknown; query?: Record<string, unknown>; session?: { user?: { organizationId?: number } } }): number | null {
+  const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+  const raw = body.cemeteryId ?? req.query?.cemeteryId ?? req.session?.user?.organizationId;
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 async function storeHeadstoneImage(organizationId: number, image: z.infer<typeof ImageInput>): Promise<string> {
   const { mediaType, buffer } = parseDataUrl(image.dataUrl);
   const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -246,7 +253,11 @@ router.post(
       return;
     }
 
-    const organizationId = req.session!.user!.organizationId!;
+    const organizationId = selectedCemeteryId(req);
+    if (!organizationId) {
+      res.status(400).json({ error: "Select a cemetery before scanning headstone images." });
+      return;
+    }
 
     const results = [];
     for (const image of parsed.data.images) {
@@ -282,7 +293,7 @@ router.post(
       });
       return;
     }
-    const organizationId = req.session!.user!.organizationId!;
+    const organizationId = selectedCemeteryId(req);
     if (!organizationId) {
       res.status(400).json({ error: "Cannot save headstones without a cemetery organization." });
       return;
@@ -321,7 +332,11 @@ router.post(
 router.get(
   "/headstone-import/library",
   asyncHandler(async (req, res) => {
-    const organizationId = req.session!.user!.organizationId!;
+    const organizationId = selectedCemeteryId(req);
+    if (!organizationId) {
+      res.status(400).json({ error: "Select a cemetery to view its headstone library." });
+      return;
+    }
     const folder = headstoneFolder(organizationId);
     res.json({
       organizationId,

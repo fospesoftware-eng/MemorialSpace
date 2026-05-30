@@ -175,6 +175,7 @@ interface Plot {
 
 interface MapDoc {
   name: string;
+  projectId?: string;
   cemeteryId: number | null;
   projectStatus: ProjectStatus;
   image: string | null;
@@ -224,6 +225,7 @@ type LegacyPlot = { id?: string; type?: string; typeId?: string; label?: string;
 type LegacySpot = Partial<BurialSpot>;
 type LegacyDoc = {
   name?: string;
+  projectId?: string;
   cemeteryId?: number | null;
   projectStatus?: ProjectStatus;
   image?: string | null;
@@ -433,6 +435,7 @@ function migrateDoc(raw: unknown): MapDoc {
   const d = (raw ?? {}) as LegacyDoc;
   return {
     name: safeStr(d.name, "Untitled Cemetery Map"),
+    projectId: safeOptStr(d.projectId),
     cemeteryId: typeof d.cemeteryId === "number" ? d.cemeteryId : null,
     projectStatus: d.projectStatus === "published" ? "published" : "draft",
     image: typeof d.image === "string" ? d.image : null,
@@ -1417,8 +1420,10 @@ function MapMakerEditor() {
 
   const mapPreviewUrl = useMemo(() => {
     const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
-    return cemetery ? `/map-maker/preview/${encodeURIComponent(cemetery.slug)}` : null;
-  }, [cemeteries, doc.cemeteryId]);
+    if (!cemetery) return null;
+    const suffix = doc.projectId ? `?project=${encodeURIComponent(doc.projectId)}` : "";
+    return `/map-maker/preview/${encodeURIComponent(cemetery.slug)}${suffix}`;
+  }, [cemeteries, doc.cemeteryId, doc.projectId]);
 
   const openPreviewUrl = useCallback(() => {
     if (!mapPreviewUrl) {
@@ -1436,7 +1441,7 @@ function MapMakerEditor() {
     try {
       localStorage.setItem(key, JSON.stringify(toSave));
       if (toSave.cemeteryId) {
-        const res = await fetch(`/api/cemetery-maps?organizationId=${toSave.cemeteryId}`, {
+        const res = await fetch(`/api/cemetery-maps?cemeteryId=${toSave.cemeteryId}`, {
           method: "PUT",
           credentials: "include",
           headers: { "content-type": "application/json" },
@@ -1583,10 +1588,20 @@ function MapMakerEditor() {
   }, [flashStatus]);
 
   const createDraftProject = () => {
-    const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
+    if (!doc.cemeteryId) {
+      setSaveError("Select or create a cemetery before creating a map project.");
+      setTimeout(() => setSaveError(null), 5000);
+      return;
+    }
+    if (!doc.name.trim() || doc.name === DEFAULT_DOC.name) {
+      setSaveError("Enter a project name before creating the draft.");
+      setTimeout(() => setSaveError(null), 5000);
+      return;
+    }
     setDoc((d) => ({
       ...d,
-      name: cemetery ? `${cemetery.name} Map Project` : d.name || "Untitled Cemetery Map",
+      name: d.name.trim(),
+      projectId: newId("project"),
       projectStatus: "draft",
       updatedAt: Date.now(),
     }));
@@ -1768,6 +1783,55 @@ function MapMakerEditor() {
         setTimeout(() => setSaveError(null), 6000);
         return;
       }
+      const coordinateRecords = records.filter((record) => record.x !== undefined && record.y !== undefined);
+      if (doc.spots.length === 0 && coordinateRecords.length > 0) {
+        const coordinateSystem = createCoordinateSystem(coordinateRecords.map((record) => ({ x: record.x!, y: record.y! })));
+        const spots: BurialSpot[] = coordinateRecords.map((record, index) => {
+          const projected = projectPoint(coordinateSystem, record.x!, record.y!);
+          let spot: BurialSpot = {
+            id: `CSV-${String(index + 1).padStart(3, "0")}`,
+            temporaryId: `CSV-${String(index + 1).padStart(3, "0")}`,
+            x: projected.x,
+            y: projected.y,
+            name: record.name,
+            dob: record.dob,
+            dod: record.dod,
+            lat: record.lat,
+            lon: record.lon,
+            gprX: record.x,
+            gprY: record.y,
+            gprZ: record.z,
+            sourceCsv: record.sourceCsv,
+            imagePath: record.imagePath,
+            imageFileName: record.imagePath ? fileBaseName(record.imagePath) : undefined,
+            veteranStatus: record.veteranStatus,
+            spotTypeId: spotTypeFromBurialRecord(record, activeSpotTypeId || "civilian"),
+            reviewStatus: record.name ? "burial_matched" : "needs_review",
+            importFlags: record.name ? ["Burial Data Matched"] : ["Needs Review"],
+          };
+          if (record.imagePath) spot = withFlag(spot, "Image Attached");
+          return spot;
+        });
+        setDoc((d) => ({
+          ...d,
+          name: d.name === DEFAULT_DOC.name ? `${file.name.replace(/\.[^.]+$/, "")} Map Project` : d.name,
+          projectStatus: "draft",
+          imgWidth: coordinateSystem.width,
+          imgHeight: coordinateSystem.height,
+          coordinateSystem,
+          spots,
+          importSource: { ...d.importSource, burialCsv: file.name },
+          updatedAt: Date.now(),
+        }));
+        setSelection(null);
+        setMergeReview(null);
+        setShowSpots(true);
+        setView("preview");
+        setZoom(1);
+        setWorkflowTab("headstones");
+        addImportLog(`Generated ${spots.length} burial spots directly from ${file.name}`);
+        return;
+      }
       const review = buildMergeReview(records, file.name);
       setMergeReview(review);
       setDoc((d) => ({ ...d, importSource: { ...d.importSource, burialCsv: file.name }, updatedAt: Date.now() }));
@@ -1818,6 +1882,7 @@ function MapMakerEditor() {
       let cremationCount = 0;
       let miscCount = 0;
       let copingCount = 0;
+      let createdDirectBurials = false;
 
       for (const { file, rows } of parsed) {
         const lower = file.name.toLowerCase();
@@ -1971,9 +2036,10 @@ function MapMakerEditor() {
             importFlags: record.name ? ["Burial Data Matched"] : ["Needs Review"],
           });
         });
+        createdDirectBurials = importedSpots.length > 0;
       }
 
-      const review = burialRecords.length > 0
+      const review = burialRecords.length > 0 && !createdDirectBurials
         ? buildMergeReview(burialRecords, sourceNames.find((name) => name.toLowerCase().includes("burial")) ?? "Burial.csv", importedSpots)
         : null;
 
@@ -2086,7 +2152,8 @@ function MapMakerEditor() {
 
   const syncHeadstoneLibrary = async () => {
     try {
-      const libraryRes = await fetch("/api/headstone-import/library", { credentials: "include" });
+      if (!doc.cemeteryId) throw new Error("Select a cemetery before syncing headstones.");
+      const libraryRes = await fetch(`/api/headstone-import/library?cemeteryId=${doc.cemeteryId}`, { credentials: "include" });
       if (!libraryRes.ok) throw new Error("Headstone library is not available.");
       const library = await libraryRes.json() as { manifestPath?: string; folder?: string };
       if (!library.manifestPath) throw new Error("No headstone manifest has been saved yet.");
@@ -2157,7 +2224,7 @@ function MapMakerEditor() {
     };
     const previewWindow = window.open("about:blank", "_blank");
     try {
-      const res = await fetch(`/api/cemetery-maps/publish?organizationId=${doc.cemeteryId}`, {
+      const res = await fetch(`/api/cemetery-maps/publish?cemeteryId=${doc.cemeteryId}`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -2235,7 +2302,7 @@ function MapMakerEditor() {
       data-testid="map-maker-root"
     >
       {/* ============ Top toolbar ============ */}
-      <div className="flex items-center gap-2 border-b border-border bg-card px-2 sm:px-3 h-14 shrink-0">
+      <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden border-b border-border bg-card px-2 sm:px-3 h-14 shrink-0">
         {/* Back to dashboard */}
         <Link href="/dashboard">
           <Button variant="ghost" size="sm" className="h-9 px-2" data-testid="btn-back-app" title="Back to dashboard">
@@ -2263,9 +2330,10 @@ function MapMakerEditor() {
           </div>
           <div className="min-w-0">
             <Input
-              value={doc.name}
+              value={doc.name === DEFAULT_DOC.name ? "" : doc.name}
               onChange={(e) => setDoc((d) => ({ ...d, name: e.target.value }))}
-              className="h-7 w-40 sm:w-56 text-sm font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-2"
+              placeholder="Project name"
+              className="h-7 w-32 sm:w-44 lg:w-56 text-sm font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-2"
               data-testid="input-map-name"
             />
             <div className="text-[10px] text-muted-foreground px-2 hidden sm:block">
@@ -2539,6 +2607,7 @@ function MapMakerEditor() {
                 onImportDataset={() => datasetInputRef.current?.click()}
                 onUploadGpr={() => gprInputRef.current?.click()}
                 onUploadBurial={() => burialInputRef.current?.click()}
+                onRenameProject={(name) => setDoc((d) => ({ ...d, name, updatedAt: Date.now() }))}
                 onMergeToggle={updateMergeCandidate}
                 onApplyMerge={applyMergeReview}
                 onSyncHeadstones={syncHeadstoneLibrary}
@@ -2722,14 +2791,11 @@ function MapMakerEditor() {
                 </div>
                 <h3 className="text-xl font-semibold mb-1">Start your cemetery map</h3>
                 <p className="text-sm text-muted-foreground mb-5">
-                  Drag &amp; drop a map image here, or upload one as a base layer. Then draw plot sections and drop burial spots on top.
+                  Select a cemetery, enter a project name, then create a draft. Upload GPR or Burial.csv to generate interactive burial spots.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
-                  <Button size="sm" onClick={() => fileInputRef.current?.click()} data-testid="empty-upload-image">
-                    <Upload className="h-3.5 w-3.5 mr-1.5" /> Upload image
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={loadSample} data-testid="empty-load-sample">
-                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Try sample
+                  <Button size="sm" onClick={createDraftProject} data-testid="empty-create-project">
+                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Create map project
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-4">
@@ -3352,7 +3418,9 @@ function PublishedMapPreview({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    fetch(`/api/cemetery-maps/public/${encodeURIComponent(slug)}`, { credentials: "include" })
+    const project = new URLSearchParams(window.location.search).get("project");
+    const suffix = project ? `?project=${encodeURIComponent(project)}` : "";
+    fetch(`/api/cemetery-maps/public/${encodeURIComponent(slug)}${suffix}`, { credentials: "include" })
       .then(async (res) => {
         const body = await res.json().catch(() => null);
         if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
@@ -3677,6 +3745,7 @@ function WorkflowPanel({
   onImportDataset,
   onUploadGpr,
   onUploadBurial,
+  onRenameProject,
   onMergeToggle,
   onApplyMerge,
   onSyncHeadstones,
@@ -3695,6 +3764,7 @@ function WorkflowPanel({
   onImportDataset: () => void;
   onUploadGpr: () => void;
   onUploadBurial: () => void;
+  onRenameProject: (name: string) => void;
   onMergeToggle: (bucket: keyof Pick<MergeReview, "exact" | "nearby" | "newRecords" | "duplicates" | "conflicts">, id: string, apply: boolean) => void;
   onApplyMerge: () => void;
   onSyncHeadstones: () => void;
@@ -3713,6 +3783,16 @@ function WorkflowPanel({
         <div className="space-y-2">
           <WorkflowLine done={Boolean(doc.cemeteryId)} label={selectedCemetery ? selectedCemetery.name : "Select cemetery"} />
           <WorkflowLine done={doc.projectStatus === "draft" || doc.projectStatus === "published"} label="Project starts as Draft" />
+          <div className="space-y-1">
+            <Label className="text-[11px]">Project name</Label>
+            <Input
+              value={doc.name === DEFAULT_DOC.name ? "" : doc.name}
+              onChange={(event) => onRenameProject(event.target.value)}
+              placeholder="Section A spring import"
+              className="h-8 text-xs"
+              data-testid="input-map-project-name"
+            />
+          </div>
           <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
             <Link href="/organizations">
               <Plus className="h-3.5 w-3.5" />
@@ -3791,17 +3871,25 @@ function WorkflowPanel({
       {tab === "headstones" && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Bulk images live in Import Center. Burial.csv image filename fields are matched here; missing or unmatched images remain review work.
+            Bulk images live in Headstone Import. This workspace syncs the selected cemetery folder by filename; missing or unmatched images remain review work.
           </p>
+          {doc.cemeteryId && (
+            <div className="rounded border border-border bg-muted/30 p-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Headstone folder</div>
+              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                /uploads/cemeteries/{doc.cemeteryId}/headstones
+              </div>
+            </div>
+          )}
           <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
             <Link href="/import-data/headstones">
               <ImagePlus className="h-3.5 w-3.5" />
-              Open headstone image import
+              Open Headstone Import
             </Link>
           </Button>
           <Button size="sm" className="h-8 w-full gap-1.5" onClick={onSyncHeadstones}>
             <GitMerge className="h-3.5 w-3.5" />
-            Match saved image filenames
+            Sync headstone library
           </Button>
           <MiniStat label="Image attached" value={workflowStats.images} />
           <MiniStat label="AI processed" value={workflowStats.ai} />

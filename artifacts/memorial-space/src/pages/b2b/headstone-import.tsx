@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type MouseEvent } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -27,6 +27,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
@@ -83,6 +90,12 @@ type VerifyResponse = {
   manifestPath: string;
 };
 
+type CemeteryOption = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
 async function api<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     ...init,
@@ -121,6 +134,8 @@ async function prepareHeadstoneImage(file: File): Promise<UploadImage> {
 }
 
 export default function HeadstoneImportPage() {
+  const [cemeteries, setCemeteries] = useState<CemeteryOption[]>([]);
+  const [selectedCemeteryId, setSelectedCemeteryId] = useState<string>("");
   const [images, setImages] = useState<UploadImage[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [folder, setFolder] = useState<string | null>(null);
@@ -132,6 +147,30 @@ export default function HeadstoneImportPage() {
   const [viewerZoom, setViewerZoom] = useState(1.2);
   const [magnifierEnabled, setMagnifierEnabled] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 50, y: 50 });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BASE}/api/organizations`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data)) return;
+        const options = data
+          .map((item) => ({
+            id: Number(item.id),
+            name: String(item.name ?? "Untitled cemetery"),
+            slug: String(item.slug ?? item.id),
+          }))
+          .filter((item) => Number.isFinite(item.id));
+        setCemeteries(options);
+        setSelectedCemeteryId((current) => current || (options[0] ? String(options[0].id) : ""));
+      })
+      .catch(() => {
+        if (!cancelled) setCemeteries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const missingCount = useMemo(
     () =>
@@ -155,6 +194,10 @@ export default function HeadstoneImportPage() {
   };
 
   const analyze = async () => {
+    if (!selectedCemeteryId) {
+      setError("Select a cemetery before scanning headstone images.");
+      return;
+    }
     if (images.length === 0) {
       setError("Upload at least one headstone image.");
       return;
@@ -175,7 +218,7 @@ export default function HeadstoneImportPage() {
         const batch = images.slice(start, start + SCAN_BATCH_SIZE);
         const result = await api<AnalyzeResponse>("/headstone-import/analyze", {
           method: "POST",
-          body: JSON.stringify({ images: batch, sheet: COMPATIBILITY_SHEET }),
+          body: JSON.stringify({ cemeteryId: Number(selectedCemeteryId), images: batch, sheet: COMPATIBILITY_SHEET }),
         });
         activeFolder = result.folder;
         const scannedRows = result.rows.map((row) => ({
@@ -202,6 +245,7 @@ export default function HeadstoneImportPage() {
       const result = await api<VerifyResponse>("/headstone-import/verify", {
         method: "POST",
         body: JSON.stringify({
+          cemeteryId: Number(selectedCemeteryId),
           rows: rows.map(({ previewDataUrl, ...row }) => row),
         }),
       });
@@ -288,6 +332,9 @@ export default function HeadstoneImportPage() {
   };
 
   const viewerImage = viewerRow?.previewDataUrl ?? viewerRow?.storedPath ?? "";
+  const headstoneFolder = selectedCemeteryId
+    ? `/uploads/cemeteries/${selectedCemeteryId}/headstones`
+    : null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -306,7 +353,7 @@ export default function HeadstoneImportPage() {
         <Button
           className="gap-2"
           onClick={analyze}
-          disabled={analyzing || images.length === 0}
+          disabled={analyzing || images.length === 0 || !selectedCemeteryId}
           data-testid="button-run-headstone-ai"
         >
           {analyzing ? (
@@ -350,6 +397,30 @@ export default function HeadstoneImportPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,360px)_1fr]">
+            <div>
+              <Label>Cemetery</Label>
+              <Select value={selectedCemeteryId || "none"} onValueChange={(value) => setSelectedCemeteryId(value === "none" ? "" : value)}>
+                <SelectTrigger className="mt-1" data-testid="select-headstone-cemetery">
+                  <SelectValue placeholder="Select cemetery" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select cemetery</SelectItem>
+                  {cemeteries.map((cemetery) => (
+                    <SelectItem key={cemetery.id} value={String(cemetery.id)}>
+                      {cemetery.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {headstoneFolder && (
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">Headstone folder</div>
+                <div className="mt-1 break-all font-mono text-xs">{headstoneFolder}</div>
+              </div>
+            )}
+          </div>
           <Input
             type="file"
             accept="image/*"
