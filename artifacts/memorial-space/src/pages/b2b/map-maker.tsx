@@ -26,6 +26,8 @@ import {
 } from "@/lib/cemetery-config";
 import { cn } from "@/lib/utils";
 
+const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
 type Tool = "select" | "draw" | "rect-outline" | "circle" | "polygon" | "polygon-outline" | "path" | "spot" | "pan";
 
 /** Tools that produce an axis-aligned rectangle (drag-to-draw). */
@@ -353,6 +355,14 @@ function fileBaseName(value: string) {
   return value.split(/[\\/]/).pop()?.trim() ?? value.trim();
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function createCoordinateSystem(points: Array<{ x: number; y: number }>): CoordinateSystem {
   const minX = Math.min(...points.map((point) => point.x));
   const maxX = Math.max(...points.map((point) => point.x));
@@ -429,6 +439,35 @@ function spotTypeFromBurialRecord(record: BurialCsvRecord, fallback = "civilian"
   if (/\b(child|infant|baby|son|daughter)\b/.test(text)) return "child";
   if (/\b(rev|reverend|pastor|father|priest|clergy)\b/.test(text)) return "clergy";
   return fallback;
+}
+
+function patchSpotFromBurialRecord(spot: BurialSpot, record: BurialCsvRecord): BurialSpot {
+  let next: BurialSpot = {
+    ...spot,
+    name: record.name || spot.name,
+    dob: record.dob ?? spot.dob,
+    dod: record.dod ?? spot.dod,
+    lat: record.lat ?? spot.lat,
+    lon: record.lon ?? spot.lon,
+    gprX: record.x ?? spot.gprX,
+    gprY: record.y ?? spot.gprY,
+    gprZ: record.z ?? spot.gprZ,
+    sourceCsv: record.sourceCsv,
+    imagePath: record.imagePath || spot.imagePath,
+    imageFileName: record.imagePath ? fileBaseName(record.imagePath) : spot.imageFileName,
+    veteranStatus: record.veteranStatus || spot.veteranStatus,
+    spotTypeId: spotTypeFromBurialRecord(record, spot.spotTypeId),
+    reviewStatus: record.name ? "burial_matched" : spot.reviewStatus,
+  };
+  if (record.name) next = withFlag(next, "Burial Data Matched");
+  if (record.imagePath) next = withFlag(next, "Image Attached");
+  return next;
+}
+
+function withBasePath(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${BASE}${normalized}`;
 }
 
 function migrateDoc(raw: unknown): MapDoc {
@@ -1431,7 +1470,7 @@ function MapMakerEditor() {
       setTimeout(() => setSaveError(null), 5000);
       return;
     }
-    window.open(mapPreviewUrl, "_blank", "noopener,noreferrer");
+    window.open(withBasePath(mapPreviewUrl), "_blank", "noopener,noreferrer");
   }, [mapPreviewUrl]);
 
   const save = async () => {
@@ -1489,6 +1528,84 @@ function MapMakerEditor() {
     a.download = `${doc.name.replace(/\s+/g, "_")}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
+    const spotTypeMap = new Map(spotTypes.map((type) => [type.id, type]));
+    const plotTypeMap = new Map(plotTypes.map((type) => [type.id, type]));
+    const plotsSvg = doc.plots.map((plot) => {
+      const meta = plotTypeMap.get(plot.typeId) ?? FALLBACK_PLOT_TYPE;
+      if (plot.points && plot.points.length >= 3) {
+        return `<polygon points="${plot.points.map(([x, y]) => `${x},${y}`).join(" ")}" fill="${plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}" stroke="${meta.stroke}" stroke-width="${plot.outline ? 2 : 1}" ${plot.outline ? 'stroke-dasharray="7 5"' : ""} opacity="0.7" />`;
+      }
+      return `<rect x="${plot.x}" y="${plot.y}" width="${plot.w}" height="${plot.h}" fill="${plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}" stroke="${meta.stroke}" stroke-width="${plot.outline ? 2 : 1}" ${plot.outline ? 'stroke-dasharray="7 5"' : ""} opacity="0.7" />`;
+    }).join("");
+    const spotsSvg = doc.spots.map((spot) => {
+      const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
+      const label = escapeHtml(spot.name || spot.temporaryId || "");
+      return `<g><rect x="${spot.x - 3}" y="${spot.y - 3}" width="6" height="6" fill="${meta.color}" stroke="#fff" stroke-width="1" /><text x="${spot.x + 5}" y="${spot.y - 3}" font-size="7" font-family="Arial, sans-serif" fill="#1f2a22">${label}</text></g>`;
+    }).join("");
+    const legend = spotTypes.map((type) => `<span><i style="background:${type.color}"></i>${escapeHtml(type.name)}</span>`).join("");
+    const win = window.open("", "_blank");
+    if (!win) {
+      setSaveError("Browser blocked the PDF window. Allow popups and try again.");
+      setTimeout(() => setSaveError(null), 5000);
+      return;
+    }
+    win.document.write(`<!doctype html>
+<html>
+<head>
+  <title>${escapeHtml(doc.name)} PDF</title>
+  <style>
+    @page { size: landscape; margin: 0.35in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f8f5ea; color: #1d2a22; font-family: Arial, sans-serif; }
+    .sheet { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; }
+    header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #2a3d31; padding-bottom: 8px; }
+    h1 { margin: 0; font-size: 20px; letter-spacing: 0.02em; }
+    .sub { margin-top: 3px; font-size: 10px; color: #536253; text-transform: uppercase; letter-spacing: 0.18em; }
+    .scale { text-align: right; font-size: 10px; color: #536253; }
+    .map-wrap { border: 1px solid #2a3d31; background: #fffdf6; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    svg { width: 100%; height: 100%; max-height: 6.8in; }
+    footer { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid #2a3d31; padding-top: 8px; font-size: 9px; color: #536253; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; max-width: 65%; }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .legend i { width: 8px; height: 8px; display: inline-block; border: 1px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+    .disclaimer { max-width: 34%; text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <div>
+        <h1>${escapeHtml(cemetery?.name ?? doc.name)}</h1>
+        <div class="sub">${escapeHtml(doc.name)} · Cemetery Overview · ${new Date().getFullYear()}</div>
+      </div>
+      <div class="scale">0&nbsp;&nbsp;20&nbsp;&nbsp;40 Feet<br/>Interactive map export</div>
+    </header>
+    <main class="map-wrap">
+      <svg viewBox="0 0 ${doc.imgWidth} ${doc.imgHeight}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="#fffdf6" />
+        <defs>
+          <pattern id="gridPdf" width="28" height="28" patternUnits="userSpaceOnUse">
+            <path d="M 28 0 L 0 0 0 28" fill="none" stroke="rgba(74,86,70,0.12)" stroke-width="1" />
+          </pattern>
+        </defs>
+        <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="url(#gridPdf)" />
+        ${plotsSvg}
+        ${spotsSvg}
+      </svg>
+    </main>
+    <footer>
+      <div class="legend">${legend}</div>
+      <div class="disclaimer">Locations are generated from imported cemetery data and should be verified by cemetery staff before public use.</div>
+    </footer>
+  </div>
+  <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
+</body>
+</html>`);
+    win.document.close();
   };
 
   const updatePlot = (patch: Partial<Plot>) => {
@@ -1883,6 +2000,7 @@ function MapMakerEditor() {
       let miscCount = 0;
       let copingCount = 0;
       let createdDirectBurials = false;
+      let autoMatchedBurials = 0;
 
       for (const { file, rows } of parsed) {
         const lower = file.name.toLowerCase();
@@ -2039,9 +2157,43 @@ function MapMakerEditor() {
         createdDirectBurials = importedSpots.length > 0;
       }
 
-      const review = burialRecords.length > 0 && !createdDirectBurials
-        ? buildMergeReview(burialRecords, sourceNames.find((name) => name.toLowerCase().includes("burial")) ?? "Burial.csv", importedSpots)
-        : null;
+      if (!createdDirectBurials && importedSpots.length > 0 && burialRecords.length > 0) {
+        const usedSpots = new Set<string>();
+        burialRecords.forEach((record) => {
+          if (record.x === undefined || record.y === undefined) return;
+          const candidates = importedSpots
+            .map((spot, index) => ({
+              spot,
+              index,
+              rawDistance: spot.gprX !== undefined && spot.gprY !== undefined
+                ? distance({ x: record.x!, y: record.y! }, { x: spot.gprX, y: spot.gprY })
+                : Number.POSITIVE_INFINITY,
+              canvasDistance: distance(projectPoint(coordinateSystem, record.x!, record.y!), { x: spot.x, y: spot.y }),
+            }))
+            .filter((candidate) => !usedSpots.has(candidate.spot.id))
+            .sort((a, b) => Math.min(a.rawDistance, a.canvasDistance) - Math.min(b.rawDistance, b.canvasDistance));
+          const best = candidates[0];
+          if (best && Math.min(best.rawDistance, best.canvasDistance) <= 25) {
+            importedSpots[best.index] = patchSpotFromBurialRecord(best.spot, record);
+            usedSpots.add(best.spot.id);
+            autoMatchedBurials++;
+            return;
+          }
+          const projected = projectPoint(coordinateSystem, record.x!, record.y!);
+          importedSpots.push(patchSpotFromBurialRecord({
+            id: `CSV-${String(importedSpots.length + 1).padStart(3, "0")}`,
+            temporaryId: `CSV-${String(importedSpots.length + 1).padStart(3, "0")}`,
+            x: projected.x,
+            y: projected.y,
+            name: "",
+            spotTypeId: spotTypeFromBurialRecord(record, activeSpotTypeId || "civilian"),
+            reviewStatus: "needs_review",
+            importFlags: ["Needs Review"],
+          }, record));
+        });
+      }
+
+      const review = null;
 
       setDoc((d) => ({
         ...d,
@@ -2064,8 +2216,8 @@ function MapMakerEditor() {
       setView("preview");
       setZoom(1);
       setMergeReview(review);
-      setWorkflowTab(review ? "merge" : "publish");
-      addImportLog(`Imported dataset: ${gprCount} GPR, ${burialRecords.length} burials, ${cremationCount} cremations, ${copingCount} areas, ${miscCount} misc`);
+      setWorkflowTab("headstones");
+      addImportLog(`Generated map: ${gprCount} GPR, ${burialRecords.length} burial rows${autoMatchedBurials ? ` (${autoMatchedBurials} matched)` : ""}, ${cremationCount} cremations, ${copingCount} areas, ${miscCount} misc`);
     } catch {
       setSaveError("Couldn't import the cemetery dataset.");
       setTimeout(() => setSaveError(null), 7000);
@@ -2093,26 +2245,7 @@ function MapMakerEditor() {
       candidates.forEach((candidate) => {
         const record = candidate.burial;
         const patch = (spot: BurialSpot): BurialSpot => {
-          let next: BurialSpot = {
-            ...spot,
-            name: record.name || spot.name,
-            dob: record.dob ?? spot.dob,
-            dod: record.dod ?? spot.dod,
-            lat: record.lat ?? spot.lat,
-            lon: record.lon ?? spot.lon,
-            gprX: record.x ?? spot.gprX,
-            gprY: record.y ?? spot.gprY,
-            gprZ: record.z ?? spot.gprZ,
-            sourceCsv: record.sourceCsv,
-            imagePath: record.imagePath || spot.imagePath,
-            imageFileName: record.imagePath ? fileBaseName(record.imagePath) : spot.imageFileName,
-            veteranStatus: record.veteranStatus || spot.veteranStatus,
-            spotTypeId: spotTypeFromBurialRecord(record, spot.spotTypeId),
-            reviewStatus: "burial_matched",
-          };
-          next = withFlag(next, "Burial Data Matched");
-          if (record.imagePath) next = withFlag(next, "Image Attached");
-          return next;
+          return patchSpotFromBurialRecord(spot, record);
         };
         if (candidate.spotId) {
           const index = spots.findIndex((spot) => spot.id === candidate.spotId);
@@ -2237,9 +2370,9 @@ function MapMakerEditor() {
       addImportLog("Map published. Permanent preview URL is ready.");
       const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
       if (url && previewWindow) {
-        previewWindow.location.href = url;
+        previewWindow.location.href = withBasePath(url);
       } else if (url) {
-        window.open(url, "_blank", "noopener,noreferrer");
+        window.open(withBasePath(url), "_blank", "noopener,noreferrer");
       }
     } catch (err) {
       previewWindow?.close();
@@ -2457,6 +2590,9 @@ function MapMakerEditor() {
         <Button size="sm" variant="outline" onClick={exportJson} data-testid="export-json" className="h-8 hidden md:inline-flex">
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export
         </Button>
+        <Button size="sm" variant="outline" onClick={exportPdf} data-testid="export-pdf" className="h-8 hidden md:inline-flex">
+          <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
+        </Button>
         <Button size="sm" variant="outline" onClick={openPreviewUrl} data-testid="open-map-url" className="h-8 hidden lg:inline-flex">
           <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> URL
         </Button>
@@ -2504,12 +2640,6 @@ function MapMakerEditor() {
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
             <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
             <Separator className="my-1 w-8" />
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => fileInputRef.current?.click()} title="Upload background image">
-              <Upload className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={loadSample} title="Load sample map">
-              <Sparkles className="h-4 w-4" />
-            </Button>
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => gprInputRef.current?.click()} title="Upload GPR CSV">
               <Database className="h-4 w-4" />
             </Button>
@@ -2719,21 +2849,7 @@ function MapMakerEditor() {
               )}
             </div>
 
-            <div className="p-3 border-b border-border">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Background</div>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={onUploadImage} className="hidden" data-testid="image-input" />
-              <Button size="sm" variant="outline" className="w-full mb-2" onClick={() => fileInputRef.current?.click()} data-testid="upload-image">
-                <Upload className="h-3.5 w-3.5 mr-1.5" /> Upload map image
-              </Button>
-              <Button size="sm" variant="ghost" className="w-full" onClick={loadSample} data-testid="load-sample">
-                <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Load sample map
-              </Button>
-              {doc.image && (
-                <Button size="sm" variant="ghost" className="w-full text-destructive hover:text-destructive mt-1" onClick={() => setDoc((d) => ({ ...d, image: null }))}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove image
-                </Button>
-              )}
-            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={onUploadImage} className="hidden" data-testid="image-input" />
 
             {backgrounds.length > 0 && (
               <div className="p-3">
@@ -3809,11 +3925,11 @@ function WorkflowPanel({
       {tab === "gpr" && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Upload raw GPR CSV first. X/Y coordinates create unnamed burial spots with temporary IDs.
+            Select every cemetery CSV at once: GPR, Burial, Cremations, Misc Points, Coping Area, and any other coordinate layer.
           </p>
           <Button size="sm" variant="outline" className="h-8 w-full gap-1.5" onClick={onImportDataset}>
             <FileSpreadsheet className="h-3.5 w-3.5" />
-            Import full CSV dataset
+            Import all CSV files
           </Button>
           <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadGpr}>
             <Database className="h-3.5 w-3.5" />
