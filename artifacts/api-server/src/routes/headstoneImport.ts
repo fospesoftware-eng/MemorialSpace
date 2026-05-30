@@ -31,20 +31,20 @@ const AnalyzeBody = z.object({
 });
 
 const PersonInput = z.object({
-  name: z.string().max(240),
-  dateOfBirth: z.string().max(40).nullable().optional(),
-  dateOfDeath: z.string().max(40).nullable().optional(),
+  name: z.string().max(500),
+  dateOfBirth: z.string().max(120).nullable().optional(),
+  dateOfDeath: z.string().max(120).nullable().optional(),
 });
 
 const VerifiedRow = z.object({
-  imageFileName: z.string().min(1).max(240),
-  storedPath: z.string().min(1).max(500),
+  imageFileName: z.string().min(1).max(500),
+  storedPath: z.string().min(1).max(1200),
   isFamilyHeadstone: z.boolean().default(false),
   people: z.array(PersonInput).max(12),
-  inscriptionText: z.string().max(5000).optional(),
+  inscriptionText: z.string().max(10000).nullable().optional(),
   confidence: z.number().min(0).max(1).optional(),
-  warnings: z.array(z.string().max(240)).max(12).optional(),
-  notes: z.string().max(2000).nullable().optional(),
+  warnings: z.array(z.string().max(1000)).max(20).optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 const VerifyBody = z.object({
@@ -273,10 +273,20 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = VerifyBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid verified rows", details: parsed.error.issues });
+      const issue = parsed.error.issues[0];
+      res.status(400).json({
+        error: issue
+          ? `Invalid verified rows: ${issue.path.join(".") || "request"} ${issue.message}`
+          : "Invalid verified rows",
+        details: parsed.error.issues,
+      });
       return;
     }
     const organizationId = req.session!.user!.organizationId!;
+    if (!organizationId) {
+      res.status(400).json({ error: "Cannot save headstones without a cemetery organization." });
+      return;
+    }
     const folder = headstoneFolder(organizationId);
     await mkdir(folder.absolute, { recursive: true });
     const verifiedRows = parsed.data.rows.map((row) => ({
@@ -286,18 +296,15 @@ router.post(
       status: row.people.some((person) => asText(person.name)) ? "verified" : "needs_manual_entry",
       verifiedAt: new Date().toISOString(),
     }));
+    const manifest = {
+      organizationId,
+      folder: folder.publicBase,
+      updatedAt: new Date().toISOString(),
+      images: verifiedRows,
+    };
     await writeFile(
       path.join(folder.absolute, "headstone-manifest.json"),
-      JSON.stringify(
-        {
-          organizationId,
-          folder: folder.publicBase,
-          updatedAt: new Date().toISOString(),
-          images: verifiedRows,
-        },
-        null,
-        2,
-      ),
+      JSON.stringify(manifest, null, 2),
       "utf8",
     );
 

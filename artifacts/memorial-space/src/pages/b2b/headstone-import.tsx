@@ -207,6 +207,14 @@ export default function HeadstoneImportPage() {
       });
       setSuccess(result);
       setFolder(result.folder);
+      setRows((prev) =>
+        prev.map((row) => ({
+          ...row,
+          status: row.people.some((person) => person.name.trim())
+            ? "verified"
+            : "needs_manual_entry",
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save review.");
     } finally {
@@ -442,7 +450,11 @@ export default function HeadstoneImportPage() {
                         {row.imageFileName}
                       </p>
                       <Badge variant={needsName ? "outline" : "default"}>
-                        {needsName ? "Needs manual entry" : "Ready"}
+                        {row.status === "verified"
+                          ? "Saved"
+                          : needsName
+                            ? "Needs manual entry"
+                            : "Ready"}
                       </Badge>
                       <Badge variant="outline">
                         {Math.round((row.confidence ?? 0) * 100)}% confidence
