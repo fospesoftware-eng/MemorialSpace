@@ -1,0 +1,44 @@
+{
+  "organizationId": 1,
+  "folder": "/uploads/cemeteries/1/headstones",
+  "updatedAt": "2026-05-29T13:50:46.518Z",
+  "images": [
+    {
+      "imageFileName": "0a056ff0-bcbc-4ffc-b07b-7685cbe2a4a1.jpg",
+      "storedPath": "/uploads/cemeteries/1/headstones/0a056ff0-bcbc-4ffc-b07b-7685cbe2a4a1.jpg",
+      "isFamilyHeadstone": false,
+      "people": [
+        {
+          "name": "Maggie McNinch McIlwain",
+          "dateOfBirth": "1872-04-26",
+          "dateOfDeath": "1961-12-30"
+        }
+      ],
+      "inscriptionText": "MAGGIE MCNINCH\nWIFE OF\nG. H. MCILWAIN\nAPR. 26. 1872\nDEC. 30. 1961",
+      "confidence": 0.95,
+      "warnings": [
+        "Maiden name is McNinch; married name is McIlwain via husband G. H. McIlwain",
+        "G. H. McIlwain is referenced as husband but has no dates on this stone and is not counted as a separate entry"
+      ],
+      "status": "verified",
+      "verifiedAt": "2026-05-29T13:50:46.518Z"
+    },
+    {
+      "imageFileName": "0afe27d9-6c46-44b5-b072-bcf50b63bf81.jpg",
+      "storedPath": "/uploads/cemeteries/1/headstones/0afe27d9-6c46-44b5-b072-bcf50b63bf81.jpg",
+      "isFamilyHeadstone": false,
+      "people": [
+        {
+          "name": "Lucy Ellis Parker",
+          "dateOfBirth": "1951-04-02",
+          "dateOfDeath": "1980-09-02"
+        }
+      ],
+      "inscriptionText": "LUCY ELLIS PARKER\nAPRIL 2, 1951\nSEPT. 2, 1980",
+      "confidence": 0.98,
+      "warnings": [],
+      "status": "verified",
+      "verifiedAt": "2026-05-29T13:50:46.518Z"
+    }
+  ]
+}
