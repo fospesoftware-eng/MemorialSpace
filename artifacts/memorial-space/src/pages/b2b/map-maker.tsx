@@ -53,7 +53,7 @@ type CemeteryOption = {
   slug: string;
 };
 
-type WorkflowTab = "project" | "gpr" | "burial" | "merge" | "headstones" | "publish";
+type WorkflowTab = "project" | "import" | "headstones" | "publish";
 
 type CsvRow = Record<string, string>;
 
@@ -249,9 +249,7 @@ const safeOptStr = (s: unknown): string | undefined => (typeof s === "string" &&
 
 const WORKFLOW_TABS: Array<{ id: WorkflowTab; label: string; icon: ComponentType<{ className?: string }> }> = [
   { id: "project", label: "Project", icon: Database },
-  { id: "gpr", label: "GPR", icon: Upload },
-  { id: "burial", label: "Burial.csv", icon: FileSpreadsheet },
-  { id: "merge", label: "Merge", icon: GitMerge },
+  { id: "import", label: "Import CSVs", icon: FileSpreadsheet },
   { id: "headstones", label: "Headstones", icon: ImagePlus },
   { id: "publish", label: "Publish", icon: Send },
 ];
@@ -1464,14 +1462,36 @@ function MapMakerEditor() {
     return `/map-maker/preview/${encodeURIComponent(cemetery.slug)}${suffix}`;
   }, [cemeteries, doc.cemeteryId, doc.projectId]);
 
-  const openPreviewUrl = useCallback(() => {
+  const openPreviewUrl = useCallback(async () => {
     if (!mapPreviewUrl) {
       setSaveError("Select a cemetery before opening the permanent map URL.");
       setTimeout(() => setSaveError(null), 5000);
       return;
     }
-    window.open(withBasePath(mapPreviewUrl), "_blank", "noopener,noreferrer");
-  }, [mapPreviewUrl]);
+    if (!doc.cemeteryId) return;
+    const previewWindow = window.open("about:blank", "_blank");
+    const toSave = { ...doc, updatedAt: Date.now() };
+    try {
+      localStorage.setItem(`${STORAGE_KEY}:${(toSave.name || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled"}`, JSON.stringify(toSave));
+      const res = await fetch(`/api/cemetery-maps?cemeteryId=${toSave.cemeteryId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(persistedPayload(toSave)),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+      setDoc(toSave);
+      refreshSaved();
+      const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
+      if (previewWindow) previewWindow.location.href = withBasePath(url);
+      else window.open(withBasePath(url), "_blank", "noopener,noreferrer");
+    } catch (err) {
+      previewWindow?.close();
+      setSaveError(err instanceof Error ? err.message : "Could not open preview URL.");
+      setTimeout(() => setSaveError(null), 6000);
+    }
+  }, [doc, mapPreviewUrl, persistedPayload, refreshSaved]);
 
   const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
@@ -1723,7 +1743,7 @@ function MapMakerEditor() {
       updatedAt: Date.now(),
     }));
     addImportLog("Map project is ready as a draft");
-    setWorkflowTab("gpr");
+    setWorkflowTab("import");
   };
 
   const onUploadGprCsv = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -1789,7 +1809,7 @@ function MapMakerEditor() {
       setSelection(null);
       setMergeReview(null);
       setShowSpots(true);
-      setWorkflowTab("burial");
+      setWorkflowTab("import");
       addImportLog(`Imported ${spots.length} unnamed GPR spots from ${file.name}`);
     } catch {
       setSaveError("Couldn't read the GPR CSV.");
@@ -1952,7 +1972,7 @@ function MapMakerEditor() {
       const review = buildMergeReview(records, file.name);
       setMergeReview(review);
       setDoc((d) => ({ ...d, importSource: { ...d.importSource, burialCsv: file.name }, updatedAt: Date.now() }));
-      setWorkflowTab("merge");
+        setWorkflowTab("import");
       addImportLog(`Prepared merge review for ${records.length} Burial.csv rows`);
     } catch {
       setSaveError("Couldn't read Burial.csv.");
@@ -2435,7 +2455,7 @@ function MapMakerEditor() {
       data-testid="map-maker-root"
     >
       {/* ============ Top toolbar ============ */}
-      <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden border-b border-border bg-card px-2 sm:px-3 h-14 shrink-0">
+      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 gap-y-2 border-b border-border bg-card px-2 py-2 sm:px-3">
         {/* Back to dashboard */}
         <Link href="/dashboard">
           <Button variant="ghost" size="sm" className="h-9 px-2" data-testid="btn-back-app" title="Back to dashboard">
@@ -2529,7 +2549,7 @@ function MapMakerEditor() {
           <Button size="sm" variant={view === "3d" ? "default" : "outline"} onClick={() => setView("3d")} data-testid="view-3d" className="h-8">
             <Box className="h-3.5 w-3.5 mr-1.5" /> 3D
           </Button>
-          <Button size="sm" variant={view === "preview" ? "default" : "outline"} onClick={() => setView("preview")} data-testid="view-preview" className="h-8">
+          <Button size="sm" variant="outline" onClick={openPreviewUrl} data-testid="view-preview" className="h-8">
             <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
           </Button>
         </div>
@@ -2593,9 +2613,6 @@ function MapMakerEditor() {
         <Button size="sm" variant="outline" onClick={exportPdf} data-testid="export-pdf" className="h-8 hidden md:inline-flex">
           <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
         </Button>
-        <Button size="sm" variant="outline" onClick={openPreviewUrl} data-testid="open-map-url" className="h-8 hidden lg:inline-flex">
-          <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> URL
-        </Button>
         <Button size="sm" onClick={save} data-testid="save-map" className="h-8">
           <Save className="h-3.5 w-3.5 mr-1.5" /> Save
         </Button>
@@ -2640,9 +2657,6 @@ function MapMakerEditor() {
             <ToolButton active={tool === "spot"}   onClick={() => setTool("spot")}   icon={MapPinIcon}    label="Spot"   testId="tool-spot-mini" iconOnly />
             <ToolButton active={tool === "pan"}    onClick={() => setTool("pan")}    icon={Hand}          label="Pan"    testId="tool-pan-mini"  iconOnly />
             <Separator className="my-1 w-8" />
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => gprInputRef.current?.click()} title="Upload GPR CSV">
-              <Database className="h-4 w-4" />
-            </Button>
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => datasetInputRef.current?.click()} title="Import cemetery dataset">
               <FileSpreadsheet className="h-4 w-4" />
             </Button>
@@ -2907,7 +2921,7 @@ function MapMakerEditor() {
                 </div>
                 <h3 className="text-xl font-semibold mb-1">Start your cemetery map</h3>
                 <p className="text-sm text-muted-foreground mb-5">
-                  Select a cemetery, enter a project name, then create a draft. Upload GPR or Burial.csv to generate interactive burial spots.
+                  Select a cemetery, enter a project name, then create a draft. Import all CSV files together to generate the interactive map.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button size="sm" onClick={createDraftProject} data-testid="empty-create-project">
@@ -3889,10 +3903,6 @@ function WorkflowPanel({
   onPublish: () => void;
 }) {
   const selectedCemetery = cemeteries.find((cemetery) => cemetery.id === doc.cemeteryId);
-  const pendingMergeCount = mergeReview
-    ? mergeReview.exact.length + mergeReview.nearby.length + mergeReview.newRecords.length + mergeReview.conflicts.length + mergeReview.duplicates.length
-    : 0;
-
   return (
     <div className="mt-3 rounded-md border border-border bg-background p-2">
       {tab === "project" && (
@@ -3922,65 +3932,18 @@ function WorkflowPanel({
         </div>
       )}
 
-      {tab === "gpr" && (
+      {tab === "import" && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Select every cemetery CSV at once: GPR, Burial, Cremations, Misc Points, Coping Area, and any other coordinate layer.
+            Upload all cemetery CSV files in one action. The importer reads GPR, Burial, Cremations, Misc Points, Coping Area, and other coordinate layers together.
           </p>
-          <Button size="sm" variant="outline" className="h-8 w-full gap-1.5" onClick={onImportDataset}>
+          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onImportDataset}>
             <FileSpreadsheet className="h-3.5 w-3.5" />
             Import all CSV files
           </Button>
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadGpr}>
-            <Database className="h-3.5 w-3.5" />
-            Upload GPR CSV
-          </Button>
           <MiniStat label="GPR spots" value={workflowStats.gpr} />
-        </div>
-      )}
-
-      {tab === "burial" && (
-        <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            Upload Burial.csv later. It is staged for merge review and never overwrites saved spot data silently.
-          </p>
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onUploadBurial}>
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Upload Burial.csv
-          </Button>
           <MiniStat label="Burial matched" value={workflowStats.burial} />
-        </div>
-      )}
-
-      {tab === "merge" && (
-        <div className="space-y-2">
-          {!mergeReview ? (
-            <p className="text-[11px] text-muted-foreground">
-              No pending merge. Upload Burial.csv to review exact matches, nearby matches, new records, duplicates, and conflicts.
-            </p>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-1">
-                <MiniStat label="Exact" value={mergeReview.exact.length} />
-                <MiniStat label="Nearby" value={mergeReview.nearby.length} />
-                <MiniStat label="New" value={mergeReview.newRecords.length} />
-                <MiniStat label="Conflicts" value={mergeReview.conflicts.length} />
-              </div>
-              <MergeBucketList title="Exact coordinate matches" bucket="exact" items={mergeReview.exact} onToggle={onMergeToggle} />
-              <MergeBucketList title="Nearby coordinate matches" bucket="nearby" items={mergeReview.nearby} onToggle={onMergeToggle} />
-              <MergeBucketList title="New burial records" bucket="newRecords" items={mergeReview.newRecords} onToggle={onMergeToggle} />
-              <MergeBucketList title="Possible duplicates" bucket="duplicates" items={mergeReview.duplicates} onToggle={onMergeToggle} />
-              <MergeBucketList title="Conflicts" bucket="conflicts" items={mergeReview.conflicts} onToggle={onMergeToggle} />
-              <div className="rounded border border-border p-2">
-                <div className="text-[11px] font-medium">Unmatched GPR spots</div>
-                <div className="mt-0.5 text-[10px] text-muted-foreground">{mergeReview.unmatchedGpr.length} stay unnamed until reviewed.</div>
-              </div>
-              <Button size="sm" className="h-8 w-full gap-1.5" onClick={onApplyMerge} disabled={pendingMergeCount === 0}>
-                <GitMerge className="h-3.5 w-3.5" />
-                Apply confirmed merge
-              </Button>
-            </>
-          )}
+          <MiniStat label="Total spots" value={doc.spots.length} />
         </div>
       )}
 

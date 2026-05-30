@@ -173,7 +173,10 @@ publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
   const published = projectId
     ? await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
     : await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
-  const draft = published?.doc ? published : await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
+  const projectDraft = projectId
+    ? await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-draft-map.json`))
+    : null;
+  const draft = published?.doc ? published : projectDraft?.doc ? projectDraft : await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
   if (!draft?.doc) {
     res.status(404).json({ error: "Cemetery map not found. Save or publish the map first." });
     return;
