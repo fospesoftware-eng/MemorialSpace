@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type ComponentType, type PointerEvent as ReactPointerEvent, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Upload, MousePointer2, Square, Trash2, Save, Download, Image as ImageIcon,
   Box, Layers, Eye, EyeOff, FolderOpen, FileImage, Plus, Hand,
   ZoomIn, ZoomOut, RotateCcw, Sparkles, MapPin as MapPinIcon, X,
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
   Spline, Circle as CircleIcon, Hexagon, SquareDashed, FileSpreadsheet,
-  GitMerge, AlertTriangle, CheckCircle2, Send, Database, ListChecks, ImagePlus,
+  GitMerge, AlertTriangle, CheckCircle2, Send, Database, ListChecks, ImagePlus, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +103,16 @@ type HeadstoneManifest = {
     people?: Array<{ name?: string; dateOfBirth?: string | null; dateOfDeath?: string | null }>;
     inscriptionText?: string;
   }>;
+};
+
+type PersistedMapPayload = {
+  doc: MapDoc;
+  plotTypes?: PlotType[];
+  spotTypes?: SpotType[];
+  cemetery?: CemeteryOption;
+  previewUrl?: string;
+  permanentUrl?: string;
+  publishedAt?: number;
 };
 
 /** Default stroke thickness for new path/road plots, in SVG units. */
@@ -408,6 +418,17 @@ function burialRecordFromRow(row: CsvRow, index: number, sourceCsv: string): Bur
   };
 }
 
+function spotTypeFromBurialRecord(record: BurialCsvRecord, fallback = "civilian") {
+  const text = `${record.name} ${record.veteranStatus ?? ""}`.toLowerCase();
+  if (/\b(navy|naval|usn)\b/.test(text)) return "veteran-navy";
+  if (/\b(marine|marines|usmc)\b/.test(text)) return "veteran-marines";
+  if (/\b(air force|airforce|usaf)\b/.test(text)) return "veteran-airforce";
+  if (/\b(army|veteran|military|service|served)\b/.test(text)) return "veteran-army";
+  if (/\b(child|infant|baby|son|daughter)\b/.test(text)) return "child";
+  if (/\b(rev|reverend|pastor|father|priest|clergy)\b/.test(text)) return "clergy";
+  return fallback;
+}
+
 function migrateDoc(raw: unknown): MapDoc {
   const d = (raw ?? {}) as LegacyDoc;
   return {
@@ -547,6 +568,15 @@ function migrateDoc(raw: unknown): MapDoc {
 }
 
 export default function MapMaker() {
+  const [location] = useLocation();
+  const previewMatch = location.match(/^\/map-maker\/preview\/([^/?#]+)/);
+  if (previewMatch) {
+    return <PublishedMapPreview slug={decodeURIComponent(previewMatch[1])} />;
+  }
+  return <MapMakerEditor />;
+}
+
+function MapMakerEditor() {
   const [plotTypes] = usePlotTypes();
   const [spotTypes] = useSpotTypes();
   const [backgrounds, setBackgrounds, backgroundsErr] = useBackgrounds();
@@ -1379,19 +1409,54 @@ export default function MapMaker() {
   };
 
   // ----- Save / load -----
-  const save = () => {
+  const persistedPayload = useCallback((nextDoc: MapDoc) => ({
+    doc: nextDoc,
+    plotTypes,
+    spotTypes,
+  }), [plotTypes, spotTypes]);
+
+  const mapPreviewUrl = useMemo(() => {
+    const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
+    return cemetery ? `/map-maker/preview/${encodeURIComponent(cemetery.slug)}` : null;
+  }, [cemeteries, doc.cemeteryId]);
+
+  const openPreviewUrl = useCallback(() => {
+    if (!mapPreviewUrl) {
+      setSaveError("Select a cemetery before opening the permanent map URL.");
+      setTimeout(() => setSaveError(null), 5000);
+      return;
+    }
+    window.open(mapPreviewUrl, "_blank", "noopener,noreferrer");
+  }, [mapPreviewUrl]);
+
+  const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
     const key = `${STORAGE_KEY}:${safeName}`;
     const toSave = { ...doc, updatedAt: Date.now() };
     try {
       localStorage.setItem(key, JSON.stringify(toSave));
+      if (toSave.cemeteryId) {
+        const res = await fetch(`/api/cemetery-maps?organizationId=${toSave.cemeteryId}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(persistedPayload(toSave)),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? `Request failed (${res.status})`);
+        }
+      }
       setDoc(toSave);
       setSaveError(null);
       refreshSaved();
+      flashStatus(toSave.cemeteryId ? "Saved map and updated permanent draft URL" : "Saved map locally");
     } catch (err) {
       const msg = err instanceof DOMException && err.name === "QuotaExceededError"
         ? "Storage full — try removing the background image, removing headstone photos, or deleting older saved maps."
-        : "Failed to save map locally. Try removing the background image and saving again.";
+        : err instanceof Error
+          ? err.message
+          : "Failed to save map. Try removing the background image and saving again.";
       setSaveError(msg);
       setTimeout(() => setSaveError(null), 8000);
     }
@@ -1880,6 +1945,34 @@ export default function MapMaker() {
         }
       }
 
+      if (importedSpots.length === 0 && burialRecords.length > 0) {
+        burialRecords.forEach((record) => {
+          if (record.x === undefined || record.y === undefined) return;
+          const projected = projectPoint(coordinateSystem, record.x, record.y);
+          importedSpots.push({
+            id: `CSV-${String(importedSpots.length + 1).padStart(3, "0")}`,
+            temporaryId: `CSV-${String(importedSpots.length + 1).padStart(3, "0")}`,
+            x: projected.x,
+            y: projected.y,
+            name: record.name,
+            dob: record.dob,
+            dod: record.dod,
+            spotTypeId: spotTypeFromBurialRecord(record, activeSpotTypeId || "civilian"),
+            lat: record.lat,
+            lon: record.lon,
+            gprX: record.x,
+            gprY: record.y,
+            gprZ: record.z,
+            sourceCsv: record.sourceCsv,
+            imagePath: record.imagePath,
+            imageFileName: record.imagePath ? fileBaseName(record.imagePath) : undefined,
+            veteranStatus: record.veteranStatus,
+            reviewStatus: record.name ? "burial_matched" : "needs_review",
+            importFlags: record.name ? ["Burial Data Matched"] : ["Needs Review"],
+          });
+        });
+      }
+
       const review = burialRecords.length > 0
         ? buildMergeReview(burialRecords, sourceNames.find((name) => name.toLowerCase().includes("burial")) ?? "Burial.csv", importedSpots)
         : null;
@@ -1902,6 +1995,8 @@ export default function MapMaker() {
       }));
       setSelection(null);
       setShowSpots(true);
+      setView("preview");
+      setZoom(1);
       setMergeReview(review);
       setWorkflowTab(review ? "merge" : "publish");
       addImportLog(`Imported dataset: ${gprCount} GPR, ${burialRecords.length} burials, ${cremationCount} cremations, ${copingCount} areas, ${miscCount} misc`);
@@ -1946,6 +2041,7 @@ export default function MapMaker() {
             imagePath: record.imagePath || spot.imagePath,
             imageFileName: record.imagePath ? fileBaseName(record.imagePath) : spot.imageFileName,
             veteranStatus: record.veteranStatus || spot.veteranStatus,
+            spotTypeId: spotTypeFromBurialRecord(record, spot.spotTypeId),
             reviewStatus: "burial_matched",
           };
           next = withFlag(next, "Burial Data Matched");
@@ -1956,13 +2052,16 @@ export default function MapMaker() {
           const index = spots.findIndex((spot) => spot.id === candidate.spotId);
           if (index >= 0) spots[index] = patch(spots[index]);
         } else if (record.x !== undefined && record.y !== undefined) {
+          const projected = d.coordinateSystem
+            ? projectPoint(d.coordinateSystem, record.x, record.y)
+            : { x: record.x, y: record.y };
           spots.push(patch({
             id: newId("s"),
             temporaryId: `CSV-${String(spots.length + 1).padStart(3, "0")}`,
-            x: record.x,
-            y: record.y,
+            x: projected.x,
+            y: projected.y,
             name: "",
-            spotTypeId: activeSpotTypeId || "civilian",
+            spotTypeId: spotTypeFromBurialRecord(record, activeSpotTypeId || "civilian"),
             reviewStatus: "needs_review",
             importFlags: ["Needs Review"],
           }));
@@ -1972,6 +2071,7 @@ export default function MapMaker() {
     });
     setMergeReview(null);
     setWorkflowTab("headstones");
+    setView("preview");
     addImportLog(`Applied ${candidates.length} reviewed Burial.csv updates`);
   };
 
@@ -2040,20 +2140,45 @@ export default function MapMaker() {
     }
   };
 
-  const publishMap = () => {
-    const needsReview = doc.spots.filter((spot) => spot.reviewStatus === "needs_review" || !(spot.importFlags ?? []).includes("Verified"));
-    if (needsReview.length > 0) {
-      setSaveError(`${needsReview.length} burial spots still need review or verification before publishing.`);
+  const publishMap = async () => {
+    if (!doc.cemeteryId) {
+      setSaveError("Select a cemetery before publishing this map.");
       setTimeout(() => setSaveError(null), 7000);
       return;
     }
-    setDoc((d) => ({
-      ...d,
+    const publishedDoc: MapDoc = {
+      ...doc,
       projectStatus: "published",
-      spots: d.spots.map((spot) => ({ ...withFlag(spot, "Published"), reviewStatus: "published" })),
+      spots: doc.spots.map((spot) => ({
+        ...withFlag(spot, "Published"),
+        reviewStatus: spot.reviewStatus === "needs_review" ? "needs_review" : "published",
+      })),
       updatedAt: Date.now(),
-    }));
-    addImportLog("Map published. Public map will use visitor-friendly fields only.");
+    };
+    const previewWindow = window.open("about:blank", "_blank");
+    try {
+      const res = await fetch(`/api/cemetery-maps/publish?organizationId=${doc.cemeteryId}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(persistedPayload(publishedDoc)),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+      setDoc(publishedDoc);
+      setView("preview");
+      addImportLog("Map published. Permanent preview URL is ready.");
+      const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
+      if (url && previewWindow) {
+        previewWindow.location.href = url;
+      } else if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      previewWindow?.close();
+      setSaveError(err instanceof Error ? err.message : "Could not publish map.");
+      setTimeout(() => setSaveError(null), 7000);
+    }
   };
 
   // ----- Stats -----
@@ -2263,6 +2388,9 @@ export default function MapMaker() {
 
         <Button size="sm" variant="outline" onClick={exportJson} data-testid="export-json" className="h-8 hidden md:inline-flex">
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+        </Button>
+        <Button size="sm" variant="outline" onClick={openPreviewUrl} data-testid="open-map-url" className="h-8 hidden lg:inline-flex">
+          <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> URL
         </Button>
         <Button size="sm" onClick={save} data-testid="save-map" className="h-8">
           <Save className="h-3.5 w-3.5 mr-1.5" /> Save
@@ -3214,6 +3342,91 @@ export default function MapMaker() {
 }
 
 // ===== Subcomponents =====
+
+function PublishedMapPreview({ slug }: { slug: string }) {
+  const [plotTypes] = usePlotTypes();
+  const [spotTypes] = useSpotTypes();
+  const [payload, setPayload] = useState<PersistedMapPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    fetch(`/api/cemetery-maps/public/${encodeURIComponent(slug)}`, { credentials: "include" })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+        return body as PersistedMapPayload;
+      })
+      .then((body) => {
+        if (!cancelled) {
+          setPayload({ ...body, doc: migrateDoc(body.doc) });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Published map could not be loaded.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  const doc = payload?.doc ?? null;
+  const effectivePlotTypes = payload?.plotTypes?.length ? payload.plotTypes : plotTypes;
+  const effectiveSpotTypes = payload?.spotTypes?.length ? payload.spotTypes : spotTypes;
+  const cemetery = payload?.cemetery ? [payload.cemetery] : [];
+
+  return (
+    <div className="min-h-screen bg-[#ebe7da] text-[#1d2a22]">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-black/10 bg-[#fffdf6]/95 px-4 py-3 backdrop-blur">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#576657]">Published map</div>
+          <h1 className="truncate text-lg font-semibold">{payload?.cemetery?.name ?? slug}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline" className="gap-2 bg-white/70">
+            <Link href="/map-maker">
+              <ArrowLeft className="h-4 w-4" />
+              Map Maker
+            </Link>
+          </Button>
+        </div>
+      </header>
+
+      <main className="min-h-[calc(100vh-65px)] overflow-auto p-6">
+        {error ? (
+          <div className="mx-auto mt-16 max-w-lg rounded border border-destructive/30 bg-white p-6 text-center shadow">
+            <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
+            <h2 className="mt-3 text-lg font-semibold">Map is not published yet</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+            <Button asChild className="mt-4">
+              <Link href="/map-maker">Open Map Maker</Link>
+            </Button>
+          </div>
+        ) : !doc ? (
+          <div className="mx-auto mt-16 max-w-sm rounded border bg-white p-6 text-center shadow">
+            <LoaderDot />
+            <p className="mt-3 text-sm text-muted-foreground">Loading published cemetery map...</p>
+          </div>
+        ) : (
+          <div className="inline-block min-w-full">
+            <InteractiveMapPreview
+              doc={doc}
+              plotTypes={effectivePlotTypes}
+              spotTypes={effectiveSpotTypes}
+              cemeteries={cemetery}
+              onSelectSpot={() => undefined}
+            />
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function LoaderDot() {
+  return <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#576657]/20 border-t-[#576657]" />;
+}
 
 function InteractiveMapPreview({
   doc,

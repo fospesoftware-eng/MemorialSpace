@@ -122,7 +122,7 @@ function B2BRoutes() {
   // Map Maker is a fullscreen editor — render it outside the B2BLayout chrome so it
   // can use the entire viewport (no sidebar / max-w-7xl constraints).
   const [location] = useLocation();
-  if (location === "/map-maker") return <MapMaker />;
+  if (location === "/map-maker" || location.startsWith("/map-maker/preview/")) return <MapMaker />;
 
   return (
     <B2BLayout>

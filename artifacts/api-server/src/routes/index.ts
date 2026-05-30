@@ -30,6 +30,7 @@ import invoicesRouter from "./invoices";
 import paymentsRouter from "./payments";
 import accountingRouter from "./accounting";
 import cemeterySitesRouter from "./cemeterySites";
+import cemeteryMapsRouter, { cemeteryMapsPublicRouter } from "./cemeteryMaps";
 import memorialRitualsRouter from "./memorialRituals";
 import adminRouter from "./admin";
 import paymentGatewayRouter from "./paymentGateway";
@@ -50,6 +51,7 @@ router.use(authRouter);
 router.use(cemeterySignupRouter);
 router.use(publicApiRouter);
 router.use(cemeterySitesRouter);
+router.use(cemeteryMapsPublicRouter);
 router.use(memorialRitualsRouter);
 // Public memorial reads — family users (viewer role) can list and view
 // memorials scoped to their organization. Writes stay behind requireOrgUser.
@@ -114,6 +116,7 @@ orgRouter.use(taxRatesRouter);
 orgRouter.use(invoicesRouter);
 orgRouter.use(paymentsRouter);
 orgRouter.use(accountingRouter);
+orgRouter.use(cemeteryMapsRouter);
 router.use(orgRouter);
 
 // --- AI map detection ---------------------------------------------------------

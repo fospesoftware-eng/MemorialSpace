@@ -721,6 +721,23 @@ export default function CemeteriesPage() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Published interactive map</p>
+                        <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                          /map-maker/preview/{cemetery.slug}
+                        </p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="shrink-0 gap-2 bg-background/80">
+                        <Link href={`/map-maker/preview/${cemetery.slug}`}>
+                          <ExternalLink className="h-4 w-4" />
+                          Open map URL
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             );
