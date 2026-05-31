@@ -248,6 +248,14 @@ function SaasMarketingRoutes({ children }: { children: React.ReactNode }) {
   return <SaasMarketingLayout>{children}</SaasMarketingLayout>;
 }
 
+function ProtectedMapMaker() {
+  return (
+    <RequireAuth kinds={["cemetery"]} signInPath="/sign-in/cemetery">
+      <MapMaker />
+    </RequireAuth>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -275,6 +283,12 @@ function Router() {
         <SaasMarketingRoutes>
           <SignInVendor />
         </SaasMarketingRoutes>
+      </Route>
+      <Route path="/map-maker/preview/:slug">
+        <ProtectedMapMaker />
+      </Route>
+      <Route path="/map-maker">
+        <ProtectedMapMaker />
       </Route>
       <Route path="/vendor/signup" component={VendorSignup} />
 
