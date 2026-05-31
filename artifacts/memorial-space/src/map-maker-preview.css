@@ -1,0 +1,38 @@
+/* Map Maker preview selected burial panel
+   Turns the existing click-to-open burial detail card into a left-side info sidebar.
+   Kept separate from Replit/runtime config files. */
+
+[data-testid="interactive-map-preview"] > div[class~="absolute"][class~="bottom-5"][class~="right-6"][class~="w-72"] {
+  top: 12rem;
+  bottom: 1.25rem;
+  left: 1.5rem;
+  right: auto;
+  width: min(22rem, calc(100% - 3rem));
+  max-height: calc(100% - 13.25rem);
+  overflow-y: auto;
+  border-radius: 0.75rem;
+  background: rgba(255, 253, 246, 0.97);
+  backdrop-filter: blur(10px);
+}
+
+[data-testid="interactive-map-preview"] > div[class~="absolute"][class~="bottom-5"][class~="right-6"][class~="w-72"]::before {
+  content: "Selected burial spot";
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #576657;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  [data-testid="interactive-map-preview"] > div[class~="absolute"][class~="bottom-5"][class~="right-6"][class~="w-72"] {
+    top: auto;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    width: auto;
+    max-height: 45%;
+  }
+}
