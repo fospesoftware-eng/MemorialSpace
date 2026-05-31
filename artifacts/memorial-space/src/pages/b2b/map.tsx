@@ -16,16 +16,28 @@ import {
 } from "@/components/ui/select";
 import { MapPin } from "lucide-react";
 
+function groupPlots(plots: any[] | undefined) {
+  const groups = new Map<string, any[]>();
+  for (const plot of plots ?? []) {
+    const section = plot.section || "Grid A";
+    const list = groups.get(section) ?? [];
+    list.push(plot);
+    groups.set(section, list);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([section, items]) => ({
+      section,
+      plots: items.sort((a, b) => a.plotNumber.localeCompare(b.plotNumber, undefined, { numeric: true })),
+    }));
+}
+
 export default function MapPage() {
   const { user } = useAuth();
   const { data: orgs, isLoading: orgsLoading } = useListOrganizations();
 
-  // Pre-select the user's own organization if available; otherwise leave
-  // unselected so the user must pick from the list.
   const defaultOrgId = user?.organizationId ?? undefined;
-  const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>(
-    defaultOrgId,
-  );
+  const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>(defaultOrgId);
 
   const selectedOrg = useMemo(
     () => orgs?.find((o) => o.id === selectedOrgId),
@@ -36,9 +48,11 @@ export default function MapPage() {
     query: {
       enabled: selectedOrgId != null,
       queryKey: getGetMapDataQueryKey(selectedOrgId ?? 0),
+      refetchOnWindowFocus: true,
     },
   });
 
+  const groupedPlots = useMemo(() => groupPlots(data?.plots), [data?.plots]);
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
 
   const getStatusColor = (status: string) => {
@@ -62,8 +76,7 @@ export default function MapPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Map View</h1>
           <p className="text-muted-foreground mt-1">
-            View the active cemetery map, burial spot layout, and assignment
-            status.
+            View the selected cemetery map as Grid A, Grid B, Grid C sections.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,7 +123,7 @@ export default function MapPage() {
       <div className="bg-card border rounded-xl shadow-sm p-6">
         {!selectedOrgId ? (
           <div className="text-center py-12 text-muted-foreground">
-            Select a cemetery above to view its burial spot map.
+            Select a cemetery above to view its map.
           </div>
         ) : isLoading ? (
           <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-3">
@@ -118,29 +131,40 @@ export default function MapPage() {
               <Skeleton key={i} className="aspect-square rounded-md" />
             ))}
           </div>
-        ) : (
-          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-3">
-            {data?.plots?.map((plot) => (
-              <button
-                type="button"
-                key={plot.id}
-                data-testid={`plot-${plot.id}`}
-                onClick={() => setSelectedPlotId(plot.id)}
-                className={`aspect-square rounded-md transition-all duration-200 border-2 cursor-pointer flex items-center justify-center text-xs font-medium text-white/90 ${
-                  selectedPlotId === plot.id
-                    ? "border-primary scale-110 shadow-lg z-10"
-                    : "border-transparent hover:scale-105"
-                } ${getStatusColor(plot.status)}`}
-                title={`Burial spot ${plot.plotNumber} - ${plot.status}`}
-              >
-                {plot.plotNumber}
-              </button>
+        ) : groupedPlots.length > 0 ? (
+          <div className="space-y-8">
+            {groupedPlots.map((group) => (
+              <section key={group.section} className="space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight">{group.section}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {group.plots.length} spot{group.plots.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 xl:grid-cols-12 gap-3">
+                  {group.plots.map((plot) => (
+                    <button
+                      type="button"
+                      key={plot.id}
+                      data-testid={`plot-${plot.id}`}
+                      onClick={() => setSelectedPlotId(plot.id)}
+                      className={`aspect-square rounded-md transition-all duration-200 border-2 cursor-pointer flex items-center justify-center text-xs font-medium text-white/90 ${
+                        selectedPlotId === plot.id
+                          ? "border-primary scale-110 shadow-lg z-10"
+                          : "border-transparent hover:scale-105"
+                      } ${getStatusColor(plot.status)}`}
+                      title={`Spot ${plot.plotNumber} - ${plot.status}`}
+                    >
+                      {plot.plotNumber}
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
-            {(!data?.plots || data.plots.length === 0) && (
-              <div className="col-span-full text-center py-12 text-muted-foreground">
-                No burial spots configured for this cemetery yet.
-              </div>
-            )}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-muted-foreground">
+            No spots configured for this cemetery yet. Publish a Map Maker map to sync spots here.
           </div>
         )}
       </div>
