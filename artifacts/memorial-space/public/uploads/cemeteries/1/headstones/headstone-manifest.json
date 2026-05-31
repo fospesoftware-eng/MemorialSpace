@@ -1,27 +1,29 @@
 {
   "organizationId": 1,
   "folder": "/uploads/cemeteries/1/headstones",
-  "updatedAt": "2026-05-29T13:50:46.518Z",
+  "updatedAt": "2026-05-30T17:06:51.320Z",
   "images": [
     {
-      "imageFileName": "0a056ff0-bcbc-4ffc-b07b-7685cbe2a4a1.jpg",
-      "storedPath": "/uploads/cemeteries/1/headstones/0a056ff0-bcbc-4ffc-b07b-7685cbe2a4a1.jpg",
-      "isFamilyHeadstone": false,
+      "imageFileName": "0a4d3d95-b69f-4fe0-9688-b8de15350b6a.jpg",
+      "storedPath": "/uploads/cemeteries/1/headstones/0a4d3d95-b69f-4fe0-9688-b8de15350b6a.jpg",
+      "isFamilyHeadstone": true,
       "people": [
         {
-          "name": "Maggie McNinch McIlwain",
-          "dateOfBirth": "1872-04-26",
-          "dateOfDeath": "1961-12-30"
+          "name": "John H. Cannon",
+          "dateOfBirth": "1882-03-05",
+          "dateOfDeath": "1950-09-15"
+        },
+        {
+          "name": "Sallie Bell Cannon",
+          "dateOfBirth": "1880-08-20",
+          "dateOfDeath": "1931-10-09"
         }
       ],
-      "inscriptionText": "MAGGIE MCNINCH\nWIFE OF\nG. H. MCILWAIN\nAPR. 26. 1872\nDEC. 30. 1961",
-      "confidence": 0.95,
-      "warnings": [
-        "Maiden name is McNinch; married name is McIlwain via husband G. H. McIlwain",
-        "G. H. McIlwain is referenced as husband but has no dates on this stone and is not counted as a separate entry"
-      ],
+      "inscriptionText": "CANNON\nJOHN H.\nMAR. 5, 1882\nSEPT. 15, 1950\nSALLIE BELL\nAUG. 20, 1880\nOCT. 9, 1931",
+      "confidence": 0.99,
+      "warnings": [],
       "status": "verified",
-      "verifiedAt": "2026-05-29T13:50:46.518Z"
+      "verifiedAt": "2026-05-30T17:06:51.320Z"
     },
     {
       "imageFileName": "0afe27d9-6c46-44b5-b072-bcf50b63bf81.jpg",
@@ -38,7 +40,7 @@
       "confidence": 0.98,
       "warnings": [],
       "status": "verified",
-      "verifiedAt": "2026-05-29T13:50:46.518Z"
+      "verifiedAt": "2026-05-30T17:06:51.320Z"
     }
   ]
 }
