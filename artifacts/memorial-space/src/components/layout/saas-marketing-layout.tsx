@@ -205,7 +205,7 @@ export function SaasMarketingLayout({ children }: { children: React.ReactNode })
                 { label: "Memorial Content Policy", href: "#" },
                 { label: "Marketplace Policy", href: "#" },
                 { label: "Vendor Terms", href: "#" },
-                { label: "Partner Terms", href: "#" },
+                { label: "Partner Terms", href: "/partner-terms" },
                 { label: "QR Memorial Policy", href: "#" },
               ]}
             />
