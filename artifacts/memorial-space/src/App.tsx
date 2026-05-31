@@ -22,6 +22,7 @@ import ContactPage from "@/pages/marketing/contact";
 import TutorialHubPage from "@/pages/marketing/tutorial-hub";
 import TutorialCemeteryPage from "@/pages/marketing/tutorial-cemetery";
 import TutorialFamilyPage from "@/pages/marketing/tutorial-family";
+import PartnerTermsPage from "@/pages/marketing/partner-terms";
 import {
   CookiePolicyPage,
   PrivacyPolicyPage,
@@ -329,6 +330,9 @@ function Router() {
       </Route>
       <Route path="/terms-and-conditions">
         <SaasMarketingRoutes><TermsAndConditionsPage /></SaasMarketingRoutes>
+      </Route>
+      <Route path="/partner-terms">
+        <SaasMarketingRoutes><PartnerTermsPage /></SaasMarketingRoutes>
       </Route>
       <Route path="/privacy-policy">
         <SaasMarketingRoutes><PrivacyPolicyPage /></SaasMarketingRoutes>
