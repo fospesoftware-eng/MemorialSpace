@@ -117,6 +117,13 @@ type PersistedMapPayload = {
   publishedAt?: number;
 };
 
+type PublishedMapItem = {
+  projectId: string;
+  name: string;
+  updatedAt: number;
+  url: string;
+};
+
 /** Default stroke thickness for new path/road plots, in SVG units. */
 const DEFAULT_PATH_WIDTH = 14;
 /** Hard cap on vertices per drawn path — guards against runaway clicks. */
@@ -640,6 +647,7 @@ function MapMakerEditor() {
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
+  const [publishedMaps, setPublishedMaps] = useState<PublishedMapItem[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -784,6 +792,7 @@ function MapMakerEditor() {
       if (k && k.startsWith(`${STORAGE_KEY}:`)) {
         try {
           const m = JSON.parse(localStorage.getItem(k)!) as MapDoc;
+          if (m.projectStatus === "published") continue;
           list.push({ key: k, name: m.name ?? "(unnamed)", updatedAt: m.updatedAt ?? 0 });
         } catch {}
       }
@@ -793,6 +802,74 @@ function MapMakerEditor() {
   }, []);
 
   useEffect(() => { refreshSaved(); }, [refreshSaved]);
+
+  const refreshPublishedMaps = useCallback(async (cemeteryId: number | null) => {
+    if (!cemeteryId) {
+      setPublishedMaps([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/cemetery-maps/published?cemeteryId=${cemeteryId}&projectId=${encodeURIComponent(doc.projectId ?? "default")}`, {
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.published?.doc) {
+        setPublishedMaps([]);
+        return;
+      }
+      const item: PublishedMapItem = {
+        projectId: String(body.projectId ?? doc.projectId ?? "default"),
+        name: String(body?.published?.doc?.name ?? "Published map"),
+        updatedAt: Number(body?.published?.doc?.updatedAt ?? body?.published?.publishedAt ?? Date.now()),
+        url: String(body?.permanentUrl ?? ""),
+      };
+      setPublishedMaps([item]);
+    } catch {
+      setPublishedMaps([]);
+    }
+  }, [doc.projectId]);
+
+  const syncGlobalBurialSpots = useCallback(async (cemeteryId: number) => {
+    try {
+      const res = await fetch(`/api/cemetery-maps/global-spots?cemeteryId=${cemeteryId}`, { credentials: "include" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !Array.isArray(body?.spots)) return;
+      const rows = body.spots as Array<Record<string, unknown>>;
+      setDoc((prev) => {
+        const mapped = rows.map((row, idx): BurialSpot => ({
+          id: String(row.mapSpotId ?? `global-${idx + 1}`),
+          temporaryId: String(row.plotNumber ?? `MAP-${idx + 1}`),
+          x: typeof row.x === "number" ? row.x : (prev.spots[idx]?.x ?? 100 + idx * 8),
+          y: typeof row.y === "number" ? row.y : (prev.spots[idx]?.y ?? 100 + idx * 8),
+          name: String(row.deceasedName ?? ""),
+          dob: typeof row.deceasedDob === "string" ? row.deceasedDob : undefined,
+          dod: typeof row.deceasedDod === "string" ? row.deceasedDod : undefined,
+          spotTypeId: typeof row.type === "string" && row.type ? row.type : "civilian",
+          lat: typeof row.latitude === "number" ? row.latitude : undefined,
+          lon: typeof row.longitude === "number" ? row.longitude : undefined,
+          gprX: typeof row.gprX === "number" ? row.gprX : undefined,
+          gprY: typeof row.gprY === "number" ? row.gprY : undefined,
+          gprZ: typeof row.gprZ === "number" ? row.gprZ : undefined,
+          imagePath: typeof row.headstonePath === "string" ? row.headstonePath : undefined,
+          notes: typeof row.notes === "string" ? row.notes : undefined,
+          reviewStatus: prev.projectStatus === "published" ? "published" : undefined,
+        }));
+        return {
+          ...prev,
+          spots: mapped,
+          updatedAt: Date.now(),
+        };
+      });
+    } catch {
+      // keep current local state if sync fails
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!doc.cemeteryId) return;
+    void refreshPublishedMaps(doc.cemeteryId);
+    void syncGlobalBurialSpots(doc.cemeteryId);
+  }, [doc.cemeteryId, refreshPublishedMaps, syncGlobalBurialSpots]);
 
   // ----- AI Map Maker handoff -----
   // The /ai-map-maker page writes a "pending" MapDoc into localStorage just before
@@ -2457,6 +2534,7 @@ function MapMakerEditor() {
       if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
       setDoc(publishedDoc);
       setView("preview");
+      void refreshPublishedMaps(doc.cemeteryId);
       addImportLog("Map published. Permanent preview URL is ready.");
       const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
       if (url && previewWindow) {
@@ -3564,6 +3642,38 @@ function MapMakerEditor() {
             </div>
 
             <div className="p-3">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
+                <span>Published Maps</span>
+                <Badge variant="outline" className="h-4 text-[9px] tabular-nums">{publishedMaps.length}</Badge>
+              </div>
+              {publishedMaps.length === 0 ? (
+                <p className="text-xs text-muted-foreground mb-3">Publish a map to list it here as a permanent live map.</p>
+              ) : (
+                <div className="space-y-1 mb-3">
+                  {publishedMaps.map((m) => (
+                    <div key={`${m.projectId}-${m.updatedAt}`} className="flex items-center gap-1 rounded-md border border-border bg-background p-2">
+                      <button
+                        type="button"
+                        onClick={() => window.open(withBasePath(m.url), "_blank", "noopener,noreferrer")}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <div className="text-xs font-medium truncate">{m.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{timeAgo(m.updatedAt)}</div>
+                      </button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => window.open(withBasePath(m.url), "_blank", "noopener,noreferrer")}
+                        title="Open published map"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
                 <span>Saved Maps</span>
                 <Badge variant="outline" className="h-4 text-[9px] tabular-nums">{savedMaps.length}</Badge>

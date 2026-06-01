@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import { db, organizationsTable } from "@workspace/db";
+import { db, organizationsTable, plotsTable, burialsTable } from "@workspace/db";
 
 const authedRouter: IRouter = Router();
 const publicRouter: IRouter = Router();
@@ -13,6 +13,29 @@ type MapPayload = {
   spotTypes?: unknown[];
   cemetery?: { id: number; name: string; slug: string };
   publishedAt?: number;
+};
+
+type GlobalSpotRecord = {
+  mapSpotId: string;
+  plotId: number;
+  plotNumber: string;
+  section: string | null;
+  row: string | null;
+  status: string;
+  type: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  x: number | null;
+  y: number | null;
+  gprX: number | null;
+  gprY: number | null;
+  gprZ: number | null;
+  deceasedName: string | null;
+  deceasedDob: string | null;
+  deceasedDod: string | null;
+  photoUrl: string | null;
+  headstonePath: string | null;
+  notes: string | null;
 };
 
 function publicRoot(): string {
@@ -89,6 +112,180 @@ function projectIdFromBody(body: unknown): string {
   return raw.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "default";
 }
 
+function asFiniteNumber(value: unknown): number | null {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function asStringOrNull(value: unknown): string | null {
+  const v = typeof value === "string" ? value.trim() : "";
+  return v.length ? v : null;
+}
+
+function extractDocSpots(body: unknown): Array<Record<string, unknown>> {
+  const input = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const doc = (input.doc && typeof input.doc === "object" ? input.doc : {}) as Record<string, unknown>;
+  const spots = doc.spots;
+  return Array.isArray(spots) ? (spots.filter((spot) => spot && typeof spot === "object") as Array<Record<string, unknown>>) : [];
+}
+
+function plotNumberFromSpot(spot: Record<string, unknown>, index: number): string {
+  const explicit = asStringOrNull(spot.temporaryId) ?? asStringOrNull(spot.plotNumber) ?? asStringOrNull(spot.name);
+  if (explicit) return explicit;
+  return `MAP-${String(index + 1).padStart(4, "0")}`;
+}
+
+function parseGeoJsonMeta(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function toPlotType(rawType: string | null): "standard" | "double" | "family" | "mausoleum" | "cremation" {
+  const value = (rawType ?? "").toLowerCase();
+  if (value.includes("family")) return "family";
+  if (value.includes("mausoleum")) return "mausoleum";
+  if (value.includes("cremation") || value.includes("columb")) return "cremation";
+  if (value.includes("double")) return "double";
+  return "standard";
+}
+
+async function syncPublishedSpotsToGlobal(
+  organizationId: number,
+  projectId: string,
+  spots: Array<Record<string, unknown>>,
+): Promise<GlobalSpotRecord[]> {
+  const existingPlots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
+  const existingBurials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+
+  const byPlotNumber = new Map(existingPlots.map((plot) => [plot.plotNumber.toLowerCase(), plot]));
+  const byMapSpotId = new Map<string, (typeof existingPlots)[number]>();
+  for (const plot of existingPlots) {
+    const meta = parseGeoJsonMeta(plot.geoJson);
+    const mapSpotId = asStringOrNull(meta.mapSpotId);
+    if (mapSpotId) byMapSpotId.set(mapSpotId, plot);
+  }
+
+  const out: GlobalSpotRecord[] = [];
+  for (let i = 0; i < spots.length; i++) {
+    const spot = spots[i];
+    const mapSpotId = asStringOrNull(spot.id) ?? `spot-${i + 1}`;
+    const plotNumber = plotNumberFromSpot(spot, i);
+    const x = asFiniteNumber(spot.x);
+    const y = asFiniteNumber(spot.y);
+    const lat = asFiniteNumber(spot.lat);
+    const lon = asFiniteNumber(spot.lon);
+    const gprX = asFiniteNumber(spot.gprX);
+    const gprY = asFiniteNumber(spot.gprY);
+    const gprZ = asFiniteNumber(spot.gprZ);
+    const notes = asStringOrNull(spot.notes);
+    const deceasedName = asStringOrNull(spot.name);
+    const deceasedDob = asStringOrNull(spot.dob);
+    const deceasedDod = asStringOrNull(spot.dod);
+    const imagePath = asStringOrNull(spot.imagePath);
+    const imageFileName = asStringOrNull(spot.imageFileName);
+    const reviewStatus = asStringOrNull(spot.reviewStatus);
+    const plotStatus = reviewStatus === "published" || deceasedName ? "occupied" : "available";
+    const plotType = toPlotType(asStringOrNull(spot.spotTypeId));
+
+    const geoMeta = {
+      source: "map-maker",
+      projectId,
+      mapSpotId,
+      x,
+      y,
+      gprX,
+      gprY,
+      gprZ,
+      imagePath,
+      imageFileName,
+      reviewStatus,
+    };
+
+    const existingPlot = byMapSpotId.get(mapSpotId) ?? byPlotNumber.get(plotNumber.toLowerCase());
+    const [plot] = existingPlot
+      ? await db.update(plotsTable).set({
+          plotNumber,
+          status: plotStatus as "available" | "reserved" | "occupied" | "maintenance",
+          type: plotType,
+          latitude: lat,
+          longitude: lon,
+          notes,
+          geoJson: JSON.stringify(geoMeta),
+        }).where(eq(plotsTable.id, existingPlot.id)).returning()
+      : await db.insert(plotsTable).values({
+          organizationId,
+          plotNumber,
+          status: plotStatus as "available" | "reserved" | "occupied" | "maintenance",
+          type: plotType,
+          latitude: lat,
+          longitude: lon,
+          notes,
+          geoJson: JSON.stringify(geoMeta),
+        }).returning();
+
+    byMapSpotId.set(mapSpotId, plot);
+    byPlotNumber.set(plotNumber.toLowerCase(), plot);
+
+    if (deceasedName) {
+      const burial = existingBurials.find((item) => item.plotId === plot.id) ?? null;
+      const burialNotes = [notes, imagePath ? `Headstone: ${imagePath}` : null].filter(Boolean).join("\n");
+      if (burial) {
+        const [updated] = await db.update(burialsTable).set({
+          deceasedName,
+          deceasedDob,
+          deceasedDod,
+          notes: burialNotes || burial.notes,
+          photoUrl: imagePath ?? burial.photoUrl,
+        }).where(eq(burialsTable.id, burial.id)).returning();
+        const idx = existingBurials.findIndex((item) => item.id === burial.id);
+        if (idx >= 0) existingBurials[idx] = updated;
+      } else {
+        const [inserted] = await db.insert(burialsTable).values({
+          organizationId,
+          plotId: plot.id,
+          deceasedName,
+          deceasedDob,
+          deceasedDod,
+          notes: burialNotes || null,
+          photoUrl: imagePath,
+        }).returning();
+        existingBurials.push(inserted);
+      }
+    }
+
+    const linkedBurial = existingBurials.find((item) => item.plotId === plot.id) ?? null;
+    out.push({
+      mapSpotId,
+      plotId: plot.id,
+      plotNumber: plot.plotNumber,
+      section: plot.section,
+      row: plot.row,
+      status: plot.status,
+      type: plot.type,
+      latitude: plot.latitude,
+      longitude: plot.longitude,
+      x,
+      y,
+      gprX,
+      gprY,
+      gprZ,
+      deceasedName: linkedBurial?.deceasedName ?? null,
+      deceasedDob: linkedBurial?.deceasedDob ?? null,
+      deceasedDod: linkedBurial?.deceasedDod ?? null,
+      photoUrl: linkedBurial?.photoUrl ?? null,
+      headstonePath: imagePath ?? imageFileName ?? null,
+      notes: linkedBurial?.notes ?? plot.notes ?? null,
+    });
+  }
+
+  return out;
+}
+
 authedRouter.get("/cemetery-maps", async (req, res) => {
   const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
@@ -158,11 +355,81 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
   const cemetery = { id: org.id, name: org.name, slug: org.slug };
   const projectId = projectIdFromBody(req.body);
   const payload = buildPayload(req.body, cemetery, true);
+  const globalSpots = await syncPublishedSpotsToGlobal(org.id, projectId, extractDocSpots(req.body));
   await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, `${projectId}-published-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(payload, null, 2), "utf8");
-  res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug, projectId), publicBase: folder.publicBase });
+  res.json({
+    ok: true,
+    organizationId: org.id,
+    slug: org.slug,
+    projectId,
+    syncedSpots: globalSpots.length,
+    ...mapUrls(org.slug, projectId),
+    publicBase: folder.publicBase,
+  });
+});
+
+authedRouter.get("/cemetery-maps/published", async (req, res) => {
+  const organizationId = requestedCemeteryId(req);
+  if (!organizationId) {
+    res.status(400).json({ error: "Valid organizationId is required." });
+    return;
+  }
+  const org = await getOrganizationById(organizationId);
+  if (!org) {
+    res.status(404).json({ error: "Cemetery not found." });
+    return;
+  }
+  const folder = mapFolder(org.id);
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "default";
+  const published = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
+    ?? await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  res.json({
+    organizationId: org.id,
+    slug: org.slug,
+    projectId,
+    published,
+    ...mapUrls(org.slug, projectId),
+  });
+});
+
+authedRouter.get("/cemetery-maps/global-spots", async (req, res) => {
+  const organizationId = requestedCemeteryId(req);
+  if (!organizationId) {
+    res.status(400).json({ error: "Valid organizationId is required." });
+    return;
+  }
+  const plots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
+  const burials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+  const records: GlobalSpotRecord[] = plots.map((plot) => {
+    const burial = burials.find((item) => item.plotId === plot.id) ?? null;
+    const geo = parseGeoJsonMeta(plot.geoJson);
+    return {
+      mapSpotId: asStringOrNull(geo.mapSpotId) ?? `plot-${plot.id}`,
+      plotId: plot.id,
+      plotNumber: plot.plotNumber,
+      section: plot.section,
+      row: plot.row,
+      status: plot.status,
+      type: plot.type,
+      latitude: plot.latitude,
+      longitude: plot.longitude,
+      x: asFiniteNumber(geo.x),
+      y: asFiniteNumber(geo.y),
+      gprX: asFiniteNumber(geo.gprX),
+      gprY: asFiniteNumber(geo.gprY),
+      gprZ: asFiniteNumber(geo.gprZ),
+      deceasedName: burial?.deceasedName ?? null,
+      deceasedDob: burial?.deceasedDob ?? null,
+      deceasedDod: burial?.deceasedDod ?? null,
+      photoUrl: burial?.photoUrl ?? null,
+      headstonePath: asStringOrNull(geo.imagePath) ?? asStringOrNull(geo.imageFileName),
+      notes: burial?.notes ?? plot.notes ?? null,
+    };
+  });
+  res.json({ organizationId, spots: records });
 });
 
 publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
