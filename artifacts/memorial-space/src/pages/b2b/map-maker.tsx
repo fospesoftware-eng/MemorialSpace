@@ -4227,9 +4227,14 @@ function WorkflowPanel({
             </div>
           )}
           <Button
+            type="button"
             size="sm"
             className="h-8 w-full gap-1.5"
-            onClick={onPublish}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onPublish();
+            }}
             disabled={isPublishing || !doc.cemeteryId}
             data-testid="publish-live-map"
           >

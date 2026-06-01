@@ -111,14 +111,6 @@ export default function MapPage() {
     };
   }, [selectedOrg?.slug]);
 
-  const plotByNumber = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const plot of data?.plots ?? []) {
-      map.set(String(plot.plotNumber).toLowerCase(), plot);
-    }
-    return map;
-  }, [data?.plots]);
-
   const visiblePublishedSpots = useMemo(() => {
     const term = query.trim().toLowerCase();
     const spots = publishedDoc?.spots ?? [];
@@ -131,6 +123,28 @@ export default function MapPage() {
       spot.notes,
     ].some((value) => String(value ?? "").toLowerCase().includes(term)));
   }, [publishedDoc?.spots, query]);
+
+  const visibleGroupedPlots = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const matchingPublishedNumbers = new Set(
+      visiblePublishedSpots
+        .map((spot) => String(spot.temporaryId ?? "").toLowerCase())
+        .filter(Boolean),
+    );
+    const plots = (data?.plots ?? []).filter((plot) => {
+      if (!term) return true;
+      const directMatch = [
+        plot.plotNumber,
+        plot.section,
+        plot.row,
+        plot.status,
+        plot.ownerName,
+        plot.notes,
+      ].some((value) => String(value ?? "").toLowerCase().includes(term));
+      return directMatch || matchingPublishedNumbers.has(String(plot.plotNumber).toLowerCase());
+    });
+    return groupPlots(plots);
+  }, [data?.plots, query, visiblePublishedSpots]);
 
   const selectedPublishedSpot = useMemo(() => {
     if (!selectedPlotId) return null;
@@ -236,26 +250,45 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="relative overflow-hidden rounded border bg-[#fbf8ef] shadow-inner" style={{ aspectRatio: `${publishedDoc.imgWidth} / ${publishedDoc.imgHeight}` }}>
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(74,86,70,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(74,86,70,0.12)_1px,transparent_1px)] bg-[size:28px_28px]" />
-                {visiblePublishedSpots.map((spot) => {
-                  const plot = plotByNumber.get(String(spot.temporaryId ?? "").toLowerCase());
-                  const left = `${(spot.x / publishedDoc.imgWidth) * 100}%`;
-                  const top = `${(spot.y / publishedDoc.imgHeight) * 100}%`;
-                  const active = selectedPlotId != null && plot?.id === selectedPlotId;
-                  return (
-                    <button
-                      type="button"
-                      key={spot.id}
-                      onClick={() => plot?.id && setSelectedPlotId(plot.id)}
-                      className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 border border-white shadow transition hover:scale-150 ${
-                        active ? "scale-150 ring-2 ring-primary ring-offset-2" : ""
-                      } ${plot ? getStatusColor(plot.status) : "bg-[#64748b]"}`}
-                      style={{ left, top }}
-                      title={spot.name || spot.temporaryId || "Burial spot"}
-                    />
-                  );
-                })}
+              <div className="space-y-8">
+                {visibleGroupedPlots.map((group) => (
+                  <section key={group.section} className="space-y-3 rounded border bg-[#fbf8ef] p-4">
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold tracking-tight">{group.section}</h2>
+                        <p className="text-xs text-muted-foreground">
+                          {group.plots.length} grid box{group.plots.length === 1 ? "" : "es"}
+                        </p>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Live map grid
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 md:grid-cols-10 xl:grid-cols-12">
+                      {group.plots.map((plot) => {
+                        const spot = publishedDoc.spots.find(
+                          (item) => String(item.temporaryId ?? "").toLowerCase() === String(plot.plotNumber).toLowerCase(),
+                        );
+                        const active = selectedPlotId === plot.id;
+                        return (
+                          <button
+                            type="button"
+                            key={plot.id}
+                            data-testid={`map-grid-box-${plot.id}`}
+                            onClick={() => setSelectedPlotId(plot.id)}
+                            className={`aspect-square rounded-sm border-2 p-1 text-[10px] font-semibold leading-tight text-white shadow-sm transition hover:scale-105 ${
+                              active ? "border-primary ring-2 ring-primary ring-offset-2" : "border-white/70"
+                            } ${getStatusColor(plot.status)}`}
+                            title={`${spot?.name || "Burial spot"} - ${plot.plotNumber}`}
+                          >
+                            <span className="block truncate">{plot.plotNumber}</span>
+                            {spot?.name && <span className="mt-0.5 block truncate text-[8px] font-medium opacity-90">{spot.name}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             </div>
 
