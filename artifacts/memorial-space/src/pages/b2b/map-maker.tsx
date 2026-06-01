@@ -661,6 +661,8 @@ function MapMakerEditor() {
   const [cemeteries, setCemeteries] = useState<CemeteryOption[]>([]);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [importLog, setImportLog] = useState<string[]>([]);
+  const [isImportingCsvs, setIsImportingCsvs] = useState(false);
+  const [fitRequest, setFitRequest] = useState(0);
 
   // Refs / mode trackers
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1905,6 +1907,9 @@ function MapMakerEditor() {
       setSelection(null);
       setMergeReview(null);
       setShowSpots(true);
+      setShowLabels(false);
+      setView("2d");
+      setFitRequest((value) => value + 1);
       setWorkflowTab("import");
       addImportLog(`Imported ${spots.length} unnamed GPR spots from ${file.name}`);
     } catch {
@@ -2059,8 +2064,9 @@ function MapMakerEditor() {
         setSelection(null);
         setMergeReview(null);
         setShowSpots(true);
-        setView("preview");
-        setZoom(1);
+        setShowLabels(false);
+        setView("2d");
+        setFitRequest((value) => value + 1);
         setWorkflowTab("headstones");
         addImportLog(`Generated ${spots.length} burial spots directly from ${file.name}`);
         return;
@@ -2080,12 +2086,23 @@ function MapMakerEditor() {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length === 0) return;
+    if (!doc.cemeteryId) {
+      setSaveError("Select a cemetery before importing CSV files.");
+      setTimeout(() => setSaveError(null), 6000);
+      return;
+    }
     try {
+      setIsImportingCsvs(true);
       const parsed = await Promise.all(
         files
           .filter((file) => file.name.toLowerCase().endsWith(".csv"))
           .map(async (file) => ({ file, rows: parseCsv(await file.text()) })),
       );
+      if (parsed.length === 0) {
+        setSaveError("Choose one or more CSV files: GPR, Burial, Cremations, Misc Points, or Coping Area.");
+        setTimeout(() => setSaveError(null), 7000);
+        return;
+      }
       const coordinateInputs: Array<{ x: number; y: number }> = [];
       for (const { file, rows } of parsed) {
         const lower = file.name.toLowerCase();
@@ -2329,14 +2346,17 @@ function MapMakerEditor() {
       }));
       setSelection(null);
       setShowSpots(true);
-      setView("preview");
-      setZoom(1);
+      setShowLabels(false);
+      setView("2d");
+      setFitRequest((value) => value + 1);
       setMergeReview(review);
       setWorkflowTab("headstones");
       addImportLog(`Generated map: ${gprCount} GPR, ${burialRecords.length} burial rows${autoMatchedBurials ? ` (${autoMatchedBurials} matched)` : ""}, ${cremationCount} cremations, ${copingCount} areas, ${miscCount} misc`);
     } catch {
       setSaveError("Couldn't import the cemetery dataset.");
       setTimeout(() => setSaveError(null), 7000);
+    } finally {
+      setIsImportingCsvs(false);
     }
   };
 
@@ -2560,6 +2580,22 @@ function MapMakerEditor() {
     const z = Math.min(availW / doc.imgWidth, availH / doc.imgHeight);
     setZoom(Math.max(0.1, Math.min(3, z)));
   }, [doc.imgWidth, doc.imgHeight]);
+
+  useEffect(() => {
+    if (!fitRequest) return;
+    const first = window.requestAnimationFrame(() => {
+      fitToScreen();
+      const viewport = findScrollViewport();
+      if (viewport) {
+        viewport.scrollTo({
+          left: Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2),
+          top: Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2),
+          behavior: "auto",
+        });
+      }
+    });
+    return () => window.cancelAnimationFrame(first);
+  }, [findScrollViewport, fitRequest, fitToScreen]);
 
   return (
     <div
@@ -2862,6 +2898,7 @@ function MapMakerEditor() {
                 selectedSpot={selectedSpot}
                 publishedUrl={publishedUrl}
                 isPublishing={isPublishing}
+                isImportingCsvs={isImportingCsvs}
                 onCreateDraft={createDraftProject}
                 onImportDataset={() => datasetInputRef.current?.click()}
                 onUploadGpr={() => gprInputRef.current?.click()}
@@ -4399,6 +4436,7 @@ function WorkflowPanel({
   selectedSpot,
   publishedUrl,
   isPublishing,
+  isImportingCsvs,
   onCreateDraft,
   onImportDataset,
   onUploadGpr,
@@ -4420,6 +4458,7 @@ function WorkflowPanel({
   selectedSpot: BurialSpot | null;
   publishedUrl: string | null;
   isPublishing: boolean;
+  isImportingCsvs: boolean;
   onCreateDraft: () => void;
   onImportDataset: () => void;
   onUploadGpr: () => void;
@@ -4464,13 +4503,24 @@ function WorkflowPanel({
 
       {tab === "import" && (
         <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            Upload all cemetery CSV files in one action. The importer reads GPR, Burial, Cremations, Misc Points, Coping Area, and other coordinate layers together.
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Upload all cemetery CSV files in one action. The importer preserves the original coordinate scale, creates the editable map, then fits it into the workspace.
           </p>
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onImportDataset}>
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Import all CSV files
+          <div className="rounded border border-border bg-muted/30 p-2 text-[10px] text-muted-foreground">
+            Supported: GPR, Burial, Cremations, Misc Points, Coping Area, and coordinate CSV layers.
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 w-full gap-1.5"
+            onClick={onImportDataset}
+            disabled={isImportingCsvs || !doc.cemeteryId}
+            data-testid="button-import-all-csvs"
+          >
+            {isImportingCsvs ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            {isImportingCsvs ? "Importing CSV files..." : "Import all CSV files"}
           </Button>
+          {!doc.cemeteryId && <p className="text-[10px] text-amber-600">Select a cemetery before importing.</p>}
           <MiniStat label="GPR spots" value={workflowStats.gpr} />
           <MiniStat label="Burial matched" value={workflowStats.burial} />
           <MiniStat label="Total spots" value={doc.spots.length} />
