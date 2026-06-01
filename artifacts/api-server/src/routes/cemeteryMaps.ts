@@ -121,6 +121,28 @@ function asStringOrNull(value: unknown): string | null {
   return v.length ? v : null;
 }
 
+function normalizeSqlDate(value: unknown): string | null {
+  const raw = asStringOrNull(value);
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return raw;
+  const slash = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (slash) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    const year = Number(slash[3].length === 2 ? `19${slash[3]}` : slash[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    ) {
+      return `${year.toString().padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
+
 function extractDocSpots(body: unknown): Array<Record<string, unknown>> {
   const input = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const doc = (input.doc && typeof input.doc === "object" ? input.doc : {}) as Record<string, unknown>;
@@ -183,8 +205,8 @@ async function syncPublishedSpotsToGlobal(
     const gprZ = asFiniteNumber(spot.gprZ);
     const notes = asStringOrNull(spot.notes);
     const deceasedName = asStringOrNull(spot.name);
-    const deceasedDob = asStringOrNull(spot.dob);
-    const deceasedDod = asStringOrNull(spot.dod);
+    const deceasedDob = normalizeSqlDate(spot.dob);
+    const deceasedDod = normalizeSqlDate(spot.dod);
     const imagePath = asStringOrNull(spot.imagePath);
     const imageFileName = asStringOrNull(spot.imageFileName);
     const reviewStatus = asStringOrNull(spot.reviewStatus);
@@ -410,16 +432,24 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
   const cemetery = { id: org.id, name: org.name, slug: org.slug };
   const projectId = projectIdFromBody(req.body);
   const payload = buildPayload(req.body, cemetery, true);
-  const globalSpots = await syncPublishedSpotsToGlobal(org.id, projectId, extractDocSpots(req.body));
   await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(payload, null, 2), "utf8");
+  let globalSpots: GlobalSpotRecord[] = [];
+  let syncWarning: string | null = null;
+  try {
+    globalSpots = await syncPublishedSpotsToGlobal(org.id, projectId, extractDocSpots(req.body));
+  } catch (err) {
+    req.log?.error({ err, organizationId: org.id, projectId }, "Published map saved but burial spot sync failed");
+    syncWarning = "Map was published, but Burial Spots sync needs attention. Check imported dates/spot data and publish again.";
+  }
   res.json({
     ok: true,
     organizationId: org.id,
     slug: org.slug,
     projectId,
     syncedSpots: globalSpots.length,
+    syncWarning,
     ...mapUrls(org.slug),
     publicBase: folder.publicBase,
   });

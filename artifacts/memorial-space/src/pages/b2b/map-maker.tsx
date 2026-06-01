@@ -650,6 +650,7 @@ function MapMakerEditor() {
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
   const [publishedMaps, setPublishedMaps] = useState<PublishedMapItem[]>([]);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -2456,11 +2457,15 @@ function MapMakerEditor() {
   };
 
   const publishMap = async () => {
+    if (isPublishing) return;
+    setSaveError(null);
     if (!doc.cemeteryId) {
       setSaveError("Select a cemetery before publishing this map.");
       setTimeout(() => setSaveError(null), 7000);
       return;
     }
+    flashStatus("Publishing live map...");
+    setIsPublishing(true);
     const publishedDoc: MapDoc = {
       ...doc,
       projectStatus: "published",
@@ -2491,11 +2496,21 @@ function MapMakerEditor() {
         syncedSpots: typeof body?.syncedSpots === "number" ? body.syncedSpots : publishedDoc.spots.length,
       }]);
       void refreshPublishedMaps(doc.cemeteryId);
-      addImportLog(`Map published. ${body?.syncedSpots ?? publishedDoc.spots.length} burial spots synced to the database.`);
-      flashStatus("Published live map and synced Burial Spots + Map View");
+      const synced = body?.syncedSpots ?? publishedDoc.spots.length;
+      const warning = typeof body?.syncWarning === "string" ? body.syncWarning : null;
+      addImportLog(warning ? `Map published. ${warning}` : `Map published. ${synced} burial spots synced to the database.`);
+      if (warning) {
+        setSaveError(warning);
+        setTimeout(() => setSaveError(null), 9000);
+        flashStatus("Published live map; sync needs review");
+      } else {
+        flashStatus("Published live map and synced Burial Spots + Map View");
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Could not publish map.");
       setTimeout(() => setSaveError(null), 7000);
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -2846,6 +2861,7 @@ function MapMakerEditor() {
                 importLog={importLog}
                 selectedSpot={selectedSpot}
                 publishedUrl={publishedUrl}
+                isPublishing={isPublishing}
                 onCreateDraft={createDraftProject}
                 onImportDataset={() => datasetInputRef.current?.click()}
                 onUploadGpr={() => gprInputRef.current?.click()}
@@ -4071,6 +4087,7 @@ function WorkflowPanel({
   importLog,
   selectedSpot,
   publishedUrl,
+  isPublishing,
   onCreateDraft,
   onImportDataset,
   onUploadGpr,
@@ -4091,6 +4108,7 @@ function WorkflowPanel({
   importLog: string[];
   selectedSpot: BurialSpot | null;
   publishedUrl: string | null;
+  isPublishing: boolean;
   onCreateDraft: () => void;
   onImportDataset: () => void;
   onUploadGpr: () => void;
@@ -4208,9 +4226,15 @@ function WorkflowPanel({
               </div>
             </div>
           )}
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onPublish}>
-            <Send className="h-3.5 w-3.5" />
-            Publish map
+          <Button
+            size="sm"
+            className="h-8 w-full gap-1.5"
+            onClick={onPublish}
+            disabled={isPublishing || !doc.cemeteryId}
+            data-testid="publish-live-map"
+          >
+            {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {isPublishing ? "Publishing..." : "Publish map"}
           </Button>
         </div>
       )}

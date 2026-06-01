@@ -51,10 +51,11 @@ app.use(
   }),
 );
 
-// Allow larger JSON bodies for image-based tools. Headstone import sends one
-// compressed image per request, while AI Map Maker sends downscaled maps.
-app.use(express.json({ limit: "32mb" }));
-app.use(express.urlencoded({ extended: true, limit: "32mb" }));
+// Allow larger JSON bodies for image-based tools and saved cemetery maps.
+// Map Maker can include a base-layer image as a data URL, so publishing a
+// saved map may exceed the default body-parser ceiling.
+app.use(express.json({ limit: "128mb" }));
+app.use(express.urlencoded({ extended: true, limit: "128mb" }));
 
 // Sessions before any route — every request must have access to req.session.
 app.use(buildSessionMiddleware());
