@@ -3716,6 +3716,10 @@ function InteractiveMapPreview({
   const [dodFrom, setDodFrom] = useState("");
   const [dodTo, setDodTo] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [panMode, setPanMode] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panDragRef = useRef<{ pointerId: number; startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
   const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
   const spotTypeMap = useMemo(
@@ -3748,16 +3752,136 @@ function InteractiveMapPreview({
 
   const selectedSpot = selectedId
     ? doc.spots.find((spot) => spot.id === selectedId) ?? null
-    : visibleSpots[0] ?? null;
+    : null;
   const matchedIds = new Set(visibleSpots.map((spot) => spot.id));
+
+  const onPreviewPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panMode) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-spot-button='true']")) return;
+    panDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPanX: pan.x,
+      startPanY: pan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPreviewPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panMode || !panDragRef.current) return;
+    if (panDragRef.current.pointerId !== event.pointerId) return;
+    const dx = event.clientX - panDragRef.current.startX;
+    const dy = event.clientY - panDragRef.current.startY;
+    setPan({
+      x: panDragRef.current.startPanX + dx,
+      y: panDragRef.current.startPanY + dy,
+    });
+  };
+
+  const onPreviewPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panDragRef.current || panDragRef.current.pointerId !== event.pointerId) return;
+    panDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   return (
     <div
       className="relative overflow-hidden rounded-sm bg-[#f8f5ea] text-[#1d2a22] shadow-2xl shadow-black/25 ring-1 ring-black/10"
       style={{ width: doc.imgWidth, height: doc.imgHeight }}
       data-testid="interactive-map-preview"
+      onPointerDown={onPreviewPointerDown}
+      onPointerMove={onPreviewPointerMove}
+      onPointerUp={onPreviewPointerUp}
+      onPointerCancel={onPreviewPointerUp}
     >
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(74,86,70,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(74,86,70,0.12)_1px,transparent_1px)] bg-[size:28px_28px]" />
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: "center center",
+          transition: panMode ? "none" : "transform 120ms ease-out",
+        }}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(74,86,70,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(74,86,70,0.12)_1px,transparent_1px)] bg-[size:28px_28px]" />
+        <svg className="absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${doc.imgWidth} ${doc.imgHeight}`} aria-hidden="true">
+          {doc.plots.map((plot) => {
+            const meta = plotTypeMap.get(plot.typeId) ?? FALLBACK_PLOT_TYPE;
+            if (plot.points && plot.points.length >= 3) {
+              return (
+                <polygon
+                  key={plot.id}
+                  points={plot.points.map(([x, y]) => `${x},${y}`).join(" ")}
+                  fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
+                  stroke={meta.stroke}
+                  strokeWidth={plot.outline ? 2 : 1}
+                  strokeDasharray={plot.outline ? "7 5" : undefined}
+                  opacity={0.65}
+                />
+              );
+            }
+            return (
+              <rect
+                key={plot.id}
+                x={plot.x}
+                y={plot.y}
+                width={plot.w}
+                height={plot.h}
+                fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
+                stroke={meta.stroke}
+                strokeWidth={plot.outline ? 2 : 1}
+                strokeDasharray={plot.outline ? "7 5" : undefined}
+                opacity={0.65}
+              />
+            );
+          })}
+        </svg>
+
+        <div className="absolute inset-0 z-10">
+          {doc.spots.map((spot) => {
+            const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
+            const visible = matchedIds.has(spot.id);
+            const active = selectedSpot?.id === spot.id;
+            const label = spot.name || spot.temporaryId || "Unknown";
+            return (
+              <button
+                key={spot.id}
+                type="button"
+                data-spot-button="true"
+                onClick={() => {
+                  setSelectedId(spot.id);
+                  onSelectSpot(spot.id);
+                }}
+                className={cn(
+                  "group absolute -translate-x-1/2 -translate-y-1/2 text-left transition",
+                  visible ? "opacity-100" : "opacity-15 grayscale",
+                )}
+                style={{ left: spot.x, top: spot.y }}
+                title={`${label}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
+              >
+                <span
+                  className={cn(
+                    "block h-2.5 w-2.5 border border-white shadow-sm",
+                    active && "ring-2 ring-[#0f766e] ring-offset-1 ring-offset-[#f8f5ea]",
+                  )}
+                  style={{ backgroundColor: meta.color }}
+                />
+                {(visible && label) && (
+                  <span className="pointer-events-none absolute left-3 top-[-3px] hidden max-w-28 whitespace-normal rounded bg-[#fffdf6]/95 px-1 py-0.5 text-[8px] font-semibold leading-tight text-[#243225] shadow-sm group-hover:block">
+                    {label}
+                    {(spot.dob || spot.dod) && (
+                      <span className="block font-normal text-[#576657]">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>
+                    )}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div className="absolute left-6 top-6 z-20 max-w-[560px] rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-lg">
         <div className="text-[10px] uppercase tracking-[0.28em] text-[#576657]">Cemetery Overview</div>
         <div className="mt-1 text-xl font-semibold leading-tight">
@@ -3794,78 +3918,22 @@ function InteractiveMapPreview({
         </div>
       </div>
 
-      <svg className="absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${doc.imgWidth} ${doc.imgHeight}`} aria-hidden="true">
-        {doc.plots.map((plot) => {
-          const meta = plotTypeMap.get(plot.typeId) ?? FALLBACK_PLOT_TYPE;
-          if (plot.points && plot.points.length >= 3) {
-            return (
-              <polygon
-                key={plot.id}
-                points={plot.points.map(([x, y]) => `${x},${y}`).join(" ")}
-                fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
-                stroke={meta.stroke}
-                strokeWidth={plot.outline ? 2 : 1}
-                strokeDasharray={plot.outline ? "7 5" : undefined}
-                opacity={0.65}
-              />
-            );
-          }
-          return (
-            <rect
-              key={plot.id}
-              x={plot.x}
-              y={plot.y}
-              width={plot.w}
-              height={plot.h}
-              fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
-              stroke={meta.stroke}
-              strokeWidth={plot.outline ? 2 : 1}
-              strokeDasharray={plot.outline ? "7 5" : undefined}
-              opacity={0.65}
-            />
-          );
-        })}
-      </svg>
-
-      <div className="absolute inset-0 z-10">
-        {doc.spots.map((spot) => {
-          const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
-          const visible = matchedIds.has(spot.id);
-          const active = selectedSpot?.id === spot.id;
-          const label = spot.name || spot.temporaryId || "Unknown";
-          return (
-            <button
-              key={spot.id}
-              type="button"
-              onClick={() => {
-                setSelectedId(spot.id);
-                onSelectSpot(spot.id);
-              }}
-              className={cn(
-                "group absolute -translate-x-1/2 -translate-y-1/2 text-left transition",
-                visible ? "opacity-100" : "opacity-15 grayscale",
-              )}
-              style={{ left: spot.x, top: spot.y }}
-              title={`${label}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
-            >
-              <span
-                className={cn(
-                  "block h-2.5 w-2.5 border border-white shadow-sm",
-                  active && "ring-2 ring-[#0f766e] ring-offset-1 ring-offset-[#f8f5ea]",
-                )}
-                style={{ backgroundColor: meta.color }}
-              />
-              {(visible && label) && (
-                <span className="pointer-events-none absolute left-3 top-[-3px] hidden max-w-28 whitespace-normal rounded bg-[#fffdf6]/95 px-1 py-0.5 text-[8px] font-semibold leading-tight text-[#243225] shadow-sm group-hover:block">
-                  {label}
-                  {(spot.dob || spot.dod) && (
-                    <span className="block font-normal text-[#576657]">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>
-                  )}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(2.5, z + 0.1))} title="Zoom in">
+          <ZoomIn className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.55, z - 0.1))} title="Zoom out">
+          <ZoomOut className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant={panMode ? "default" : "ghost"}
+          className="h-7 w-7"
+          onClick={() => setPanMode((v) => !v)}
+          title="Pan mode"
+        >
+          <Hand className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       <div className="absolute bottom-5 left-6 z-20 flex items-end gap-4 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-3 text-xs shadow">
@@ -3891,7 +3959,7 @@ function InteractiveMapPreview({
       </div>
 
       {selectedSpot && (
-        <div className="absolute bottom-5 right-6 z-20 w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
+        <div className="absolute right-4 top-28 z-20 w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
           <div className="text-[10px] uppercase tracking-wider text-[#576657]">Burial details</div>
           <div className="mt-1 text-base font-semibold">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
