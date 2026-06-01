@@ -3907,9 +3907,11 @@ function PublicFullScreenMap({
             onPointerCancel={onStagePointerUp}
           >
             <div
-              className="absolute inset-0 text-[#1d2a22]"
+              className="absolute left-1/2 top-1/2 overflow-visible text-[#1d2a22]"
               style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                width: `min(${doc.imgWidth}px, calc(100% - 2rem), calc((100vh - 9rem) * ${doc.imgWidth / Math.max(doc.imgHeight, 1)}))`,
+                aspectRatio: `${doc.imgWidth} / ${doc.imgHeight}`,
+                transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
                 transformOrigin: "center center",
                 transition: panMode ? "none" : "transform 140ms ease-out",
               }}
