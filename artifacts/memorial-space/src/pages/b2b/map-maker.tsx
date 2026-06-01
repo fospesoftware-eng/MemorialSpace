@@ -647,7 +647,7 @@ function MapMakerEditor() {
   // its label on hover even when the global "Labels" toggle is off.
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
-  const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
+  const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number; cemeteryId: number | null }[]>([]);
   const [publishedMaps, setPublishedMaps] = useState<PublishedMapItem[]>([]);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -791,26 +791,29 @@ function MapMakerEditor() {
 
   // Refresh saved maps list from localStorage
   const refreshSaved = useCallback(() => {
-    const list: { key: string; name: string; updatedAt: number }[] = [];
+    const list: { key: string; name: string; updatedAt: number; cemeteryId: number | null }[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith(`${STORAGE_KEY}:`)) {
         try {
-          const m = JSON.parse(localStorage.getItem(k)!) as MapDoc;
+          const m = migrateDoc(JSON.parse(localStorage.getItem(k)!));
           if (m.projectStatus === "published") continue;
-          list.push({ key: k, name: m.name ?? "(unnamed)", updatedAt: m.updatedAt ?? 0 });
+          if (doc.cemeteryId && m.cemeteryId !== doc.cemeteryId) continue;
+          if (!doc.cemeteryId && m.cemeteryId) continue;
+          list.push({ key: k, name: m.name ?? "(unnamed)", updatedAt: m.updatedAt ?? 0, cemeteryId: m.cemeteryId });
         } catch {}
       }
     }
     list.sort((a, b) => b.updatedAt - a.updatedAt);
     setSavedMaps(list);
-  }, []);
+  }, [doc.cemeteryId]);
 
   useEffect(() => { refreshSaved(); }, [refreshSaved]);
 
   const refreshPublishedMaps = useCallback(async (cemeteryId: number | null) => {
     if (!cemeteryId) {
       setPublishedMaps([]);
+      setPublishedUrl(null);
       return;
     }
     try {
@@ -820,6 +823,7 @@ function MapMakerEditor() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.published?.doc) {
         setPublishedMaps([]);
+        setPublishedUrl(null);
         return;
       }
       const item: PublishedMapItem = {
@@ -832,13 +836,68 @@ function MapMakerEditor() {
       setPublishedUrl(item.url || null);
     } catch {
       setPublishedMaps([]);
+      setPublishedUrl(null);
     }
   }, [doc.projectId]);
 
   useEffect(() => {
-    if (!doc.cemeteryId) return;
     void refreshPublishedMaps(doc.cemeteryId);
   }, [doc.cemeteryId, refreshPublishedMaps]);
+
+  const loadCemeteryMap = useCallback(async (cemeteryId: number | null) => {
+    setSelection(null);
+    setMergeReview(null);
+    setPublishedUrl(null);
+    setSaveError(null);
+    if (!cemeteryId) {
+      setDoc({ ...DEFAULT_DOC, updatedAt: Date.now() });
+      setSavedMaps([]);
+      setPublishedMaps([]);
+      setWorkflowTab("project");
+      setView("2d");
+      return;
+    }
+
+    const cemetery = cemeteries.find((item) => item.id === cemeteryId);
+    setDoc({
+      ...DEFAULT_DOC,
+      cemeteryId,
+      name: cemetery ? `${cemetery.name} Map Project` : "New Cemetery Map Project",
+      projectStatus: "draft",
+      updatedAt: Date.now(),
+    });
+    setWorkflowTab("project");
+    setView("2d");
+
+    try {
+      const res = await fetch(`/api/cemetery-maps?cemeteryId=${cemeteryId}`, { credentials: "include" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+      const payload = body?.draft?.doc ? body.draft : body?.published?.doc ? body.published : null;
+      if (payload?.doc) {
+        const loaded = migrateDoc(payload.doc);
+        setDoc({
+          ...loaded,
+          cemeteryId,
+          name: loaded.name || (cemetery ? `${cemetery.name} Map Project` : "Imported Cemetery Map Project"),
+          updatedAt: loaded.updatedAt || Date.now(),
+        });
+        setView(loaded.spots.length || loaded.plots.length ? "2d" : "preview");
+        setFitRequest((value) => value + 1);
+        flashStatus(`Loaded ${cemetery?.name ?? "cemetery"} map data`);
+      } else {
+        flashStatus(`Ready for ${cemetery?.name ?? "selected cemetery"} import`);
+      }
+      if (body?.published?.doc && typeof body.permanentUrl === "string") {
+        setPublishedUrl(body.permanentUrl);
+      }
+      void refreshPublishedMaps(cemeteryId);
+      refreshSaved();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not load cemetery map data.");
+      setTimeout(() => setSaveError(null), 7000);
+    }
+  }, [cemeteries, flashStatus, refreshPublishedMaps, refreshSaved]);
 
   // ----- AI Map Maker handoff -----
   // The /ai-map-maker page writes a "pending" MapDoc into localStorage just before
@@ -1523,7 +1582,7 @@ function MapMakerEditor() {
 
   const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
-    const key = `${STORAGE_KEY}:${safeName}`;
+    const key = `${STORAGE_KEY}:${doc.cemeteryId ?? "local"}:${safeName}`;
     const toSave = { ...doc, updatedAt: Date.now() };
     try {
       localStorage.setItem(key, JSON.stringify(toSave));
@@ -1558,8 +1617,13 @@ function MapMakerEditor() {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return;
-      setDoc(migrateDoc(JSON.parse(raw)));
+      const loaded = migrateDoc(JSON.parse(raw));
+      setDoc(loaded);
       setSelection(null);
+      setMergeReview(null);
+      setView(loaded.spots.length || loaded.plots.length ? "2d" : "preview");
+      setFitRequest((value) => value + 1);
+      void refreshPublishedMaps(loaded.cemeteryId);
     } catch {}
   };
 
@@ -2657,13 +2721,7 @@ function MapMakerEditor() {
           </div>
           <Select
             value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
-            onValueChange={(value) =>
-              setDoc((d) => ({
-                ...d,
-                cemeteryId: value === "none" ? null : Number(value),
-                updatedAt: Date.now(),
-              }))
-            }
+            onValueChange={(value) => void loadCemeteryMap(value === "none" ? null : Number(value))}
           >
             <SelectTrigger className="h-7 text-xs" data-testid="top-select-map-cemetery">
               <SelectValue placeholder="Select cemetery" />
@@ -2847,13 +2905,7 @@ function MapMakerEditor() {
 
               <Select
                 value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
-                onValueChange={(value) =>
-                  setDoc((d) => ({
-                    ...d,
-                    cemeteryId: value === "none" ? null : Number(value),
-                    updatedAt: Date.now(),
-                  }))
-                }
+                onValueChange={(value) => void loadCemeteryMap(value === "none" ? null : Number(value))}
               >
                 <SelectTrigger className="h-8 text-xs" data-testid="select-map-cemetery">
                   <SelectValue placeholder="Select cemetery" />

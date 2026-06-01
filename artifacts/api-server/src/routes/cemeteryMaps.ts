@@ -87,8 +87,13 @@ function mapUrls(slug: string) {
 
 function buildPayload(body: unknown, cemetery: { id: number; name: string; slug: string }, published = false): MapPayload {
   const input = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const inputDoc = input.doc && typeof input.doc === "object" ? (input.doc as Record<string, unknown>) : {};
   return {
-    doc: input.doc,
+    doc: {
+      ...inputDoc,
+      cemeteryId: cemetery.id,
+      projectStatus: published ? "published" : (inputDoc.projectStatus === "published" ? "published" : "draft"),
+    },
     plotTypes: Array.isArray(input.plotTypes) ? input.plotTypes : [],
     spotTypes: Array.isArray(input.spotTypes) ? input.spotTypes : [],
     cemetery,
