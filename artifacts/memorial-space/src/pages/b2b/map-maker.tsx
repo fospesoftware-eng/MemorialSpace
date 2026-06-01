@@ -3959,7 +3959,7 @@ function InteractiveMapPreview({
       </div>
 
       {selectedSpot && (
-        <div className="absolute right-4 top-28 z-20 w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
+        <div className="fixed right-6 top-24 z-[70] w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
           <div className="text-[10px] uppercase tracking-wider text-[#576657]">Burial details</div>
           <div className="mt-1 text-base font-semibold">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
