@@ -3773,6 +3773,15 @@ function LoaderDot() {
   return <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#576657]/20 border-t-[#576657]" />;
 }
 
+const MAP_GRID_COLUMNS = ["A", "B", "C", "D"];
+const MAP_GRID_ROWS = ["1", "2", "3", "4", "5"];
+
+function mapSpotPercent(spot: { x: number; y: number }, width: number, height: number) {
+  const left = Math.max(1, Math.min(99, (spot.x / Math.max(width, 1)) * 100));
+  const top = Math.max(1, Math.min(99, (spot.y / Math.max(height, 1)) * 100));
+  return { left: `${left}%`, top: `${top}%` };
+}
+
 function InteractiveMapPreview({
   doc,
   plotTypes,
@@ -3802,10 +3811,6 @@ function InteractiveMapPreview({
   const spotTypeMap = useMemo(
     () => new Map(spotTypes.map((type) => [type.id, type])),
     [spotTypes],
-  );
-  const plotTypeMap = useMemo(
-    () => new Map(plotTypes.map((type) => [type.id, type])),
-    [plotTypes],
   );
 
   const visibleSpots = useMemo(() => {
@@ -3867,7 +3872,7 @@ function InteractiveMapPreview({
 
   return (
     <div
-      className="relative overflow-hidden rounded-sm bg-[#f8f5ea] text-[#1d2a22] shadow-2xl shadow-black/25 ring-1 ring-black/10"
+      className="relative overflow-hidden rounded-sm bg-[#f7f5ee] text-[#1d2a22] shadow-2xl shadow-black/25 ring-1 ring-black/10"
       style={{ width: doc.imgWidth, height: doc.imgHeight }}
       data-testid="interactive-map-preview"
       onPointerDown={onPreviewPointerDown}
@@ -3875,54 +3880,52 @@ function InteractiveMapPreview({
       onPointerUp={onPreviewPointerUp}
       onPointerCancel={onPreviewPointerUp}
     >
+      <div className="absolute left-6 top-8 z-30 flex flex-col items-center gap-1 text-[#101813]">
+        <div className="text-sm font-semibold">N</div>
+        <div className="relative h-16 w-16">
+          <div className="absolute left-1/2 top-0 h-16 w-px -translate-x-1/2 bg-[#101813]" />
+          <div className="absolute left-0 top-1/2 h-px w-16 -translate-y-1/2 bg-[#101813]" />
+          <div className="absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
+          <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
+        </div>
+        <div className="flex w-20 items-center justify-between text-sm font-semibold"><span>W</span><span>E</span></div>
+        <div className="text-sm font-semibold">S</div>
+      </div>
+
       <div
-        className="absolute inset-0"
+        className="absolute inset-x-[9%] bottom-[7%] top-[4%]"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: "center center",
           transition: panMode ? "none" : "transform 120ms ease-out",
         }}
       >
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(74,86,70,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(74,86,70,0.12)_1px,transparent_1px)] bg-[size:28px_28px]" />
-        <svg className="absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${doc.imgWidth} ${doc.imgHeight}`} aria-hidden="true">
-          {doc.plots.map((plot) => {
-            const meta = plotTypeMap.get(plot.typeId) ?? FALLBACK_PLOT_TYPE;
-            if (plot.points && plot.points.length >= 3) {
-              return (
-                <polygon
-                  key={plot.id}
-                  points={plot.points.map(([x, y]) => `${x},${y}`).join(" ")}
-                  fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
-                  stroke={meta.stroke}
-                  strokeWidth={plot.outline ? 2 : 1}
-                  strokeDasharray={plot.outline ? "7 5" : undefined}
-                  opacity={0.65}
-                />
-              );
-            }
-            return (
-              <rect
-                key={plot.id}
-                x={plot.x}
-                y={plot.y}
-                width={plot.w}
-                height={plot.h}
-                fill={plot.outline ? "rgba(0,0,0,0.02)" : meta.fill}
-                stroke={meta.stroke}
-                strokeWidth={plot.outline ? 2 : 1}
-                strokeDasharray={plot.outline ? "7 5" : undefined}
-                opacity={0.65}
-              />
-            );
-          })}
-        </svg>
-
+        <div className="absolute inset-0 border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]" />
+        {MAP_GRID_COLUMNS.map((label, index) => (
+          <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-[10px] font-semibold" style={{ left: `${(index + 0.5) * 25}%`, width: "25%" }}>{label}</div>
+        ))}
+        {MAP_GRID_COLUMNS.map((label, index) => (
+          <div key={`bottom-${label}`} className="absolute bottom-0 translate-y-full text-center text-[10px] font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
+        ))}
+        {MAP_GRID_ROWS.map((label, index) => (
+          <div key={`left-${label}`} className="absolute right-full -translate-y-1/2 pr-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+        ))}
+        {MAP_GRID_ROWS.map((label, index) => (
+          <div key={`right-${label}`} className="absolute left-full -translate-y-1/2 pl-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+        ))}
+        {MAP_GRID_COLUMNS.slice(1).map((label, index) => (
+          <div key={`v-${label}`} className="absolute top-0 h-full w-px bg-[#f0b7b7]/70" style={{ left: `${(index + 1) * 25}%` }} />
+        ))}
+        {MAP_GRID_ROWS.slice(1).map((label, index) => (
+          <div key={`h-${label}`} className="absolute left-0 h-px w-full bg-[#f0b7b7]/70" style={{ top: `${(index + 1) * 20}%` }} />
+        ))}
         <div className="absolute inset-0 z-10">
           {doc.spots.map((spot) => {
             const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
             const visible = matchedIds.has(spot.id);
             const active = selectedSpot?.id === spot.id;
             const label = spot.name || spot.temporaryId || "Unknown";
+            const position = mapSpotPercent(spot, doc.imgWidth, doc.imgHeight);
             return (
               <button
                 key={spot.id}
@@ -3933,41 +3936,24 @@ function InteractiveMapPreview({
                   onSelectSpot(spot.id);
                 }}
                 className={cn(
-                  "group absolute -translate-x-1/2 -translate-y-1/2 text-left transition",
+                  "group absolute -translate-x-1/2 -translate-y-1/2 border border-[#9ca3af] bg-white px-1 py-0.5 text-center text-[6px] font-semibold leading-none shadow-sm transition hover:z-20 hover:scale-125",
                   visible ? "opacity-100" : "opacity-15 grayscale",
+                  active && "z-20 ring-2 ring-[#0f766e] ring-offset-1 ring-offset-white",
                 )}
-                style={{ left: spot.x, top: spot.y }}
+                style={{ left: position.left, top: position.top, borderTopColor: meta.color, borderTopWidth: 3 }}
                 title={`${label}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
               >
-                <span
-                  className={cn(
-                    "block h-2.5 w-2.5 border border-white shadow-sm",
-                    active && "ring-2 ring-[#0f766e] ring-offset-1 ring-offset-[#f8f5ea]",
-                  )}
-                  style={{ backgroundColor: meta.color }}
-                />
-                {(visible && label) && (
-                  <span className="pointer-events-none absolute left-3 top-[-3px] hidden max-w-28 whitespace-normal rounded bg-[#fffdf6]/95 px-1 py-0.5 text-[8px] font-semibold leading-tight text-[#243225] shadow-sm group-hover:block">
-                    {label}
-                    {(spot.dob || spot.dod) && (
-                      <span className="block font-normal text-[#576657]">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>
-                    )}
-                  </span>
-                )}
+                <span className="block max-w-[42px] truncate">{label}</span>
+                {(spot.dob || spot.dod) && <span className="block max-w-[42px] truncate font-normal">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>}
               </button>
             );
           })}
         </div>
       </div>
-      <div className="absolute left-6 top-6 z-20 max-w-[560px] rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-lg">
-        <div className="text-[10px] uppercase tracking-[0.28em] text-[#576657]">Cemetery Overview</div>
-        <div className="mt-1 text-xl font-semibold leading-tight">
-          {cemetery?.name ?? doc.name}
-        </div>
-        <div className="mt-1 text-xs text-[#576657]">
-          Interactive HTML5 preview · {visibleSpots.length} of {doc.spots.length} burial spots visible
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-[1.5fr_1fr_0.8fr_0.8fr]">
+
+      <div className="absolute right-6 top-6 z-30 w-[360px] rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-3 shadow-lg">
+        <div className="mb-2 text-[10px] uppercase tracking-[0.22em] text-[#576657]">Search & Filters</div>
+        <div className="grid gap-2">
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -3986,12 +3972,12 @@ function InteractiveMapPreview({
               ))}
             </SelectContent>
           </Select>
-          <Input value={dobFrom} onChange={(event) => setDobFrom(event.target.value)} placeholder="DOB from" className="h-8 bg-white/90 text-xs" />
-          <Input value={dodTo} onChange={(event) => setDodTo(event.target.value)} placeholder="DOD to" className="h-8 bg-white/90 text-xs" />
-        </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          <Input value={dobTo} onChange={(event) => setDobTo(event.target.value)} placeholder="DOB to" className="h-8 bg-white/90 text-xs" />
-          <Input value={dodFrom} onChange={(event) => setDodFrom(event.target.value)} placeholder="DOD from" className="h-8 bg-white/90 text-xs" />
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={dobFrom} onChange={(event) => setDobFrom(event.target.value)} placeholder="DOB from" className="h-8 bg-white/90 text-xs" />
+            <Input value={dobTo} onChange={(event) => setDobTo(event.target.value)} placeholder="DOB to" className="h-8 bg-white/90 text-xs" />
+            <Input value={dodFrom} onChange={(event) => setDodFrom(event.target.value)} placeholder="DOD from" className="h-8 bg-white/90 text-xs" />
+            <Input value={dodTo} onChange={(event) => setDodTo(event.target.value)} placeholder="DOD to" className="h-8 bg-white/90 text-xs" />
+          </div>
         </div>
       </div>
 
@@ -4013,10 +3999,10 @@ function InteractiveMapPreview({
         </Button>
       </div>
 
-      <div className="absolute bottom-5 left-6 z-20 flex items-end gap-4 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-3 text-xs shadow">
+      <div className="absolute bottom-16 right-7 z-20 w-36 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-2 text-[9px] shadow">
         <div>
           <div className="mb-1 text-[10px] uppercase tracking-wider text-[#576657]">Legend</div>
-          <div className="grid max-w-[520px] grid-cols-2 gap-x-4 gap-y-1">
+          <div className="grid gap-y-1">
             {spotTypes.map((type) => (
               <div key={type.id} className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 border border-white shadow-sm" style={{ backgroundColor: type.color }} />
@@ -4025,13 +4011,20 @@ function InteractiveMapPreview({
             ))}
           </div>
         </div>
-        <div className="min-w-28">
+        <div className="mt-2">
           <div className="h-1 w-24 bg-[#243225]" />
           <div className="mt-1 flex justify-between text-[10px] text-[#576657]">
             <span>0</span>
             <span>20</span>
             <span>40 ft</span>
           </div>
+        </div>
+      </div>
+
+      <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 text-center">
+        <div className="text-lg font-semibold leading-none">{cemetery?.name ?? doc.name}</div>
+        <div className="mt-1 text-xs leading-tight text-[#576657]">
+          Cemetery Overview<br />{new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
         </div>
       </div>
 

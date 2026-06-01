@@ -38,6 +38,16 @@ type PublishedDoc = {
   spots: PublishedSpot[];
 };
 
+const MAP_GRID_COLUMNS = ["A", "B", "C", "D"];
+const MAP_GRID_ROWS = ["1", "2", "3", "4", "5"];
+
+function spotPercent(spot: PublishedSpot, width: number, height: number) {
+  return {
+    left: `${Math.max(1, Math.min(99, (spot.x / Math.max(width, 1)) * 100))}%`,
+    top: `${Math.max(1, Math.min(99, (spot.y / Math.max(height, 1)) * 100))}%`,
+  };
+}
+
 function groupPlots(plots: any[] | undefined) {
   const groups = new Map<string, any[]>();
   for (const plot of plots ?? []) {
@@ -123,28 +133,6 @@ export default function MapPage() {
       spot.notes,
     ].some((value) => String(value ?? "").toLowerCase().includes(term)));
   }, [publishedDoc?.spots, query]);
-
-  const visibleGroupedPlots = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const matchingPublishedNumbers = new Set(
-      visiblePublishedSpots
-        .map((spot) => String(spot.temporaryId ?? "").toLowerCase())
-        .filter(Boolean),
-    );
-    const plots = (data?.plots ?? []).filter((plot) => {
-      if (!term) return true;
-      const directMatch = [
-        plot.plotNumber,
-        plot.section,
-        plot.row,
-        plot.status,
-        plot.ownerName,
-        plot.notes,
-      ].some((value) => String(value ?? "").toLowerCase().includes(term));
-      return directMatch || matchingPublishedNumbers.has(String(plot.plotNumber).toLowerCase());
-    });
-    return groupPlots(plots);
-  }, [data?.plots, query, visiblePublishedSpots]);
 
   const selectedPublishedSpot = useMemo(() => {
     if (!selectedPlotId) return null;
@@ -250,45 +238,79 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="space-y-8">
-                {visibleGroupedPlots.map((group) => (
-                  <section key={group.section} className="space-y-3 rounded border bg-[#fbf8ef] p-4">
-                    <div className="flex items-end justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-tight">{group.section}</h2>
-                        <p className="text-xs text-muted-foreground">
-                          {group.plots.length} grid box{group.plots.length === 1 ? "" : "es"}
-                        </p>
-                      </div>
-                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Live map grid
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 md:grid-cols-10 xl:grid-cols-12">
-                      {group.plots.map((plot) => {
-                        const spot = publishedDoc.spots.find(
-                          (item) => String(item.temporaryId ?? "").toLowerCase() === String(plot.plotNumber).toLowerCase(),
-                        );
-                        const active = selectedPlotId === plot.id;
-                        return (
-                          <button
-                            type="button"
-                            key={plot.id}
-                            data-testid={`map-grid-box-${plot.id}`}
-                            onClick={() => setSelectedPlotId(plot.id)}
-                            className={`aspect-square rounded-sm border-2 p-1 text-[10px] font-semibold leading-tight text-white shadow-sm transition hover:scale-105 ${
-                              active ? "border-primary ring-2 ring-primary ring-offset-2" : "border-white/70"
-                            } ${getStatusColor(plot.status)}`}
-                            title={`${spot?.name || "Burial spot"} - ${plot.plotNumber}`}
-                          >
-                            <span className="block truncate">{plot.plotNumber}</span>
-                            {spot?.name && <span className="mt-0.5 block truncate text-[8px] font-medium opacity-90">{spot.name}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))}
+              <div className="relative min-h-[720px] overflow-hidden rounded-sm border bg-[#f7f5ee] p-10 shadow-inner">
+                <div className="absolute left-4 top-6 flex flex-col items-center gap-1 text-[#101813]">
+                  <div className="text-xs font-semibold">N</div>
+                  <div className="relative h-12 w-12">
+                    <div className="absolute left-1/2 top-0 h-12 w-px -translate-x-1/2 bg-[#101813]" />
+                    <div className="absolute left-0 top-1/2 h-px w-12 -translate-y-1/2 bg-[#101813]" />
+                    <div className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
+                    <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
+                  </div>
+                  <div className="flex w-14 justify-between text-xs font-semibold"><span>W</span><span>E</span></div>
+                  <div className="text-xs font-semibold">S</div>
+                </div>
+
+                <div className="absolute inset-x-[9%] bottom-[12%] top-[5%] border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]">
+                  {MAP_GRID_COLUMNS.map((label, index) => (
+                    <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-[10px] font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
+                  ))}
+                  {MAP_GRID_COLUMNS.map((label, index) => (
+                    <div key={`bottom-${label}`} className="absolute bottom-0 translate-y-full text-center text-[10px] font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
+                  ))}
+                  {MAP_GRID_ROWS.map((label, index) => (
+                    <div key={`left-${label}`} className="absolute right-full -translate-y-1/2 pr-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+                  ))}
+                  {MAP_GRID_ROWS.map((label, index) => (
+                    <div key={`right-${label}`} className="absolute left-full -translate-y-1/2 pl-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+                  ))}
+                  {MAP_GRID_COLUMNS.slice(1).map((label, index) => (
+                    <div key={`v-${label}`} className="absolute top-0 h-full w-px bg-[#f0b7b7]/70" style={{ left: `${(index + 1) * 25}%` }} />
+                  ))}
+                  {MAP_GRID_ROWS.slice(1).map((label, index) => (
+                    <div key={`h-${label}`} className="absolute left-0 h-px w-full bg-[#f0b7b7]/70" style={{ top: `${(index + 1) * 20}%` }} />
+                  ))}
+                  {visiblePublishedSpots.map((spot) => {
+                    const plot = (data?.plots ?? []).find(
+                      (item) => String(item.plotNumber).toLowerCase() === String(spot.temporaryId ?? "").toLowerCase(),
+                    );
+                    const active = selectedPlotId != null && plot?.id === selectedPlotId;
+                    const position = spotPercent(spot, publishedDoc.imgWidth, publishedDoc.imgHeight);
+                    return (
+                      <button
+                        type="button"
+                        key={spot.id}
+                        data-testid={`map-grid-box-${spot.id}`}
+                        onClick={() => plot?.id && setSelectedPlotId(plot.id)}
+                        className={`absolute -translate-x-1/2 -translate-y-1/2 border border-[#9ca3af] bg-white px-1 py-0.5 text-center text-[7px] font-semibold leading-none shadow-sm transition hover:z-20 hover:scale-125 ${
+                          active ? "z-20 ring-2 ring-primary ring-offset-1" : ""
+                        }`}
+                        style={{
+                          ...position,
+                          borderTopColor: plot?.status === "reserved" ? "#d4a843" : plot?.status === "occupied" ? "#374151" : "#40916c",
+                          borderTopWidth: 3,
+                        }}
+                        title={`${spot.name || "Burial spot"} - ${spot.temporaryId ?? ""}`}
+                      >
+                        <span className="block max-w-[46px] truncate">{spot.name || spot.temporaryId}</span>
+                        {(spot.dob || spot.dod) && <span className="block max-w-[46px] truncate font-normal">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
+                  <div className="text-lg font-semibold">{selectedOrg?.name ?? publishedDoc.name}</div>
+                  <div className="text-xs text-muted-foreground">Cemetery Overview</div>
+                </div>
+                <div className="absolute bottom-4 right-4 rounded border bg-white/95 p-2 text-[10px] shadow">
+                  <div className="mb-1 font-semibold uppercase tracking-wider text-muted-foreground">Legend</div>
+                  <div className="space-y-1">
+                    <div><span className="mr-1 inline-block h-2 w-2 bg-[#40916c]" />Available</div>
+                    <div><span className="mr-1 inline-block h-2 w-2 bg-[#d4a843]" />Reserved</div>
+                    <div><span className="mr-1 inline-block h-2 w-2 bg-[#374151]" />Occupied</div>
+                  </div>
+                </div>
               </div>
             </div>
 
