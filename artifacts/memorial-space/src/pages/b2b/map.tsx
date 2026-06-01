@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   useGetMapData,
   useListOrganizations,
@@ -7,6 +7,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlotDetailSheet } from "@/components/plot-detail-sheet";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MapPin, Search } from "lucide-react";
+import { Hand, MapPin, Maximize, Search, ZoomIn, ZoomOut } from "lucide-react";
 
 type PublishedSpot = {
   id: string;
@@ -89,14 +90,20 @@ export default function MapPage() {
 
   const groupedPlots = useMemo(() => groupPlots(data?.plots), [data?.plots]);
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
+  const [selectedPublishedSpotId, setSelectedPublishedSpotId] = useState<string | null>(null);
   const [publishedDoc, setPublishedDoc] = useState<PublishedDoc | null>(null);
   const [publishedLoading, setPublishedLoading] = useState(false);
   const [publishedError, setPublishedError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapPanMode, setMapPanMode] = useState(false);
+  const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
+  const mapPanDragRef = useRef<{ pointerId: number; startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setSelectedPlotId(null);
+    setSelectedPublishedSpotId(null);
     setPublishedDoc(null);
     setPublishedError(null);
     if (!selectedOrg?.slug) return;
@@ -135,11 +142,45 @@ export default function MapPage() {
   }, [publishedDoc?.spots, query]);
 
   const selectedPublishedSpot = useMemo(() => {
+    if (selectedPublishedSpotId) {
+      return publishedDoc?.spots?.find((spot) => spot.id === selectedPublishedSpotId) ?? null;
+    }
     if (!selectedPlotId) return null;
     const plot = data?.plots?.find((item) => item.id === selectedPlotId);
     if (!plot) return null;
     return publishedDoc?.spots?.find((spot) => String(spot.temporaryId ?? "").toLowerCase() === String(plot.plotNumber).toLowerCase()) ?? null;
-  }, [data?.plots, publishedDoc?.spots, selectedPlotId]);
+  }, [data?.plots, publishedDoc?.spots, selectedPlotId, selectedPublishedSpotId]);
+
+  const onMapPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!mapPanMode) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-map-spot='true']")) return;
+    mapPanDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPanX: mapPan.x,
+      startPanY: mapPan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onMapPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!mapPanMode || !mapPanDragRef.current) return;
+    if (mapPanDragRef.current.pointerId !== event.pointerId) return;
+    setMapPan({
+      x: mapPanDragRef.current.startPanX + event.clientX - mapPanDragRef.current.startX,
+      y: mapPanDragRef.current.startPanY + event.clientY - mapPanDragRef.current.startY,
+    });
+  };
+
+  const onMapPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!mapPanDragRef.current || mapPanDragRef.current.pointerId !== event.pointerId) return;
+    mapPanDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -172,6 +213,7 @@ export default function MapPage() {
             onValueChange={(v) => {
               setSelectedOrgId(Number(v));
               setSelectedPlotId(null);
+              setSelectedPublishedSpotId(null);
             }}
             disabled={orgsLoading}
           >
@@ -238,7 +280,48 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="relative min-h-[720px] overflow-hidden rounded-sm border bg-[#f7f5ee] p-10 shadow-inner">
+              <div className="relative h-[calc(100vh-18rem)] min-h-[520px] overflow-auto rounded border border-[#d8d4c8] bg-[#e8e4d8] p-4">
+                <div className="sticky left-1/2 top-3 z-30 flex w-max -translate-x-1/2 items-center gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
+                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setMapZoom((z) => Math.min(2.5, z + 0.1))} title="Zoom in">
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setMapZoom((z) => Math.max(0.55, z - 0.1))} title="Zoom out">
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon" variant={mapPanMode ? "default" : "ghost"} className="h-8 w-8" onClick={() => setMapPanMode((v) => !v)} title="Pan mode">
+                    <Hand className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setMapZoom(1);
+                      setMapPan({ x: 0, y: 0 });
+                      setMapPanMode(false);
+                    }}
+                    title="Fit map"
+                  >
+                    <Maximize className="h-4 w-4" />
+                  </Button>
+                  <span className="px-2 text-[11px] font-semibold text-[#576657]">{Math.round(mapZoom * 100)}%</span>
+                </div>
+
+                <div
+                  className="relative mx-auto overflow-hidden rounded-sm border bg-[#f7f5ee] p-10 text-[#1d2a22] shadow-inner"
+                  style={{
+                    width: publishedDoc.imgWidth,
+                    height: publishedDoc.imgHeight,
+                    maxWidth: "min(100%, calc((100vh - 20rem) * 0.72))",
+                    maxHeight: "calc(100vh - 20rem)",
+                    aspectRatio: `${publishedDoc.imgWidth} / ${publishedDoc.imgHeight}`,
+                  }}
+                  onPointerDown={onMapPointerDown}
+                  onPointerMove={onMapPointerMove}
+                  onPointerUp={onMapPointerUp}
+                  onPointerCancel={onMapPointerUp}
+                >
                 <div className="absolute left-4 top-6 flex flex-col items-center gap-1 text-[#101813]">
                   <div className="text-xs font-semibold">N</div>
                   <div className="relative h-12 w-12">
@@ -251,7 +334,15 @@ export default function MapPage() {
                   <div className="text-xs font-semibold">S</div>
                 </div>
 
-                <div className="absolute inset-x-[9%] bottom-[12%] top-[5%] border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]">
+                <div
+                  className="absolute inset-x-[9%] bottom-[12%] top-[5%] border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]"
+                  style={{
+                    transform: `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapZoom})`,
+                    transformOrigin: "center center",
+                    transition: mapPanMode ? "none" : "transform 120ms ease-out",
+                    cursor: mapPanMode ? "grab" : "default",
+                  }}
+                >
                   {MAP_GRID_COLUMNS.map((label, index) => (
                     <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-[10px] font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
                   ))}
@@ -280,10 +371,14 @@ export default function MapPage() {
                       <button
                         type="button"
                         key={spot.id}
+                        data-map-spot="true"
                         data-testid={`map-grid-box-${spot.id}`}
-                        onClick={() => plot?.id && setSelectedPlotId(plot.id)}
+                        onClick={() => {
+                          setSelectedPublishedSpotId(spot.id);
+                          setSelectedPlotId(plot?.id ?? null);
+                        }}
                         className={`absolute -translate-x-1/2 -translate-y-1/2 border border-[#9ca3af] bg-white px-1 py-0.5 text-center text-[7px] font-semibold leading-none shadow-sm transition hover:z-20 hover:scale-125 ${
-                          active ? "z-20 ring-2 ring-primary ring-offset-1" : ""
+                          active || selectedPublishedSpotId === spot.id ? "z-20 ring-2 ring-primary ring-offset-1" : ""
                         }`}
                         style={{
                           ...position,
@@ -310,6 +405,7 @@ export default function MapPage() {
                     <div><span className="mr-1 inline-block h-2 w-2 bg-[#d4a843]" />Reserved</div>
                     <div><span className="mr-1 inline-block h-2 w-2 bg-[#374151]" />Occupied</div>
                   </div>
+                </div>
                 </div>
               </div>
             </div>
@@ -361,6 +457,7 @@ export default function MapPage() {
                           : "border-transparent hover:scale-105"
                       } ${getStatusColor(plot.status)}`}
                       title={`Spot ${plot.plotNumber} - ${plot.status}`}
+                      onMouseDown={() => setSelectedPublishedSpotId(null)}
                     >
                       {plot.plotNumber}
                     </button>

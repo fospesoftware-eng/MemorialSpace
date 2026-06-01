@@ -3871,9 +3871,17 @@ function InteractiveMapPreview({
   };
 
   return (
+    <div className="h-[calc(100vh-7rem)] w-full overflow-auto rounded border border-[#d8d4c8] bg-[#e8e4d8] p-4">
     <div
       className="relative overflow-hidden rounded-sm bg-[#f7f5ee] text-[#1d2a22] shadow-2xl shadow-black/25 ring-1 ring-black/10"
-      style={{ width: doc.imgWidth, height: doc.imgHeight }}
+      style={{
+        width: doc.imgWidth,
+        height: doc.imgHeight,
+        maxWidth: "min(100%, calc((100vh - 9rem) * 0.72))",
+        maxHeight: "calc(100vh - 9rem)",
+        aspectRatio: `${doc.imgWidth} / ${doc.imgHeight}`,
+        margin: "0 auto",
+      }}
       data-testid="interactive-map-preview"
       onPointerDown={onPreviewPointerDown}
       onPointerMove={onPreviewPointerMove}
@@ -3981,7 +3989,7 @@ function InteractiveMapPreview({
         </div>
       </div>
 
-      <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
+      <div className="absolute left-1/2 top-4 z-40 flex -translate-x-1/2 items-center gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(2.5, z + 0.1))} title="Zoom in">
           <ZoomIn className="h-3.5 w-3.5" />
         </Button>
@@ -3997,6 +4005,20 @@ function InteractiveMapPreview({
         >
           <Hand className="h-3.5 w-3.5" />
         </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => {
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+            setPanMode(false);
+          }}
+          title="Fit map"
+        >
+          <Maximize className="h-3.5 w-3.5" />
+        </Button>
+        <span className="px-2 text-[10px] font-semibold text-[#576657]">{Math.round(zoom * 100)}%</span>
       </div>
 
       <div className="absolute bottom-16 right-7 z-20 w-36 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-2 text-[9px] shadow">
@@ -4041,6 +4063,7 @@ function InteractiveMapPreview({
           {selectedSpot.notes && <p className="mt-2 text-xs text-[#576657]">{selectedSpot.notes}</p>}
         </div>
       )}
+    </div>
     </div>
   );
 }
