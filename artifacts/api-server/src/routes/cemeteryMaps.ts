@@ -75,7 +75,11 @@ function buildPayload(body: unknown, cemetery: { id: number; name: string; slug:
 }
 
 function requestedCemeteryId(req: { query: Record<string, unknown> }): number | null {
-  return asPositiveId(req.query.cemeteryId ?? req.query.organizationId ?? req.query.orgId);
+  return (
+    asPositiveId(req.query.cemeteryId) ??
+    asPositiveId(req.query.organizationId) ??
+    asPositiveId(req.query.orgId)
+  );
 }
 
 function projectIdFromBody(body: unknown): string {
