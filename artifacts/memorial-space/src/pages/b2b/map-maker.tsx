@@ -1578,51 +1578,121 @@ function MapMakerEditor() {
 <head>
   <title>${escapeHtml(doc.name)} PDF</title>
   <style>
-    @page { size: landscape; margin: 0.35in; }
+    @page { size: 11in 11in; margin: 0.35in; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #f8f5ea; color: #1d2a22; font-family: Arial, sans-serif; }
-    .sheet { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; }
-    header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #2a3d31; padding-bottom: 8px; }
-    h1 { margin: 0; font-size: 20px; letter-spacing: 0.02em; }
-    .sub { margin-top: 3px; font-size: 10px; color: #536253; text-transform: uppercase; letter-spacing: 0.18em; }
-    .scale { text-align: right; font-size: 10px; color: #536253; }
-    .map-wrap { border: 1px solid #2a3d31; background: #fffdf6; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-    svg { width: 100%; height: 100%; max-height: 6.8in; }
-    footer { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid #2a3d31; padding-top: 8px; font-size: 9px; color: #536253; }
-    .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; max-width: 65%; }
-    .legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-    .legend i { width: 8px; height: 8px; display: inline-block; border: 1px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
-    .disclaimer { max-width: 34%; text-align: right; }
+    body { margin: 0; background: #f4f0e5; color: #1d2a22; font-family: "Times New Roman", Georgia, serif; }
+    .sheet {
+      min-height: calc(100vh - 2px);
+      border: 1px solid #2a3d31;
+      background: #fffdf6;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 10px;
+      padding: 12px;
+    }
+    .title-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 10px;
+      border-bottom: 1px solid #2a3d31;
+      padding-bottom: 8px;
+    }
+    .title-lg { margin: 0; font-size: 22px; letter-spacing: 0.02em; font-weight: 600; }
+    .title-sm { margin-top: 4px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #50604f; font-family: Arial, sans-serif; }
+    .meta { text-align: right; font-size: 10px; color: #50604f; font-family: Arial, sans-serif; line-height: 1.45; }
+    .map-grid {
+      display: grid;
+      grid-template-columns: 1fr 170px;
+      gap: 10px;
+      min-height: 0;
+    }
+    .map-wrap {
+      border: 1px solid #2a3d31;
+      background: #fffdf6;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .map-wrap svg { width: 100%; height: 100%; }
+    .side {
+      border: 1px solid #2a3d31;
+      background: #faf7ef;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: Arial, sans-serif;
+    }
+    .panel-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #50604f; font-weight: 600; }
+    .legend { display: grid; gap: 4px; }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #263426; }
+    .legend i { width: 9px; height: 9px; border: 1px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+    .scale {
+      margin-top: auto;
+      border-top: 1px solid #d5d0c3;
+      padding-top: 8px;
+      font-size: 9px;
+      color: #50604f;
+    }
+    .bar { width: 132px; max-width: 100%; height: 4px; background: #253524; margin-bottom: 4px; }
+    .ticks { display: flex; justify-content: space-between; width: 132px; max-width: 100%; }
+    .foot {
+      border-top: 1px solid #2a3d31;
+      padding-top: 7px;
+      font-size: 9px;
+      color: #50604f;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="sheet">
-    <header>
+    <header class="title-row">
       <div>
-        <h1>${escapeHtml(cemetery?.name ?? doc.name)}</h1>
-        <div class="sub">${escapeHtml(doc.name)} · Cemetery Overview · ${new Date().getFullYear()}</div>
+        <h1 class="title-lg">${escapeHtml(cemetery?.name ?? doc.name)}</h1>
+        <div class="title-sm">${escapeHtml(doc.name)} · Cemetery Overview · Spring ${new Date().getFullYear()}</div>
       </div>
-      <div class="scale">0&nbsp;&nbsp;20&nbsp;&nbsp;40 Feet<br/>Interactive map export</div>
+      <div class="meta">
+        Interactive Cemetery Grid Map<br/>
+        Exported ${new Date().toLocaleDateString()}<br/>
+        All dimensions in feet
+      </div>
     </header>
-    <main class="map-wrap">
-      <svg viewBox="0 0 ${doc.imgWidth} ${doc.imgHeight}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="#fffdf6" />
-        <defs>
-          <pattern id="gridPdf" width="28" height="28" patternUnits="userSpaceOnUse">
-            <path d="M 28 0 L 0 0 0 28" fill="none" stroke="rgba(74,86,70,0.12)" stroke-width="1" />
-          </pattern>
-        </defs>
-        <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="url(#gridPdf)" />
-        ${plotsSvg}
-        ${spotsSvg}
-      </svg>
+    <main class="map-grid">
+      <section class="map-wrap">
+        <svg viewBox="0 0 ${doc.imgWidth} ${doc.imgHeight}" xmlns="http://www.w3.org/2000/svg">
+          <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="#fffdf6" />
+          <defs>
+            <pattern id="gridPdf" width="28" height="28" patternUnits="userSpaceOnUse">
+              <path d="M 28 0 L 0 0 0 28" fill="none" stroke="rgba(74,86,70,0.14)" stroke-width="1" />
+            </pattern>
+          </defs>
+          <rect width="${doc.imgWidth}" height="${doc.imgHeight}" fill="url(#gridPdf)" />
+          ${plotsSvg}
+          ${spotsSvg}
+        </svg>
+      </section>
+      <aside class="side">
+        <div class="panel-title">Legend</div>
+        <div class="legend">${legend}</div>
+        <div class="scale">
+          <div class="panel-title">Scale</div>
+          <div class="bar"></div>
+          <div class="ticks"><span>0</span><span>10</span><span>20</span><span>40 ft</span></div>
+        </div>
+      </aside>
     </main>
-    <footer>
-      <div class="legend">${legend}</div>
-      <div class="disclaimer">Locations are generated from imported cemetery data and should be verified by cemetery staff before public use.</div>
+    <footer class="foot">
+      <div>Reference style: Cemetery grid map export</div>
+      <div>Locations are generated from imported cemetery data and should be verified before public release.</div>
     </footer>
   </div>
-  <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
+  <script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>
 </body>
 </html>`);
     win.document.close();
@@ -3994,6 +4064,11 @@ function WorkflowPanel({
           <p className="text-[11px] text-muted-foreground">
             Public map exposes name, dates, headstone image, and burial location. Admin map keeps GPR coordinates, source CSV, confidence, and review data.
           </p>
+          <div className="rounded border border-primary/20 bg-primary/5 p-2">
+            <p className="text-[11px] text-primary">
+              Workflow: Save Draft keeps work private. Publish Live Map makes it permanent and syncs Burial Spots + Map View.
+            </p>
+          </div>
           <Button size="sm" className="h-8 w-full gap-1.5" onClick={onPublish}>
             <Send className="h-3.5 w-3.5" />
             Publish map
