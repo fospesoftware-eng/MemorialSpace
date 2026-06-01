@@ -77,9 +77,8 @@ function asPositiveId(value: unknown): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function mapUrls(slug: string, projectId?: string) {
-  const projectSuffix = projectId ? `?project=${encodeURIComponent(projectId)}` : "";
-  const previewUrl = `/map-maker/preview/${encodeURIComponent(slug)}${projectSuffix}`;
+function mapUrls(slug: string) {
+  const previewUrl = `/map-maker/preview/${encodeURIComponent(slug)}`;
   return {
     previewUrl,
     permanentUrl: previewUrl,
@@ -286,6 +285,62 @@ async function syncPublishedSpotsToGlobal(
   return out;
 }
 
+async function hydratePayloadWithGlobalSpots(organizationId: number, payload: MapPayload | null): Promise<MapPayload | null> {
+  if (!payload?.doc || typeof payload.doc !== "object") return payload;
+  const doc = payload.doc as Record<string, unknown>;
+  const spots = Array.isArray(doc.spots)
+    ? (doc.spots.filter((spot) => spot && typeof spot === "object") as Array<Record<string, unknown>>)
+    : [];
+  if (!spots.length) return payload;
+
+  const plots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
+  const burials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+  const byMapSpotId = new Map<string, (typeof plots)[number]>();
+  const byPlotNumber = new Map<string, (typeof plots)[number]>();
+  for (const plot of plots) {
+    byPlotNumber.set(plot.plotNumber.toLowerCase(), plot);
+    const meta = parseGeoJsonMeta(plot.geoJson);
+    const mapSpotId = asStringOrNull(meta.mapSpotId);
+    if (mapSpotId) byMapSpotId.set(mapSpotId, plot);
+  }
+
+  const hydratedSpots = spots.map((spot, index) => {
+    const spotId = asStringOrNull(spot.id);
+    const plotNumber = plotNumberFromSpot(spot, index);
+    const plot = (spotId ? byMapSpotId.get(spotId) : null) ?? byPlotNumber.get(plotNumber.toLowerCase());
+    if (!plot) return spot;
+    const burial = burials.find((item) => item.plotId === plot.id) ?? null;
+    const geo = parseGeoJsonMeta(plot.geoJson);
+    return {
+      ...spot,
+      id: asStringOrNull(geo.mapSpotId) ?? spot.id,
+      temporaryId: plot.plotNumber,
+      x: asFiniteNumber(geo.x) ?? spot.x,
+      y: asFiniteNumber(geo.y) ?? spot.y,
+      name: burial?.deceasedName ?? spot.name,
+      dob: burial?.deceasedDob ?? spot.dob,
+      dod: burial?.deceasedDod ?? spot.dod,
+      lat: plot.latitude ?? spot.lat,
+      lon: plot.longitude ?? spot.lon,
+      gprX: asFiniteNumber(geo.gprX) ?? spot.gprX,
+      gprY: asFiniteNumber(geo.gprY) ?? spot.gprY,
+      gprZ: asFiniteNumber(geo.gprZ) ?? spot.gprZ,
+      imagePath: burial?.photoUrl ?? asStringOrNull(geo.imagePath) ?? spot.imagePath,
+      imageFileName: asStringOrNull(geo.imageFileName) ?? spot.imageFileName,
+      notes: burial?.notes ?? plot.notes ?? spot.notes,
+      reviewStatus: "published",
+    };
+  });
+
+  return {
+    ...payload,
+    doc: {
+      ...doc,
+      spots: hydratedSpots,
+    },
+  };
+}
+
 authedRouter.get("/cemetery-maps", async (req, res) => {
   const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
@@ -303,14 +358,14 @@ authedRouter.get("/cemetery-maps", async (req, res) => {
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "default";
   const draft = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-draft-map.json`))
     ?? await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
-  const published = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
-    ?? await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  const published = await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  const hydratedPublished = await hydratePayloadWithGlobalSpots(org.id, published);
   res.json({
     organizationId: org.id,
     slug: org.slug,
     draft,
-    published,
-    ...mapUrls(org.slug, projectId),
+    published: hydratedPublished,
+    ...mapUrls(org.slug),
   });
 });
 
@@ -334,7 +389,7 @@ authedRouter.put("/cemetery-maps", async (req, res) => {
   const payload = buildPayload(req.body, cemetery, false);
   await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
-  res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug, projectId), publicBase: folder.publicBase });
+  res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug), publicBase: folder.publicBase });
 });
 
 authedRouter.post("/cemetery-maps/publish", async (req, res) => {
@@ -357,7 +412,6 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
   const payload = buildPayload(req.body, cemetery, true);
   const globalSpots = await syncPublishedSpotsToGlobal(org.id, projectId, extractDocSpots(req.body));
   await writeFile(path.join(folder.absolute, `${projectId}-draft-map.json`), JSON.stringify(payload, null, 2), "utf8");
-  await writeFile(path.join(folder.absolute, `${projectId}-published-map.json`), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
   await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(payload, null, 2), "utf8");
   res.json({
@@ -366,7 +420,7 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
     slug: org.slug,
     projectId,
     syncedSpots: globalSpots.length,
-    ...mapUrls(org.slug, projectId),
+    ...mapUrls(org.slug),
     publicBase: folder.publicBase,
   });
 });
@@ -383,15 +437,16 @@ authedRouter.get("/cemetery-maps/published", async (req, res) => {
     return;
   }
   const folder = mapFolder(org.id);
-  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "default";
-  const published = await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
-    ?? await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+  const published = await hydratePayloadWithGlobalSpots(
+    org.id,
+    await readJson<MapPayload>(path.join(folder.absolute, "published-map.json")),
+  );
   res.json({
     organizationId: org.id,
     slug: org.slug,
-    projectId,
+    projectId: "live",
     published,
-    ...mapUrls(org.slug, projectId),
+    ...mapUrls(org.slug),
   });
 });
 
@@ -440,22 +495,18 @@ publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
   }
 
   const folder = mapFolder(org.id);
-  const projectId = typeof req.query.project === "string" ? req.query.project.replace(/[^a-zA-Z0-9_-]+/g, "-") : "";
-  const published = projectId
-    ? await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-published-map.json`))
-    : await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
-  const projectDraft = projectId
-    ? await readJson<MapPayload>(path.join(folder.absolute, `${projectId}-draft-map.json`))
-    : null;
-  const draft = published?.doc ? published : projectDraft?.doc ? projectDraft : await readJson<MapPayload>(path.join(folder.absolute, "draft-map.json"));
-  if (!draft?.doc) {
-    res.status(404).json({ error: "Cemetery map not found. Save or publish the map first." });
+  const published = await hydratePayloadWithGlobalSpots(
+    org.id,
+    await readJson<MapPayload>(path.join(folder.absolute, "published-map.json")),
+  );
+  if (!published?.doc) {
+    res.status(404).json({ error: "Cemetery map not found. Publish the map first." });
     return;
   }
   res.json({
-    ...draft,
+    ...published,
     cemetery: { id: org.id, name: org.name, slug: org.slug },
-    ...mapUrls(org.slug, projectId || undefined),
+    ...mapUrls(org.slug),
   });
 });
 

@@ -122,6 +122,7 @@ type PublishedMapItem = {
   name: string;
   updatedAt: number;
   url: string;
+  syncedSpots?: number;
 };
 
 /** Default stroke thickness for new path/road plots, in SVG units. */
@@ -648,6 +649,7 @@ function MapMakerEditor() {
   const [draftRect, setDraftRect] = useState<Plot | null>(null);
   const [savedMaps, setSavedMaps] = useState<{ key: string; name: string; updatedAt: number }[]>([]);
   const [publishedMaps, setPublishedMaps] = useState<PublishedMapItem[]>([]);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -809,7 +811,7 @@ function MapMakerEditor() {
       return;
     }
     try {
-      const res = await fetch(`/api/cemetery-maps/published?cemeteryId=${cemeteryId}&projectId=${encodeURIComponent(doc.projectId ?? "default")}`, {
+      const res = await fetch(`/api/cemetery-maps/published?cemeteryId=${cemeteryId}`, {
         credentials: "include",
       });
       const body = await res.json().catch(() => ({}));
@@ -824,52 +826,16 @@ function MapMakerEditor() {
         url: String(body?.permanentUrl ?? ""),
       };
       setPublishedMaps([item]);
+      setPublishedUrl(item.url || null);
     } catch {
       setPublishedMaps([]);
     }
   }, [doc.projectId]);
 
-  const syncGlobalBurialSpots = useCallback(async (cemeteryId: number) => {
-    try {
-      const res = await fetch(`/api/cemetery-maps/global-spots?cemeteryId=${cemeteryId}`, { credentials: "include" });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || !Array.isArray(body?.spots)) return;
-      const rows = body.spots as Array<Record<string, unknown>>;
-      setDoc((prev) => {
-        const mapped = rows.map((row, idx): BurialSpot => ({
-          id: String(row.mapSpotId ?? `global-${idx + 1}`),
-          temporaryId: String(row.plotNumber ?? `MAP-${idx + 1}`),
-          x: typeof row.x === "number" ? row.x : (prev.spots[idx]?.x ?? 100 + idx * 8),
-          y: typeof row.y === "number" ? row.y : (prev.spots[idx]?.y ?? 100 + idx * 8),
-          name: String(row.deceasedName ?? ""),
-          dob: typeof row.deceasedDob === "string" ? row.deceasedDob : undefined,
-          dod: typeof row.deceasedDod === "string" ? row.deceasedDod : undefined,
-          spotTypeId: typeof row.type === "string" && row.type ? row.type : "civilian",
-          lat: typeof row.latitude === "number" ? row.latitude : undefined,
-          lon: typeof row.longitude === "number" ? row.longitude : undefined,
-          gprX: typeof row.gprX === "number" ? row.gprX : undefined,
-          gprY: typeof row.gprY === "number" ? row.gprY : undefined,
-          gprZ: typeof row.gprZ === "number" ? row.gprZ : undefined,
-          imagePath: typeof row.headstonePath === "string" ? row.headstonePath : undefined,
-          notes: typeof row.notes === "string" ? row.notes : undefined,
-          reviewStatus: prev.projectStatus === "published" ? "published" : undefined,
-        }));
-        return {
-          ...prev,
-          spots: mapped,
-          updatedAt: Date.now(),
-        };
-      });
-    } catch {
-      // keep current local state if sync fails
-    }
-  }, []);
-
   useEffect(() => {
     if (!doc.cemeteryId) return;
     void refreshPublishedMaps(doc.cemeteryId);
-    void syncGlobalBurialSpots(doc.cemeteryId);
-  }, [doc.cemeteryId, refreshPublishedMaps, syncGlobalBurialSpots]);
+  }, [doc.cemeteryId, refreshPublishedMaps]);
 
   // ----- AI Map Maker handoff -----
   // The /ai-map-maker page writes a "pending" MapDoc into localStorage just before
@@ -1535,9 +1501,8 @@ function MapMakerEditor() {
   const mapPreviewUrl = useMemo(() => {
     const cemetery = cemeteries.find((item) => item.id === doc.cemeteryId);
     if (!cemetery) return null;
-    const suffix = doc.projectId ? `?project=${encodeURIComponent(doc.projectId)}` : "";
-    return `/map-maker/preview/${encodeURIComponent(cemetery.slug)}${suffix}`;
-  }, [cemeteries, doc.cemeteryId, doc.projectId]);
+    return `/map-maker/preview/${encodeURIComponent(cemetery.slug)}`;
+  }, [cemeteries, doc.cemeteryId]);
 
   const openPreviewUrl = useCallback(async () => {
     if (!mapPreviewUrl) {
@@ -1545,30 +1510,13 @@ function MapMakerEditor() {
       setTimeout(() => setSaveError(null), 5000);
       return;
     }
-    if (!doc.cemeteryId) return;
-    const previewWindow = window.open("about:blank", "_blank");
-    const toSave = { ...doc, updatedAt: Date.now() };
-    try {
-      localStorage.setItem(`${STORAGE_KEY}:${(toSave.name || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled"}`, JSON.stringify(toSave));
-      const res = await fetch(`/api/cemetery-maps?cemeteryId=${toSave.cemeteryId}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(persistedPayload(toSave)),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
-      setDoc(toSave);
-      refreshSaved();
-      const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
-      if (previewWindow) previewWindow.location.href = withBasePath(url);
-      else window.open(withBasePath(url), "_blank", "noopener,noreferrer");
-    } catch (err) {
-      previewWindow?.close();
-      setSaveError(err instanceof Error ? err.message : "Could not open preview URL.");
+    if (!publishedUrl && doc.projectStatus !== "published") {
+      setSaveError("Publish the map first to create the permanent map URL.");
       setTimeout(() => setSaveError(null), 6000);
+      return;
     }
-  }, [doc, mapPreviewUrl, persistedPayload, refreshSaved]);
+    window.open(withBasePath(publishedUrl ?? mapPreviewUrl), "_blank", "noopener,noreferrer");
+  }, [doc.projectStatus, mapPreviewUrl, publishedUrl]);
 
   const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
@@ -2522,7 +2470,6 @@ function MapMakerEditor() {
       })),
       updatedAt: Date.now(),
     };
-    const previewWindow = window.open("about:blank", "_blank");
     try {
       const res = await fetch(`/api/cemetery-maps/publish?cemeteryId=${doc.cemeteryId}`, {
         method: "POST",
@@ -2534,16 +2481,19 @@ function MapMakerEditor() {
       if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
       setDoc(publishedDoc);
       setView("preview");
-      void refreshPublishedMaps(doc.cemeteryId);
-      addImportLog("Map published. Permanent preview URL is ready.");
       const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
-      if (url && previewWindow) {
-        previewWindow.location.href = withBasePath(url);
-      } else if (url) {
-        window.open(withBasePath(url), "_blank", "noopener,noreferrer");
-      }
+      setPublishedUrl(url ?? null);
+      setPublishedMaps([{
+        projectId: String(body?.projectId ?? publishedDoc.projectId ?? "live"),
+        name: publishedDoc.name || "Published map",
+        updatedAt: publishedDoc.updatedAt,
+        url: url ?? "",
+        syncedSpots: typeof body?.syncedSpots === "number" ? body.syncedSpots : publishedDoc.spots.length,
+      }]);
+      void refreshPublishedMaps(doc.cemeteryId);
+      addImportLog(`Map published. ${body?.syncedSpots ?? publishedDoc.spots.length} burial spots synced to the database.`);
+      flashStatus("Published live map and synced Burial Spots + Map View");
     } catch (err) {
-      previewWindow?.close();
       setSaveError(err instanceof Error ? err.message : "Could not publish map.");
       setTimeout(() => setSaveError(null), 7000);
     }
@@ -2895,6 +2845,7 @@ function MapMakerEditor() {
                 mergeReview={mergeReview}
                 importLog={importLog}
                 selectedSpot={selectedSpot}
+                publishedUrl={publishedUrl}
                 onCreateDraft={createDraftProject}
                 onImportDataset={() => datasetInputRef.current?.click()}
                 onUploadGpr={() => gprInputRef.current?.click()}
@@ -4119,6 +4070,7 @@ function WorkflowPanel({
   mergeReview,
   importLog,
   selectedSpot,
+  publishedUrl,
   onCreateDraft,
   onImportDataset,
   onUploadGpr,
@@ -4138,6 +4090,7 @@ function WorkflowPanel({
   mergeReview: MergeReview | null;
   importLog: string[];
   selectedSpot: BurialSpot | null;
+  publishedUrl: string | null;
   onCreateDraft: () => void;
   onImportDataset: () => void;
   onUploadGpr: () => void;
@@ -4247,6 +4200,14 @@ function WorkflowPanel({
               Workflow: Save Draft keeps work private. Publish Live Map makes it permanent and syncs Burial Spots + Map View.
             </p>
           </div>
+          {publishedUrl && (
+            <div className="rounded border border-border bg-muted/30 p-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Permanent map URL</div>
+              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                {withBasePath(publishedUrl)}
+              </div>
+            </div>
+          )}
           <Button size="sm" className="h-8 w-full gap-1.5" onClick={onPublish}>
             <Send className="h-3.5 w-3.5" />
             Publish map

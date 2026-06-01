@@ -1,7 +1,15 @@
-import { useState } from "react";
-import { useListPlots } from "@workspace/api-client-react";
+import { useEffect, useMemo, useState } from "react";
+import { useListOrganizations, useListPlots } from "@workspace/api-client-react";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -14,12 +22,28 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, MapPin } from "lucide-react";
 import { PlotDetailSheet } from "@/components/plot-detail-sheet";
 
-const ORG_ID = 1;
-
 export default function Plots() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
-  const { data: plots, isLoading } = useListPlots({ organizationId: ORG_ID });
+  const { data: orgs, isLoading: orgsLoading } = useListOrganizations();
+  const defaultOrgId = user?.organizationId ?? undefined;
+  const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>(defaultOrgId);
+  useEffect(() => {
+    if (!selectedOrgId && defaultOrgId) setSelectedOrgId(defaultOrgId);
+  }, [defaultOrgId, selectedOrgId]);
+  const selectedOrg = useMemo(
+    () => orgs?.find((org) => org.id === selectedOrgId),
+    [orgs, selectedOrgId],
+  );
+  const { data: plots, isLoading } = useListPlots(
+    { organizationId: selectedOrgId ?? 0 },
+    {
+      query: {
+        enabled: selectedOrgId != null,
+      },
+    },
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -45,7 +69,7 @@ export default function Plots() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Burial Spots</h1>
           <p className="text-muted-foreground mt-1">
@@ -53,10 +77,31 @@ export default function Plots() {
             pricing.
           </p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Burial Spot
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select
+            value={selectedOrgId?.toString() ?? ""}
+            onValueChange={(value) => {
+              setSelectedOrgId(Number(value));
+              setSelectedPlotId(null);
+            }}
+            disabled={orgsLoading}
+          >
+            <SelectTrigger className="w-full sm:w-64" data-testid="select-burial-spots-cemetery">
+              <SelectValue placeholder="Select cemetery" />
+            </SelectTrigger>
+            <SelectContent>
+              {orgs?.map((org) => (
+                <SelectItem key={org.id} value={String(org.id)}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button className="gap-2" disabled={!selectedOrgId}>
+            <Plus className="h-4 w-4" />
+            Add Burial Spot
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-4 bg-card p-4 border rounded-xl shadow-sm">
@@ -84,7 +129,13 @@ export default function Plots() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {!selectedOrgId ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  Select a cemetery to manage its burial spots.
+                </TableCell>
+              </TableRow>
+            ) : isLoading ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   Loading burial spots...
@@ -98,6 +149,7 @@ export default function Plots() {
                 >
                   <MapPin className="mx-auto h-6 w-6 mb-2 opacity-50" />
                   No burial spots found
+                  {selectedOrg ? ` for ${selectedOrg.name}` : ""}
                 </TableCell>
               </TableRow>
             ) : (
@@ -151,7 +203,7 @@ export default function Plots() {
 
       <PlotDetailSheet
         plotId={selectedPlotId}
-        organizationId={ORG_ID}
+        organizationId={selectedOrgId ?? null}
         onOpenChange={(open) => !open && setSelectedPlotId(null)}
       />
     </div>
