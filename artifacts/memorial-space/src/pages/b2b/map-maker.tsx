@@ -336,6 +336,20 @@ function pickNumber(row: CsvRow, names: string[]) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function hasUsableMapCoordinate(x: number | undefined, y: number | undefined) {
+  if (x === undefined || y === undefined) return false;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  // Field exports commonly use 0,0 for "coordinate missing". Treating that
+  // as a real point makes the cemetery bounds enormous and destroys scale.
+  return !(Math.abs(x) < 0.000001 && Math.abs(y) < 0.000001);
+}
+
+function usableCoordinateFromRow(row: CsvRow, xNames: string[], yNames: string[]) {
+  const x = pickNumber(row, xNames);
+  const y = pickNumber(row, yNames);
+  return hasUsableMapCoordinate(x, y) ? { x: x!, y: y! } : null;
+}
+
 function normalizeDateLike(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -370,10 +384,12 @@ function escapeHtml(value: unknown) {
 }
 
 function createCoordinateSystem(points: Array<{ x: number; y: number }>): CoordinateSystem {
-  const minX = Math.min(...points.map((point) => point.x));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxY = Math.max(...points.map((point) => point.y));
+  const usablePoints = points.filter((point) => hasUsableMapCoordinate(point.x, point.y));
+  const source = usablePoints.length > 0 ? usablePoints : points;
+  const minX = Math.min(...source.map((point) => point.x));
+  const maxX = Math.max(...source.map((point) => point.x));
+  const minY = Math.min(...source.map((point) => point.y));
+  const maxY = Math.max(...source.map((point) => point.y));
   const pad = 72;
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
@@ -386,7 +402,9 @@ function createCoordinateSystem(points: Array<{ x: number; y: number }>): Coordi
 function projectPoint(system: CoordinateSystem, x: number, y: number) {
   return {
     x: system.pad + (x - system.minX) * system.scale,
-    y: system.pad + (y - system.minY) * system.scale,
+    // Survey/NAD style northing increases upward on a map, while SVG Y
+    // increases downward. Flip Y so row 1/top grid cells match the source map.
+    y: system.pad + (system.maxY - y) * system.scale,
   };
 }
 
@@ -420,6 +438,11 @@ function fullNameFromRow(row: CsvRow) {
 }
 
 function burialRecordFromRow(row: CsvRow, index: number, sourceCsv: string): BurialCsvRecord {
+  const coordinate = usableCoordinateFromRow(
+    row,
+    ["x", "gpr x", "gpr_x", "map x", "longitude"],
+    ["y", "gpr y", "gpr_y", "map y", "latitude"],
+  );
   return {
     rowNumber: index + 2,
     name: fullNameFromRow(row),
@@ -427,8 +450,8 @@ function burialRecordFromRow(row: CsvRow, index: number, sourceCsv: string): Bur
     dod: normalizeDateLike(pick(row, ["dod", "date of death", "death date", "died"])),
     veteranStatus: pick(row, ["veteran", "veteran status", "veteranstatus", "military", "service"]),
     imagePath: pick(row, ["image", "image path", "image filename", "headstone image", "filename", "file name"]),
-    x: pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]),
-    y: pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]),
+    x: coordinate?.x,
+    y: coordinate?.y,
     z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
     lat: pickNumber(row, ["lat", "latitude"]),
     lon: pickNumber(row, ["lon", "lng", "long", "longitude"]),
@@ -478,7 +501,7 @@ function withBasePath(path: string) {
 
 function migrateDoc(raw: unknown): MapDoc {
   const d = (raw ?? {}) as LegacyDoc;
-  return {
+  const migrated: MapDoc = {
     name: safeStr(d.name, "Untitled Cemetery Map"),
     projectId: safeOptStr(d.projectId),
     cemeteryId: typeof d.cemeteryId === "number" ? d.cemeteryId : null,
@@ -612,6 +635,31 @@ function migrateDoc(raw: unknown): MapDoc {
     }),
     importSource: d.importSource,
     updatedAt: safeNum(d.updatedAt, Date.now()),
+  };
+  return repairImportedCoordinateScale(migrated);
+}
+
+function repairImportedCoordinateScale(doc: MapDoc): MapDoc {
+  const rawPoints = doc.spots
+    .filter((spot) => hasUsableMapCoordinate(spot.gprX, spot.gprY))
+    .map((spot) => ({ x: spot.gprX!, y: spot.gprY! }));
+  if (rawPoints.length < 5) return doc;
+  const systemLooksCorrupt =
+    !doc.coordinateSystem ||
+    Math.abs(doc.coordinateSystem.minX) < 0.000001 ||
+    Math.abs(doc.coordinateSystem.minY) < 0.000001;
+  if (!systemLooksCorrupt) return doc;
+  const coordinateSystem = createCoordinateSystem(rawPoints);
+  return {
+    ...doc,
+    imgWidth: coordinateSystem.width,
+    imgHeight: coordinateSystem.height,
+    coordinateSystem,
+    spots: doc.spots.map((spot) => {
+      if (!hasUsableMapCoordinate(spot.gprX, spot.gprY)) return spot;
+      const projected = projectPoint(coordinateSystem, spot.gprX!, spot.gprY!);
+      return { ...spot, x: projected.x, y: projected.y };
+    }),
   };
 }
 
@@ -1919,12 +1967,15 @@ function MapMakerEditor() {
         .map((row, index) => ({
           row,
           index,
-          x: pickNumber(row, ["x", "gpr x", "gpr_x", "easting", "map x", "longitude"]),
-          y: pickNumber(row, ["y", "gpr y", "gpr_y", "northing", "map y", "latitude"]),
+          ...usableCoordinateFromRow(
+            row,
+            ["x", "gpr x", "gpr_x", "easting", "map x", "longitude"],
+            ["y", "gpr y", "gpr_y", "northing", "map y", "latitude"],
+          ),
           z: pickNumber(row, ["z", "depth", "gpr z", "gpr_z"]),
           accuracy: pickNumber(row, ["accuracy", "confidence", "quality"]),
         }))
-        .filter((point): point is typeof point & { x: number; y: number } => point.x !== undefined && point.y !== undefined);
+        .filter((point): point is typeof point & { x: number; y: number } => hasUsableMapCoordinate(point.x, point.y));
 
       if (points.length === 0) {
         setSaveError("GPR CSV needs valid X and Y coordinate columns.");
@@ -2174,9 +2225,12 @@ function MapMakerEditor() {
           rows.forEach((row) => parseWktPolygon(pick(row, ["wkt", "geometry"])).forEach((point) => coordinateInputs.push(point)));
         } else {
           rows.forEach((row) => {
-            const x = pickNumber(row, ["x", "gpr x", "gpr_x", "map x", "longitude"]);
-            const y = pickNumber(row, ["y", "gpr y", "gpr_y", "map y", "latitude"]);
-            if (x !== undefined && y !== undefined) coordinateInputs.push({ x, y });
+            const coordinate = usableCoordinateFromRow(
+              row,
+              ["x", "gpr x", "gpr_x", "map x", "longitude"],
+              ["y", "gpr y", "gpr_y", "map y", "latitude"],
+            );
+            if (coordinate) coordinateInputs.push(coordinate);
           });
         }
       }
@@ -2205,9 +2259,13 @@ function MapMakerEditor() {
 
         if (lower.includes("gpr")) {
           rows.forEach((row) => {
-            const x = pickNumber(row, ["x", "gpr x", "gpr_x", "easting", "map x"]);
-            const y = pickNumber(row, ["y", "gpr y", "gpr_y", "northing", "map y"]);
-            if (x === undefined || y === undefined) return;
+            const coordinate = usableCoordinateFromRow(
+              row,
+              ["x", "gpr x", "gpr_x", "easting", "map x"],
+              ["y", "gpr y", "gpr_y", "northing", "map y"],
+            );
+            if (!coordinate) return;
+            const { x, y } = coordinate;
             gprCount++;
             const projected = projectPoint(coordinateSystem, x, y);
             importedSpots.push({
@@ -2240,9 +2298,9 @@ function MapMakerEditor() {
 
         if (lower.includes("cremation")) {
           rows.forEach((row) => {
-            const x = pickNumber(row, ["x"]);
-            const y = pickNumber(row, ["y"]);
-            if (x === undefined || y === undefined) return;
+            const coordinate = usableCoordinateFromRow(row, ["x"], ["y"]);
+            if (!coordinate) return;
+            const { x, y } = coordinate;
             cremationCount++;
             const projected = projectPoint(coordinateSystem, x, y);
             const name = fullNameFromRow(row);
@@ -2272,9 +2330,9 @@ function MapMakerEditor() {
 
         if (lower.includes("misc")) {
           rows.forEach((row) => {
-            const x = pickNumber(row, ["x"]);
-            const y = pickNumber(row, ["y"]);
-            if (x === undefined || y === undefined) return;
+            const coordinate = usableCoordinateFromRow(row, ["x"], ["y"]);
+            if (!coordinate) return;
+            const { x, y } = coordinate;
             miscCount++;
             const projected = projectPoint(coordinateSystem, x, y);
             const label = pick(row, ["comment", "name", "type"]) || `Misc ${miscCount}`;
