@@ -3828,16 +3828,16 @@ function PublicFullScreenMap({
   };
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#111812] text-[#1d2a22]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(105,143,118,0.22),transparent_32%),linear-gradient(135deg,#111812,#283126)]" />
+    <div className="fixed inset-0 overflow-hidden bg-[#121812] text-[#1d2a22]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(123,154,128,0.2),transparent_34%),linear-gradient(135deg,#111812,#283126)]" />
 
-      <header className="absolute left-4 right-4 top-4 z-50 flex items-center justify-between gap-3">
-        <div className="min-w-0 rounded border border-white/15 bg-[#fffdf6]/95 px-4 py-3 shadow-2xl backdrop-blur">
+      <header className="absolute inset-x-0 top-0 z-50 flex h-20 items-center justify-between gap-3 border-b border-white/10 bg-[#121812]/92 px-5 backdrop-blur">
+        <div className="min-w-0 text-[#fffdf6]">
           <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#576657]">Published live map</div>
           <h1 className="truncate text-xl font-semibold leading-tight">{cemeteryName}</h1>
-          <p className="text-xs text-[#576657]">{visibleSpots.length} of {doc.spots.length} burial spots visible</p>
+          <p className="text-xs text-[#b8c4b4]">{visibleSpots.length} of {doc.spots.length} burial spots visible</p>
         </div>
-        <Button asChild size="sm" variant="outline" className="gap-2 border-white/20 bg-[#fffdf6]/95 shadow-xl backdrop-blur">
+        <Button asChild size="sm" variant="outline" className="gap-2 border-white/20 bg-[#fffdf6] shadow-xl">
           <Link href="/map-maker">
             <ArrowLeft className="h-4 w-4" />
             Map Maker
@@ -3845,189 +3845,223 @@ function PublicFullScreenMap({
         </Button>
       </header>
 
-      <aside className="absolute left-4 top-32 z-40 w-[330px] rounded border border-white/15 bg-[#fffdf6]/95 p-3 shadow-2xl backdrop-blur">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Find a burial</div>
-          <Badge variant="secondary" className="rounded-sm">{Math.round(zoom * 100)}%</Badge>
-        </div>
-        <div className="grid gap-2">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search name, ID, date, notes"
-            className="h-10 bg-white text-sm"
-            data-testid="public-map-search"
-          />
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="h-10 bg-white text-sm">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {spotTypes.map((type) => (
-                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </aside>
-
-      <div
-        className={cn(
-          "absolute inset-0 cursor-default overflow-hidden px-4 py-4",
-          panMode && "cursor-grab",
-        )}
-        onPointerDown={onStagePointerDown}
-        onPointerMove={onStagePointerMove}
-        onPointerUp={onStagePointerUp}
-        onPointerCancel={onStagePointerUp}
-      >
-        <div
-          className="absolute left-4 right-4 top-4 bottom-4 overflow-hidden rounded-sm bg-[#f7f5ee] text-[#1d2a22] shadow-2xl shadow-black/40 ring-1 ring-white/20"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: "center center",
-            transition: panMode ? "none" : "transform 140ms ease-out",
-          }}
-        >
-          <div className="absolute left-6 top-24 z-20 hidden flex-col items-center gap-1 text-[#101813] md:flex">
-            <div className="text-xs font-semibold">N</div>
-            <div className="relative h-12 w-12">
-              <div className="absolute left-1/2 top-0 h-12 w-px -translate-x-1/2 bg-[#101813]" />
-              <div className="absolute left-0 top-1/2 h-px w-12 -translate-y-1/2 bg-[#101813]" />
-              <div className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
-              <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
+      <main className="absolute inset-x-0 bottom-0 top-20 grid min-h-0 gap-3 p-3 lg:grid-cols-[320px_minmax(0,1fr)_300px]">
+        <aside className="min-h-0 overflow-auto rounded border border-white/12 bg-[#fffdf6] p-4 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Find a burial</div>
+              <p className="mt-1 text-xs text-[#576657]">Search and filter the visible map records.</p>
             </div>
-            <div className="flex w-14 justify-between text-xs font-semibold"><span>W</span><span>E</span></div>
-            <div className="text-xs font-semibold">S</div>
+            <Badge variant="secondary" className="rounded-sm">{Math.round(zoom * 100)}%</Badge>
+          </div>
+          <div className="grid gap-3">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search name, ID, date, notes"
+              className="h-10 bg-white text-sm"
+              data-testid="public-map-search"
+            />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="h-10 bg-white text-sm">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {spotTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="absolute inset-x-[5%] bottom-[9%] top-[10%] border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]">
-            {MAP_GRID_COLUMNS.map((label, index) => (
-              <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-xs font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
-            ))}
-            {MAP_GRID_COLUMNS.map((label, index) => (
-              <div key={`bottom-${label}`} className="absolute bottom-0 translate-y-full text-center text-xs font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
-            ))}
-            {MAP_GRID_ROWS.map((label, index) => (
-              <div key={`left-${label}`} className="absolute right-full -translate-y-1/2 pr-2 text-xs font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
-            ))}
-            {MAP_GRID_ROWS.map((label, index) => (
-              <div key={`right-${label}`} className="absolute left-full -translate-y-1/2 pl-2 text-xs font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
-            ))}
-            {MAP_GRID_COLUMNS.slice(1).map((label, index) => (
-              <div key={`v-${label}`} className="absolute top-0 h-full w-px bg-[#f0b7b7]/80" style={{ left: `${(index + 1) * 25}%` }} />
-            ))}
-            {MAP_GRID_ROWS.slice(1).map((label, index) => (
-              <div key={`h-${label}`} className="absolute left-0 h-px w-full bg-[#f0b7b7]/80" style={{ top: `${(index + 1) * 20}%` }} />
-            ))}
+          <Separator className="my-4" />
 
-            {doc.spots.map((spot) => {
-              const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
-              const position = mapSpotPercent(spot, doc.imgWidth, doc.imgHeight);
-              const visible = visibleIds.has(spot.id);
-              const active = selectedId === spot.id;
-              const label = zoom >= 1.25 ? spot.name || spot.temporaryId || "Unknown" : spot.temporaryId || spot.name || "";
-              return (
+          <div className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Results</div>
+            <div className="max-h-[calc(100vh-320px)] space-y-1 overflow-auto pr-1">
+              {visibleSpots.slice(0, 80).map((spot) => (
                 <button
                   key={spot.id}
                   type="button"
-                  data-public-map-spot="true"
                   onClick={() => setSelectedId(spot.id)}
                   className={cn(
-                    "absolute -translate-x-1/2 -translate-y-1/2 border border-[#7b8794] bg-white px-1 py-0.5 text-center text-[7px] font-semibold leading-none shadow-sm transition hover:z-30 hover:scale-125",
-                    visible ? "opacity-100" : "pointer-events-none opacity-10 grayscale",
-                    active && "z-30 ring-2 ring-[#0f766e] ring-offset-1 ring-offset-white",
+                    "w-full rounded border px-3 py-2 text-left text-xs transition hover:bg-[#edf2ea]",
+                    selectedId === spot.id ? "border-[#0f766e] bg-[#e6f2ec]" : "border-[#d8d4c8] bg-white",
                   )}
-                  style={{ left: position.left, top: position.top, borderTopColor: meta.color, borderTopWidth: 3 }}
-                  title={`${spot.name || spot.temporaryId || "Burial spot"}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
                 >
-                  <span className="block max-w-[54px] truncate">{label}</span>
-                  {zoom >= 1.45 && (spot.dob || spot.dod) && (
-                    <span className="block max-w-[54px] truncate font-normal">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>
-                  )}
+                  <span className="block truncate font-semibold">{spot.name || spot.temporaryId || "Unknown burial"}</span>
+                  <span className="block truncate text-[#576657]">{spot.temporaryId || "No plot"} {spot.dob || spot.dod ? `· ${spot.dob ?? "?"}-${spot.dod ?? "?"}` : ""}</span>
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 rounded bg-[#f7f5ee]/85 px-4 py-2 text-center backdrop-blur">
-            <div className="text-lg font-semibold leading-none">{cemeteryName}</div>
-            <div className="mt-1 text-xs leading-tight text-[#576657]">
-              Cemetery Overview · {new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
+              ))}
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded border border-white/15 bg-[#fffdf6]/95 p-1.5 shadow-2xl backdrop-blur">
-        <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => setZoom((z) => Math.min(3, z + 0.12))} title="Zoom in">
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => setZoom((z) => Math.max(0.55, z - 0.12))} title="Zoom out">
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button type="button" size="icon" variant={panMode ? "default" : "ghost"} className="h-9 w-9" onClick={() => setPanMode((value) => !value)} title="Pan mode">
-          <Hand className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-9 w-9"
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-            setPanMode(false);
-          }}
-          title="Fit map"
-        >
-          <Maximize className="h-4 w-4" />
-        </Button>
-        <span className="px-3 text-xs font-semibold text-[#576657]">{Math.round(zoom * 100)}%</span>
-      </div>
-
-      <aside className="absolute bottom-5 right-5 z-50 w-[260px] rounded border border-white/15 bg-[#fffdf6]/95 p-3 shadow-2xl backdrop-blur">
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Legend</div>
-        <div className="grid max-h-36 gap-y-1 overflow-auto pr-1 text-xs">
-          {spotTypes.map((type) => (
-            <div key={type.id} className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 border border-white shadow-sm" style={{ backgroundColor: type.color }} />
-              <span className="truncate">{type.name}</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3">
-          <div className="h-1 w-28 bg-[#243225]" />
-          <div className="mt-1 flex w-32 justify-between text-[10px] text-[#576657]">
-            <span>0</span>
-            <span>20</span>
-            <span>40 ft</span>
-          </div>
-        </div>
-      </aside>
-
-      {selectedSpot && (
-        <aside className="absolute right-5 top-32 z-[60] w-[340px] rounded border border-white/15 bg-[#fffdf6]/95 p-4 shadow-2xl backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Burial details</div>
-              <h2 className="mt-1 text-xl font-semibold leading-tight">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</h2>
-            </div>
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSelectedId(null)} title="Close details">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <FieldMini label="Plot" value={selectedSpot.temporaryId} />
-            <FieldMini label="Category" value={(spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).name} />
-            <FieldMini label="DOB" value={selectedSpot.dob} />
-            <FieldMini label="DOD" value={selectedSpot.dod} />
-            <FieldMini label="Image" value={selectedSpot.imageFileName || fileBaseName(selectedSpot.imagePath ?? "")} />
-          </div>
-          {selectedSpot.notes && <p className="mt-4 text-sm leading-relaxed text-[#576657]">{selectedSpot.notes}</p>}
         </aside>
-      )}
+
+        <section className="relative min-h-0 overflow-hidden rounded border border-white/12 bg-[#ebe7da] shadow-2xl">
+          <div
+            className={cn("absolute inset-3 overflow-hidden rounded-sm bg-[#f7f5ee] shadow-inner", panMode && "cursor-grab")}
+            onPointerDown={onStagePointerDown}
+            onPointerMove={onStagePointerMove}
+            onPointerUp={onStagePointerUp}
+            onPointerCancel={onStagePointerUp}
+          >
+            <div
+              className="absolute inset-0 text-[#1d2a22]"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: "center center",
+                transition: panMode ? "none" : "transform 140ms ease-out",
+              }}
+            >
+              <div className="absolute left-6 top-10 z-20 hidden flex-col items-center gap-1 text-[#101813] md:flex">
+                <div className="text-xs font-semibold">N</div>
+                <div className="relative h-12 w-12">
+                  <div className="absolute left-1/2 top-0 h-12 w-px -translate-x-1/2 bg-[#101813]" />
+                  <div className="absolute left-0 top-1/2 h-px w-12 -translate-y-1/2 bg-[#101813]" />
+                  <div className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
+                  <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
+                </div>
+                <div className="flex w-14 justify-between text-xs font-semibold"><span>W</span><span>E</span></div>
+                <div className="text-xs font-semibold">S</div>
+              </div>
+
+              <div className="absolute inset-x-[6%] bottom-[10%] top-[9%] border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]">
+                {MAP_GRID_COLUMNS.map((label, index) => (
+                  <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-xs font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
+                ))}
+                {MAP_GRID_COLUMNS.map((label, index) => (
+                  <div key={`bottom-${label}`} className="absolute bottom-0 translate-y-full text-center text-xs font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
+                ))}
+                {MAP_GRID_ROWS.map((label, index) => (
+                  <div key={`left-${label}`} className="absolute right-full -translate-y-1/2 pr-2 text-xs font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+                ))}
+                {MAP_GRID_ROWS.map((label, index) => (
+                  <div key={`right-${label}`} className="absolute left-full -translate-y-1/2 pl-2 text-xs font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
+                ))}
+                {MAP_GRID_COLUMNS.slice(1).map((label, index) => (
+                  <div key={`v-${label}`} className="absolute top-0 h-full w-px bg-[#f0b7b7]/80" style={{ left: `${(index + 1) * 25}%` }} />
+                ))}
+                {MAP_GRID_ROWS.slice(1).map((label, index) => (
+                  <div key={`h-${label}`} className="absolute left-0 h-px w-full bg-[#f0b7b7]/80" style={{ top: `${(index + 1) * 20}%` }} />
+                ))}
+
+                {doc.spots.map((spot) => {
+                  const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
+                  const position = mapSpotPercent(spot, doc.imgWidth, doc.imgHeight);
+                  const visible = visibleIds.has(spot.id);
+                  const active = selectedId === spot.id;
+                  const label = zoom >= 1.22 ? spot.name || spot.temporaryId || "Unknown" : spot.temporaryId || spot.name || "";
+                  return (
+                    <button
+                      key={spot.id}
+                      type="button"
+                      data-public-map-spot="true"
+                      onClick={() => setSelectedId(spot.id)}
+                      className={cn(
+                        "absolute -translate-x-1/2 -translate-y-1/2 border border-[#7b8794] bg-white px-1 py-0.5 text-center text-[7px] font-semibold leading-none shadow-sm transition hover:z-30 hover:scale-125",
+                        visible ? "opacity-100" : "pointer-events-none opacity-10 grayscale",
+                        active && "z-30 ring-2 ring-[#0f766e] ring-offset-1 ring-offset-white",
+                      )}
+                      style={{ left: position.left, top: position.top, borderTopColor: meta.color, borderTopWidth: 3 }}
+                      title={`${spot.name || spot.temporaryId || "Burial spot"}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
+                    >
+                      <span className="block max-w-[54px] truncate">{label}</span>
+                      {zoom >= 1.45 && (spot.dob || spot.dod) && (
+                        <span className="block max-w-[54px] truncate font-normal">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 rounded bg-[#f7f5ee]/90 px-4 py-2 text-center shadow-sm">
+                <div className="text-base font-semibold leading-none">{cemeteryName}</div>
+                <div className="mt-1 text-xs leading-tight text-[#576657]">
+                  Cemetery Overview · {new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded border border-[#d8d4c8] bg-[#fffdf6] p-1.5 shadow-xl">
+            <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => setZoom((z) => Math.min(3, z + 0.12))} title="Zoom in">
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => setZoom((z) => Math.max(0.55, z - 0.12))} title="Zoom out">
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon" variant={panMode ? "default" : "ghost"} className="h-9 w-9" onClick={() => setPanMode((value) => !value)} title="Pan mode">
+              <Hand className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9"
+              onClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+                setPanMode(false);
+              }}
+              title="Fit map"
+            >
+              <Maximize className="h-4 w-4" />
+            </Button>
+            <span className="px-3 text-xs font-semibold text-[#576657]">{Math.round(zoom * 100)}%</span>
+          </div>
+        </section>
+
+        <aside className="min-h-0 overflow-auto rounded border border-white/12 bg-[#fffdf6] p-4 shadow-2xl">
+          {selectedSpot ? (
+            <div className="rounded border border-[#d8d4c8] bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Burial details</div>
+                  <h2 className="mt-1 text-lg font-semibold leading-tight">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</h2>
+                </div>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSelectedId(null)} title="Close details">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <FieldMini label="Plot" value={selectedSpot.temporaryId} />
+                <FieldMini label="Category" value={(spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).name} />
+                <FieldMini label="DOB" value={selectedSpot.dob} />
+                <FieldMini label="DOD" value={selectedSpot.dod} />
+                <FieldMini label="Image" value={selectedSpot.imageFileName || fileBaseName(selectedSpot.imagePath ?? "")} />
+              </div>
+              {selectedSpot.notes && <p className="mt-4 text-sm leading-relaxed text-[#576657]">{selectedSpot.notes}</p>}
+            </div>
+          ) : (
+            <div className="rounded border border-dashed border-[#d8d4c8] bg-white p-4 text-sm text-[#576657]">
+              Click a burial square or result to view details.
+            </div>
+          )}
+
+          <Separator className="my-4" />
+
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#576657]">Legend</div>
+            <div className="grid max-h-56 gap-y-1 overflow-auto pr-1 text-xs">
+              {spotTypes.map((type) => (
+                <div key={type.id} className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 border border-white shadow-sm" style={{ backgroundColor: type.color }} />
+                  <span className="truncate">{type.name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <div className="h-1 w-32 bg-[#243225]" />
+              <div className="mt-1 flex w-36 justify-between text-[10px] text-[#576657]">
+                <span>0</span>
+                <span>20</span>
+                <span>40 ft</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }
