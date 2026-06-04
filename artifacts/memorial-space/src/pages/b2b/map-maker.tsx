@@ -2936,66 +2936,17 @@ function MapMakerEditor() {
             <input ref={datasetInputRef} type="file" accept=".csv,text/csv" multiple onChange={onImportDatasetFiles} className="hidden" data-testid="dataset-input-mini" />
           </aside>
         ) : (
-        <aside className="w-60 shrink-0 border-r border-border bg-card flex flex-col">
+        <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-3 border-b border-border bg-muted/20">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Workflow</div>
-                  <div className="mt-0.5 text-xs font-medium">
-                    {doc.projectStatus === "published" ? "Published map" : "Draft map project"}
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Map Maker Workflow</div>
+                  <div className="mt-0.5 text-xs font-medium text-muted-foreground">
+                    Follow the steps below
                   </div>
                 </div>
-                <Badge variant={doc.projectStatus === "published" ? "default" : "outline"}>{doc.projectStatus}</Badge>
-              </div>
-
-              <div className="mb-2 rounded-md border border-primary/20 bg-primary/5 p-2">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-primary">Cemetery</span>
-                  <Link href="/organizations" className="text-[10px] font-medium text-primary hover:underline">
-                    Create new
-                  </Link>
-                </div>
-                <p className="text-[10px] leading-snug text-muted-foreground">
-                  Select the global cemetery before importing or publishing map data.
-                </p>
-              </div>
-
-              <Select
-                value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
-                onValueChange={(value) => void loadCemeteryMap(value === "none" ? null : Number(value))}
-              >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-map-cemetery">
-                  <SelectValue placeholder="Select cemetery" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select cemetery</SelectItem>
-                  {cemeteries.map((cemetery) => (
-                    <SelectItem key={cemetery.id} value={String(cemetery.id)}>
-                      {cemetery.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="mt-2 grid grid-cols-2 gap-1">
-                {WORKFLOW_TABS.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setWorkflowTab(item.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] transition-colors",
-                        workflowTab === item.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
+                <Badge variant={doc.projectStatus === "published" ? "default" : "outline"} className="shrink-0">{doc.projectStatus}</Badge>
               </div>
 
               <WorkflowPanel
@@ -3020,6 +2971,8 @@ function MapMakerEditor() {
                 onMarkAiProcessed={() => markSelectedSpot("AI Processed", "ai_processed")}
                 onMarkVerified={() => markSelectedSpot("Verified", "verified")}
                 onPublish={publishMap}
+                onSelectCemetery={(id) => void loadCemeteryMap(id)}
+                onTabChange={setWorkflowTab}
               />
 
               <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input" />
@@ -4558,6 +4511,8 @@ function WorkflowPanel({
   onMarkAiProcessed,
   onMarkVerified,
   onPublish,
+  onSelectCemetery,
+  onTabChange,
 }: {
   tab: WorkflowTab;
   doc: MapDoc;
@@ -4580,154 +4535,342 @@ function WorkflowPanel({
   onMarkAiProcessed: () => void;
   onMarkVerified: () => void;
   onPublish: () => void;
+  onSelectCemetery: (id: number | null) => void;
+  onTabChange: (tab: WorkflowTab) => void;
 }) {
-  const selectedCemetery = cemeteries.find((cemetery) => cemetery.id === doc.cemeteryId);
+  const selectedCemetery = cemeteries.find((c) => c.id === doc.cemeteryId);
+
+  const hasCemetery = Boolean(doc.cemeteryId);
+  const hasProject = Boolean(doc.projectId && doc.name !== DEFAULT_DOC.name);
+  const hasImport = doc.spots.length > 0 || doc.plots.length > 0;
+  const isPublished = doc.projectStatus === "published";
+
+  type StepId = "cemetery" | WorkflowTab;
+
+  const steps: Array<{ id: StepId; num: number; label: string; sublabel: string; done: boolean; locked: boolean }> = [
+    {
+      id: "cemetery",
+      num: 1,
+      label: "Select Cemetery",
+      sublabel: selectedCemetery ? selectedCemetery.name : "No cemetery selected",
+      done: hasCemetery,
+      locked: false,
+    },
+    {
+      id: "project",
+      num: 2,
+      label: "Add Project",
+      sublabel: hasProject ? doc.name : "Name & create your map project",
+      done: hasProject,
+      locked: !hasCemetery,
+    },
+    {
+      id: "import",
+      num: 3,
+      label: "Import CSVs",
+      sublabel: hasImport ? `${doc.spots.length} spots · ${doc.plots.length} plots` : "Upload cemetery data files",
+      done: hasImport,
+      locked: !hasCemetery || !hasProject,
+    },
+    {
+      id: "headstones",
+      num: 4,
+      label: "Headstone Sync",
+      sublabel: workflowStats.images > 0 ? `${workflowStats.images} images synced` : "Link headstone images",
+      done: workflowStats.images > 0,
+      locked: !hasCemetery,
+    },
+    {
+      id: "publish",
+      num: 5,
+      label: "Publish Map",
+      sublabel: isPublished ? "Live map published" : "Generate live map URL",
+      done: isPublished,
+      locked: !hasCemetery || !hasProject,
+    },
+  ];
+
+  const [cemeteryExpanded, setCemeteryExpanded] = useState(false);
+  const activeStepId: StepId = (!hasCemetery || cemeteryExpanded) ? "cemetery" : tab;
+
   return (
-    <div className="mt-3 rounded-md border border-border bg-background p-2">
-      {tab === "project" && (
-        <div className="space-y-2">
-          <WorkflowLine done={Boolean(doc.cemeteryId)} label={selectedCemetery ? selectedCemetery.name : "Select cemetery"} />
-          <WorkflowLine done={doc.projectStatus === "draft" || doc.projectStatus === "published"} label="Project starts as Draft" />
-          <div className="space-y-1">
-            <Label className="text-[11px]">Project name</Label>
-            <Input
-              value={doc.name === DEFAULT_DOC.name ? "" : doc.name}
-              onChange={(event) => onRenameProject(event.target.value)}
-              placeholder="Section A spring import"
-              className="h-8 text-xs"
-              data-testid="input-map-project-name"
-            />
-          </div>
-          <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
-            <Link href="/organizations">
-              <Plus className="h-3.5 w-3.5" />
-              Create cemetery
-            </Link>
-          </Button>
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onCreateDraft}>
-            <Plus className="h-3.5 w-3.5" />
-            Create map project
-          </Button>
-        </div>
-      )}
+    <div className="mt-2 space-y-1">
+      {/* Vertical stepper */}
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        {steps.map((step, idx) => {
+          const isActive = step.id === activeStepId;
+          const isLast = idx === steps.length - 1;
 
-      {tab === "import" && (
-        <div className="space-y-2">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Upload all cemetery CSV files in one action. The importer preserves the original coordinate scale, creates the editable map, then fits it into the workspace.
-          </p>
-          <div className="rounded border border-border bg-muted/30 p-2 text-[10px] text-muted-foreground">
-            Supported: GPR, Burial, Cremations, Misc Points, Coping Area, and coordinate CSV layers.
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 w-full gap-1.5"
-            onClick={onImportDataset}
-            disabled={isImportingCsvs || !doc.cemeteryId}
-            data-testid="button-import-all-csvs"
-          >
-            {isImportingCsvs ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
-            {isImportingCsvs ? "Importing CSV files..." : "Import all CSV files"}
-          </Button>
-          {!doc.cemeteryId && <p className="text-[10px] text-amber-600">Select a cemetery before importing.</p>}
-          <MiniStat label="GPR spots" value={workflowStats.gpr} />
-          <MiniStat label="Burial matched" value={workflowStats.burial} />
-          <MiniStat label="Total spots" value={doc.spots.length} />
-        </div>
-      )}
+          return (
+            <div key={step.id}>
+              <button
+                type="button"
+                disabled={step.locked}
+                onClick={() => {
+                  if (step.locked) return;
+                  if (step.id === "cemetery") {
+                    setCemeteryExpanded((v) => !v);
+                  } else {
+                    setCemeteryExpanded(false);
+                    onTabChange(step.id as WorkflowTab);
+                  }
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                  isActive && "bg-primary/8 border-l-2 border-primary",
+                  !isActive && !step.locked && "hover:bg-muted/60",
+                  step.locked && "opacity-40 cursor-not-allowed",
+                )}
+              >
+                <div className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors",
+                  step.done ? "bg-emerald-600 text-white" : isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                )}>
+                  {step.done ? <CheckCircle2 className="h-3.5 w-3.5" /> : step.num}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={cn("text-[12px] font-semibold leading-tight", isActive ? "text-primary" : "text-foreground")}>
+                    {step.label}
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{step.sublabel}</div>
+                </div>
+                {step.done && !isActive && (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                )}
+              </button>
 
-      {tab === "headstones" && (
-        <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            Bulk images live in Headstone Import. This workspace syncs the selected cemetery folder by filename; missing or unmatched images remain review work.
-          </p>
-          {doc.cemeteryId && (
-            <div className="rounded border border-border bg-muted/30 p-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Headstone folder</div>
-              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                /uploads/cemeteries/{doc.cemeteryId}/headstones
-              </div>
+              {/* Connector line */}
+              {!isLast && (
+                <div className="ml-6 w-px bg-border" style={{ height: 6, marginLeft: 21 }} />
+              )}
+
+              {/* Expanded step content */}
+              {isActive && (
+                <div className="border-t border-border bg-muted/20 px-3 py-3 space-y-2.5">
+
+                  {/* Step 1: Cemetery */}
+                  {step.id === "cemetery" && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Choose the cemetery this map belongs to. One cemetery can have multiple saved map projects.
+                      </p>
+                      <Select
+                        value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
+                        onValueChange={(v) => { onSelectCemetery(v === "none" ? null : Number(v)); if (v !== "none") setCemeteryExpanded(false); }}
+                      >
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-map-cemetery">
+                          <SelectValue placeholder="Select cemetery…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Select cemetery…</SelectItem>
+                          {cemeteries.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5 text-xs">
+                        <Link href="/organizations">
+                          <Plus className="h-3.5 w-3.5" />
+                          Create new cemetery
+                        </Link>
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Step 2: Project */}
+                  {step.id === "project" && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Give this map a name and create a draft. A cemetery can have multiple map projects (e.g. different sections or seasonal imports).
+                      </p>
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Project name</Label>
+                        <Input
+                          value={doc.name === DEFAULT_DOC.name ? "" : doc.name}
+                          onChange={(e) => onRenameProject(e.target.value)}
+                          placeholder="e.g. Section A — Spring 2025"
+                          className="h-8 text-xs"
+                          data-testid="input-map-project-name"
+                        />
+                      </div>
+                      <Button size="sm" className="h-8 w-full gap-1.5 text-xs" onClick={onCreateDraft} disabled={!hasCemetery}>
+                        <Plus className="h-3.5 w-3.5" />
+                        Create map project
+                      </Button>
+                      {hasProject && (
+                        <p className="text-[10px] text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Project created — proceed to Import CSVs
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Step 3: Import CSVs */}
+                  {step.id === "import" && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Select all your cemetery CSV files at once. Supports GPR, Burial, Cremations, Misc Points, and Coping Area layers.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 w-full gap-1.5 text-xs"
+                        onClick={onImportDataset}
+                        disabled={isImportingCsvs || !hasCemetery}
+                        data-testid="button-import-all-csvs"
+                      >
+                        {isImportingCsvs
+                          ? <RotateCcw className="h-3.5 w-3.5 animate-spin" />
+                          : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                        {isImportingCsvs ? "Importing…" : "Import all CSV files"}
+                      </Button>
+                      <div className="grid grid-cols-3 gap-1">
+                        <MiniStat label="GPR spots" value={workflowStats.gpr} />
+                        <MiniStat label="Matched" value={workflowStats.burial} />
+                        <MiniStat label="Total" value={doc.spots.length} />
+                      </div>
+                      {mergeReview && (
+                        <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
+                          <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Merge review needed
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-[10px]">
+                            {mergeReview.exact.length > 0 && <span className="text-emerald-700">{mergeReview.exact.length} exact match</span>}
+                            {mergeReview.nearby.length > 0 && <span className="text-amber-700">{mergeReview.nearby.length} nearby</span>}
+                            {mergeReview.conflicts.length > 0 && <span className="text-red-600">{mergeReview.conflicts.length} conflict</span>}
+                            {mergeReview.newRecords.length > 0 && <span className="text-blue-600">{mergeReview.newRecords.length} new</span>}
+                          </div>
+                          {mergeReview.exact.length > 0 && (
+                            <MergeBucketList title="Exact matches" bucket="exact" items={mergeReview.exact} onToggle={onMergeToggle} />
+                          )}
+                          {mergeReview.nearby.length > 0 && (
+                            <MergeBucketList title="Nearby (review)" bucket="nearby" items={mergeReview.nearby} onToggle={onMergeToggle} />
+                          )}
+                          {mergeReview.conflicts.length > 0 && (
+                            <MergeBucketList title="Conflicts" bucket="conflicts" items={mergeReview.conflicts} onToggle={onMergeToggle} />
+                          )}
+                          {mergeReview.newRecords.length > 0 && (
+                            <MergeBucketList title="New records" bucket="newRecords" items={mergeReview.newRecords} onToggle={onMergeToggle} />
+                          )}
+                          <Button size="sm" className="h-7 w-full gap-1.5 text-[11px]" onClick={onApplyMerge}>
+                            <GitMerge className="h-3.5 w-3.5" /> Apply merge
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Step 4: Headstone Sync */}
+                  {step.id === "headstones" && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Sync headstone images from the import library. Matches spots by filename and attaches AI-extracted name, dates, and inscription.
+                      </p>
+                      {doc.cemeteryId && (
+                        <div className="rounded border border-border bg-muted/30 p-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Headstone folder</div>
+                          <div className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">
+                            /uploads/cemeteries/{doc.cemeteryId}/headstones
+                          </div>
+                        </div>
+                      )}
+                      <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5 text-xs">
+                        <Link href="/import-data/headstones">
+                          <ImagePlus className="h-3.5 w-3.5" />
+                          Open Headstone Import
+                        </Link>
+                      </Button>
+                      <Button size="sm" className="h-8 w-full gap-1.5 text-xs" onClick={onSyncHeadstones}>
+                        <GitMerge className="h-3.5 w-3.5" />
+                        Sync headstone library
+                      </Button>
+                      <div className="grid grid-cols-2 gap-1">
+                        <MiniStat label="Images linked" value={workflowStats.images} />
+                        <MiniStat label="AI processed" value={workflowStats.ai} />
+                      </div>
+                      {selectedSpot ? (
+                        <div className="grid grid-cols-2 gap-1">
+                          <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkAiProcessed}>Mark AI done</Button>
+                          <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkVerified}>Verify spot</Button>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">Select a spot on the canvas to mark it.</p>
+                      )}
+                      <Button size="sm" variant="outline" className="h-8 w-full gap-1.5 text-xs text-primary border-primary/40 hover:bg-primary/5" onClick={() => onTabChange("publish")}>
+                        Continue to Publish <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Step 5: Publish */}
+                  {step.id === "publish" && (
+                    <>
+                      <div className="grid grid-cols-2 gap-1">
+                        <MiniStat label="Needs review" value={workflowStats.needsReview} />
+                        <MiniStat label="Verified" value={workflowStats.verified} />
+                        <MiniStat label="Total spots" value={doc.spots.length} />
+                        <MiniStat label="Published" value={workflowStats.published} />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Publishing generates a permanent live map URL and syncs all burial spots to the cemetery database.
+                      </p>
+                      {publishedUrl ? (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Live map URL
+                          </div>
+                          <div className="break-all font-mono text-[10px] text-emerald-700">
+                            {withBasePath(publishedUrl)}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-full gap-1.5 text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                            onClick={() => window.open(withBasePath(publishedUrl), "_blank")}
+                          >
+                            <ExternalLink className="h-3 w-3" /> Open live map
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border border-primary/20 bg-primary/5 p-2">
+                          <p className="text-[11px] text-primary leading-snug">
+                            Save Draft keeps the map private. Publish Live makes it public and syncs burial records.
+                          </p>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 w-full gap-1.5 text-xs"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPublish(); }}
+                        disabled={isPublishing || !hasCemetery}
+                        data-testid="publish-live-map"
+                      >
+                        {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        {isPublishing ? "Publishing…" : isPublished ? "Re-publish map" : "Publish live map"}
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Activity log — shown on import/headstones steps */}
+                  {importLog.length > 0 && (step.id === "import" || step.id === "headstones") && (
+                    <div className="border-t border-border pt-2 mt-1">
+                      <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        <ListChecks className="h-3 w-3" /> Activity
+                      </div>
+                      <div className="space-y-0.5">
+                        {importLog.slice(0, 4).map((item) => (
+                          <div key={item} className="text-[10px] text-muted-foreground leading-snug">{item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-          <Button asChild size="sm" variant="outline" className="h-8 w-full gap-1.5">
-            <Link href="/import-data/headstones">
-              <ImagePlus className="h-3.5 w-3.5" />
-              Open Headstone Import
-            </Link>
-          </Button>
-          <Button size="sm" className="h-8 w-full gap-1.5" onClick={onSyncHeadstones}>
-            <GitMerge className="h-3.5 w-3.5" />
-            Sync headstone library
-          </Button>
-          <MiniStat label="Image attached" value={workflowStats.images} />
-          <MiniStat label="AI processed" value={workflowStats.ai} />
-          {selectedSpot ? (
-            <div className="grid grid-cols-2 gap-1">
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkAiProcessed}>AI done</Button>
-              <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={onMarkVerified}>Verify spot</Button>
-            </div>
-          ) : (
-            <p className="text-[10px] text-muted-foreground">Select a burial spot to mark AI processed or verified.</p>
-          )}
-        </div>
-      )}
-
-      {tab === "publish" && (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-1">
-            <MiniStat label="Needs review" value={workflowStats.needsReview} />
-            <MiniStat label="Verified" value={workflowStats.verified} />
-            <MiniStat label="Published" value={workflowStats.published} />
-            <MiniStat label="Total spots" value={doc.spots.length} />
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Public map exposes name, dates, headstone image, and burial location. Admin map keeps GPR coordinates, source CSV, confidence, and review data.
-          </p>
-          <div className="rounded border border-primary/20 bg-primary/5 p-2">
-            <p className="text-[11px] text-primary">
-              Workflow: Save Draft keeps work private. Publish Live Map makes it permanent and syncs Burial Spots + Map View.
-            </p>
-          </div>
-          {publishedUrl && (
-            <div className="rounded border border-border bg-muted/30 p-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Permanent map URL</div>
-              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                {withBasePath(publishedUrl)}
-              </div>
-            </div>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 w-full gap-1.5"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onPublish();
-            }}
-            disabled={isPublishing || !doc.cemeteryId}
-            data-testid="publish-live-map"
-          >
-            {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            {isPublishing ? "Publishing..." : "Publish map"}
-          </Button>
-        </div>
-      )}
-
-      {importLog.length > 0 && (
-        <div className="mt-3 border-t border-border pt-2">
-          <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            <ListChecks className="h-3 w-3" />
-            Activity
-          </div>
-          <div className="space-y-1">
-            {importLog.slice(0, 3).map((item) => (
-              <div key={item} className="text-[10px] text-muted-foreground">{item}</div>
-            ))}
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
