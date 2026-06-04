@@ -1956,6 +1956,24 @@ function MapMakerEditor() {
     setWorkflowTab("import");
   };
 
+  // Start a completely blank new map — keeps the current cemetery but does NOT
+  // call loadCemeteryMap (which would auto-fetch the existing draft from the API).
+  const createBlankMap = useCallback(() => {
+    const cId = doc.cemeteryId;
+    const cemetery = cemeteries.find((c) => c.id === cId);
+    setDoc({
+      ...DEFAULT_DOC,
+      cemeteryId: cId,
+      name: cemetery ? `${cemetery.name} Map Project` : DEFAULT_DOC.name,
+      updatedAt: Date.now(),
+    });
+    setSelection(null);
+    setMergeReview(null);
+    setPublishedUrl(null);
+    setImportLog([]);
+    setWorkflowTab("project");
+  }, [cemeteries, doc.cemeteryId]);
+
   const onUploadGprCsv = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -2879,7 +2897,7 @@ function MapMakerEditor() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Badge variant={doc.projectStatus === "published" ? "default" : "outline"} className="shrink-0 text-[10px]">{doc.projectStatus}</Badge>
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" title="New map" onClick={() => { setDoc(DEFAULT_DOC); setSelection(null); setWorkflowTab("project"); }}>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" title="New map" onClick={createBlankMap}>
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -3631,7 +3649,7 @@ function MapMakerEditor() {
               {selectedSpot ? "Burial Spot" : selectedPlot ? "Plot" : "Inspector"}
             </span>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[11px]" onClick={() => { setDoc(DEFAULT_DOC); setSelection(null); setWorkflowTab("project"); }} data-testid="new-map">
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[11px]" onClick={createBlankMap} data-testid="new-map">
                 <Plus className="h-3 w-3" /> New Map
               </Button>
               {selection && (
@@ -3751,15 +3769,8 @@ function MapMakerEditor() {
             <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs h-8" onClick={save} data-testid="save-map-panel">
               <Save className="h-3.5 w-3.5" /> Save Draft
             </Button>
-            <Button
-              size="sm"
-              onClick={publishMap}
-              disabled={isPublishing || !doc.cemeteryId}
-              data-testid="publish-live-map-panel"
-              className="flex-1 gap-1.5 text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              {isPublishing ? "Publishing…" : "Publish Live"}
+            <Button size="sm" variant="ghost" className="flex-1 gap-1.5 text-xs h-8" onClick={exportJson} data-testid="export-json-panel">
+              <Download className="h-3.5 w-3.5" /> Export
             </Button>
           </div>
         </aside>
