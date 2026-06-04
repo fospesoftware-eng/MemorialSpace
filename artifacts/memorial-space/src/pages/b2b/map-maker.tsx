@@ -665,6 +665,32 @@ function repairImportedCoordinateScale(doc: MapDoc): MapDoc {
   };
 }
 
+// Force-rebuild coordinate system from raw GPR values regardless of current state.
+// Used to fix scale on maps imported with the old coordinate formula.
+function forceRecalcCoordinateSystem(doc: MapDoc): MapDoc {
+  const rawPoints = doc.spots
+    .filter((spot) => hasUsableMapCoordinate(spot.gprX, spot.gprY))
+    .map((spot) => ({ x: spot.gprX!, y: spot.gprY! }));
+  if (rawPoints.length < 2) return doc;
+  const coordinateSystem = createCoordinateSystem(rawPoints);
+  return {
+    ...doc,
+    imgWidth: coordinateSystem.width,
+    imgHeight: coordinateSystem.height,
+    coordinateSystem,
+    spots: doc.spots.map((spot) => {
+      if (!hasUsableMapCoordinate(spot.gprX, spot.gprY)) return spot;
+      const projected = projectPoint(coordinateSystem, spot.gprX!, spot.gprY!);
+      return { ...spot, x: projected.x, y: projected.y };
+    }),
+    plots: doc.plots.map((plot) => {
+      if (!hasUsableMapCoordinate(plot.gprX as number | undefined, plot.gprY as number | undefined)) return plot;
+      const projected = projectPoint(coordinateSystem, (plot as unknown as { gprX: number }).gprX, (plot as unknown as { gprY: number }).gprY);
+      return { ...plot, x: projected.x, y: projected.y };
+    }),
+  };
+}
+
 export default function MapMaker() {
   const [location] = useLocation();
   const previewMatch = location.match(/^\/map-maker\/preview\/([^/?#]+)/);
@@ -1616,19 +1642,15 @@ function MapMakerEditor() {
     return `/map-maker/preview/${encodeURIComponent(cemetery.slug)}`;
   }, [cemeteries, doc.cemeteryId]);
 
-  const openPreviewUrl = useCallback(async () => {
-    if (!mapPreviewUrl) {
-      setSaveError("Select a cemetery before opening the permanent map URL.");
-      setTimeout(() => setSaveError(null), 5000);
+  const openPreviewUrl = useCallback(() => {
+    // If already published, open the live map in a new tab.
+    if (publishedUrl) {
+      window.open(withBasePath(publishedUrl), "_blank", "noopener,noreferrer");
       return;
     }
-    if (!publishedUrl && doc.projectStatus !== "published") {
-      setSaveError("Publish the map first to create the permanent map URL.");
-      setTimeout(() => setSaveError(null), 6000);
-      return;
-    }
-    window.open(withBasePath(publishedUrl ?? mapPreviewUrl), "_blank", "noopener,noreferrer");
-  }, [doc.projectStatus, mapPreviewUrl, publishedUrl]);
+    // Draft preview — switch to inline preview mode (no publish required).
+    setView((v) => v === "preview" ? "2d" : "preview");
+  }, [publishedUrl]);
 
   const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
@@ -1970,6 +1992,17 @@ function MapMakerEditor() {
     flashStatus(`Loaded: ${existingDraft.name}`);
     setWorkflowTab("import");
   }, [existingDraft, flashStatus]);
+
+  // Recalculate coordinate system from raw GPR values — fixes scale on old imports.
+  const recalcScale = useCallback(() => {
+    setDoc((d) => {
+      const repaired = forceRecalcCoordinateSystem(d);
+      if (repaired === d) return d;
+      return { ...repaired, updatedAt: Date.now() };
+    });
+    setFitRequest((v) => v + 1);
+    flashStatus("Recalculated map scale from GPR coordinates");
+  }, [flashStatus]);
 
   // Start a completely blank new map — keeps the current cemetery but does NOT
   // call loadCemeteryMap (which would auto-fetch the existing draft from the API).
@@ -2562,7 +2595,6 @@ function MapMakerEditor() {
     });
     setMergeReview(null);
     setWorkflowTab("headstones");
-    setView("preview");
     addImportLog(`Applied ${candidates.length} reviewed Burial.csv updates`);
   };
 
@@ -2661,7 +2693,6 @@ function MapMakerEditor() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
       setDoc(publishedDoc);
-      setView("preview");
       const url = typeof body?.permanentUrl === "string" ? body.permanentUrl : mapPreviewUrl;
       setPublishedUrl(url ?? null);
       setPublishedMaps([{
@@ -2675,6 +2706,8 @@ function MapMakerEditor() {
       const synced = body?.syncedSpots ?? publishedDoc.spots.length;
       const warning = typeof body?.syncWarning === "string" ? body.syncWarning : null;
       addImportLog(warning ? `Map published. ${warning}` : `Map published. ${synced} burial spots synced to the database.`);
+      setWorkflowTab("publish");
+      setFitRequest((v) => v + 1);
       if (warning) {
         setSaveError(warning);
         setTimeout(() => setSaveError(null), 9000);
@@ -2809,17 +2842,18 @@ function MapMakerEditor() {
           </button>
         </div>
 
-        {/* Preview Map — prominent standalone button */}
+        {/* Preview Map — works on draft and published maps */}
         <Button
           size="sm"
-          variant="outline"
+          variant={view === "preview" ? "default" : "outline"}
           onClick={openPreviewUrl}
           data-testid="view-preview"
-          className="h-8 gap-1.5 hidden sm:inline-flex border-primary/40 text-primary hover:bg-primary/5"
-          disabled={!doc.cemeteryId}
-          title={doc.cemeteryId ? "Open live map preview" : "Publish the map first to preview"}
+          className="h-8 gap-1.5 hidden sm:inline-flex"
+          disabled={!doc.cemeteryId || (doc.plots.length === 0 && doc.spots.length === 0)}
+          title={publishedUrl ? "Open published live map" : "Preview draft map (toggle)"}
         >
-          <Eye className="h-3.5 w-3.5" /> Preview Map
+          <Eye className="h-3.5 w-3.5" />
+          {view === "preview" ? "Exit Preview" : "Preview Map"}
         </Button>
 
         <Separator orientation="vertical" className="h-6 mx-1 hidden md:block" />
@@ -2945,6 +2979,7 @@ function MapMakerEditor() {
                 onTabChange={setWorkflowTab}
                 existingDraft={existingDraft}
                 onLoadExistingDraft={loadExistingDraft}
+                onRecalcScale={recalcScale}
               />
 
               <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input" />
@@ -4598,6 +4633,7 @@ function WorkflowPanel({
   onTabChange,
   existingDraft,
   onLoadExistingDraft,
+  onRecalcScale,
 }: {
   tab: WorkflowTab;
   doc: MapDoc;
@@ -4624,6 +4660,7 @@ function WorkflowPanel({
   onTabChange: (tab: WorkflowTab) => void;
   existingDraft: { name: string; spots: number; plots: number } | null;
   onLoadExistingDraft: () => void;
+  onRecalcScale: () => void;
 }) {
   const selectedCemetery = cemeteries.find((c) => c.id === doc.cemeteryId);
 
@@ -4832,6 +4869,11 @@ function WorkflowPanel({
                         <MiniStat label="Matched" value={workflowStats.burial} />
                         <MiniStat label="Total" value={doc.spots.length} />
                       </div>
+                      {doc.spots.length > 0 && (
+                        <Button type="button" size="sm" variant="outline" className="h-7 w-full gap-1.5 text-[11px]" onClick={onRecalcScale}>
+                          <RotateCcw className="h-3 w-3" /> Recalculate map scale
+                        </Button>
+                      )}
                       {mergeReview && (
                         <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
                           <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
