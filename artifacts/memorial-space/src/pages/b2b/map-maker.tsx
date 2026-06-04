@@ -711,6 +711,9 @@ function MapMakerEditor() {
   const [importLog, setImportLog] = useState<string[]>([]);
   const [isImportingCsvs, setIsImportingCsvs] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
+  // Existing draft found for the selected cemetery — stored but NOT auto-loaded.
+  // The user must explicitly click "Load existing draft" to bring it in.
+  const [existingDraft, setExistingDraft] = useState<{ name: string; spots: number; plots: number; payload: PersistedMapPayload } | null>(null);
 
   // Refs / mode trackers
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -917,6 +920,7 @@ function MapMakerEditor() {
     setWorkflowTab("project");
     setView("2d");
 
+    setExistingDraft(null);
     try {
       const res = await fetch(`/api/cemetery-maps?cemeteryId=${cemeteryId}`, { credentials: "include" });
       const body = await res.json().catch(() => ({}));
@@ -924,17 +928,13 @@ function MapMakerEditor() {
       const payload = body?.draft?.doc ? body.draft : body?.published?.doc ? body.published : null;
       if (payload?.doc) {
         const loaded = migrateDoc(payload.doc);
-        setDoc({
-          ...loaded,
-          cemeteryId,
-          name: loaded.name || (cemetery ? `${cemetery.name} Map Project` : "Imported Cemetery Map Project"),
-          updatedAt: loaded.updatedAt || Date.now(),
+        // Do NOT auto-load — store the summary so user can choose to load it explicitly
+        setExistingDraft({
+          name: loaded.name || (cemetery?.name ? `${cemetery.name} Map Project` : "Existing map"),
+          spots: loaded.spots.length,
+          plots: loaded.plots.length,
+          payload: { ...payload, doc: { ...loaded, cemeteryId } },
         });
-        setView(loaded.spots.length || loaded.plots.length ? "2d" : "preview");
-        setFitRequest((value) => value + 1);
-        flashStatus(`Loaded ${cemetery?.name ?? "cemetery"} map data`);
-      } else {
-        flashStatus(`Ready for ${cemetery?.name ?? "selected cemetery"} import`);
       }
       if (body?.published?.doc && typeof body.permanentUrl === "string") {
         setPublishedUrl(body.permanentUrl);
@@ -945,7 +945,7 @@ function MapMakerEditor() {
       setSaveError(err instanceof Error ? err.message : "Could not load cemetery map data.");
       setTimeout(() => setSaveError(null), 7000);
     }
-  }, [cemeteries, flashStatus, refreshPublishedMaps, refreshSaved]);
+  }, [cemeteries, refreshPublishedMaps, refreshSaved]);
 
   // ----- AI Map Maker handoff -----
   // The /ai-map-maker page writes a "pending" MapDoc into localStorage just before
@@ -1956,6 +1956,19 @@ function MapMakerEditor() {
     setWorkflowTab("import");
   };
 
+  // Explicitly load the existing draft the user chose (not auto-loaded).
+  const loadExistingDraft = useCallback(() => {
+    if (!existingDraft) return;
+    const loaded = existingDraft.payload.doc;
+    setDoc({ ...loaded, updatedAt: loaded.updatedAt || Date.now() });
+    setExistingDraft(null);
+    setSelection(null);
+    setView("2d");
+    setFitRequest((v) => v + 1);
+    flashStatus(`Loaded: ${existingDraft.name}`);
+    setWorkflowTab("import");
+  }, [existingDraft, flashStatus]);
+
   // Start a completely blank new map — keeps the current cemetery but does NOT
   // call loadCemeteryMap (which would auto-fetch the existing draft from the API).
   const createBlankMap = useCallback(() => {
@@ -1971,6 +1984,7 @@ function MapMakerEditor() {
     setMergeReview(null);
     setPublishedUrl(null);
     setImportLog([]);
+    setExistingDraft(null);
     setWorkflowTab("project");
   }, [cemeteries, doc.cemeteryId]);
 
@@ -2832,19 +2846,9 @@ function MapMakerEditor() {
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* Save Draft + Publish Live — clearly separated primary actions */}
-        <Button size="sm" variant="outline" onClick={save} data-testid="save-map" className="h-8 gap-1.5 hidden sm:inline-flex">
+        {/* Save Draft — single top-bar action. Publish is in Workflow Step 5 only. */}
+        <Button size="sm" variant="outline" onClick={save} data-testid="save-map" className="h-8 gap-1.5 hidden sm:inline-flex" disabled={!doc.cemeteryId}>
           <Save className="h-3.5 w-3.5" /> Save Draft
-        </Button>
-        <Button
-          size="sm"
-          onClick={publishMap}
-          disabled={isPublishing || !doc.cemeteryId}
-          data-testid="publish-live-map-top"
-          className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white hidden sm:inline-flex"
-        >
-          {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          {isPublishing ? "Publishing…" : "Publish Live"}
         </Button>
 
         <Separator orientation="vertical" className="h-6 mx-0.5" />
@@ -2927,6 +2931,8 @@ function MapMakerEditor() {
                 onPublish={publishMap}
                 onSelectCemetery={(id) => void loadCemeteryMap(id)}
                 onTabChange={setWorkflowTab}
+                existingDraft={existingDraft}
+                onLoadExistingDraft={loadExistingDraft}
               />
 
               <input ref={gprInputRef} type="file" accept=".csv,text/csv" onChange={onUploadGprCsv} className="hidden" data-testid="gpr-input" />
@@ -3081,54 +3087,58 @@ function MapMakerEditor() {
           onDragLeave={onCanvasDragLeave}
           onDrop={onCanvasDrop}
         >
-          {/* Empty state */}
-          {tool === "select" && !doc.image && doc.plots.length === 0 && doc.spots.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-6">
-              <div className="pointer-events-auto bg-card/90 backdrop-blur-sm border border-border rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-                {/* Header */}
-                <div className="bg-primary/8 border-b border-border px-6 py-5 text-center">
-                  <div className="mx-auto h-12 w-12 rounded-xl bg-primary/15 flex items-center justify-center mb-3">
-                    <Layers className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-base font-bold">Cemetery Map Maker</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Follow 5 simple steps to build your map</p>
+          {/* Full-screen start state: no cemetery selected yet */}
+          {!doc.cemeteryId && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm pointer-events-auto">
+              <div className="w-full max-w-md px-6 text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20">
+                  <Layers className="h-8 w-8 text-primary" />
                 </div>
-                {/* Steps */}
-                <div className="px-6 py-4 space-y-3">
+                <h2 className="text-xl font-bold mb-1">Cemetery Map Maker</h2>
+                <p className="text-sm text-muted-foreground mb-6">Select a cemetery from the panel on the left to begin building your map.</p>
+
+                <div className="rounded-xl border border-border bg-card p-4 text-left space-y-3 mb-6">
                   {[
-                    { num: 1, icon: Database, label: "Select a Cemetery", desc: "Choose from the left panel", done: Boolean(doc.cemeteryId) },
-                    { num: 2, icon: Plus, label: "Create a Project", desc: "Name your map and save a draft", done: Boolean(doc.projectId) },
-                    { num: 3, icon: FileSpreadsheet, label: "Import CSV Data", desc: "Upload GPR, burial and other files", done: false },
-                    { num: 4, icon: GitMerge, label: "Sync Headstones", desc: "Link headstone images to spots", done: false },
-                    { num: 5, icon: Send, label: "Publish Live", desc: "Generate a permanent map URL", done: false },
-                  ].map((step) => {
-                    const Icon = step.icon;
-                    return (
-                      <div key={step.num} className="flex items-center gap-3">
-                        <div className={cn("h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold", step.done ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground")}>
-                          {step.done ? <CheckCircle2 className="h-4 w-4" /> : step.num}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className={cn("text-[12px] font-semibold", step.done ? "text-emerald-700" : "text-foreground")}>{step.label}</div>
-                          <div className="text-[10px] text-muted-foreground">{step.desc}</div>
-                        </div>
+                    { num: 1, label: "Select Cemetery", desc: "Choose your cemetery from the left panel" },
+                    { num: 2, label: "Create or Load a Project", desc: "Start fresh or load a saved draft" },
+                    { num: 3, label: "Import CSV Data", desc: "Upload GPR, burial and plot files" },
+                    { num: 4, label: "Sync Headstones", desc: "Link headstone photos to burial spots" },
+                    { num: 5, label: "Publish Live", desc: "Generate a live public map URL" },
+                  ].map((s, i, arr) => (
+                    <div key={s.num} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="h-7 w-7 shrink-0 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-bold text-primary">{s.num}</div>
+                        {i < arr.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                       </div>
-                    );
-                  })}
+                      <div className="pb-3">
+                        <div className="text-[13px] font-semibold">{s.label}</div>
+                        <div className="text-[11px] text-muted-foreground">{s.desc}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                {/* CTA */}
-                <div className="px-6 pb-5 flex flex-col gap-2">
-                  {!doc.cemeteryId ? (
-                    <p className="text-[11px] text-center text-amber-600 font-medium">← Select a cemetery in the left panel to begin</p>
-                  ) : (
-                    <Button size="sm" className="w-full gap-1.5" onClick={createDraftProject} data-testid="empty-create-project">
-                      <Plus className="h-3.5 w-3.5" /> Create Map Project
-                    </Button>
-                  )}
-                  <p className="text-[10px] text-center text-muted-foreground">
-                    Tip: press <kbd className="px-1 py-0.5 bg-muted rounded">F</kbd> for fullscreen
-                  </p>
-                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  Open the <strong>Workflow panel</strong> on the left to get started.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty canvas hint: cemetery selected but no content yet */}
+          {doc.cemeteryId && !doc.image && doc.plots.length === 0 && doc.spots.length === 0 && tool === "select" && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="pointer-events-auto bg-card/90 backdrop-blur border border-dashed border-primary/30 rounded-xl px-8 py-6 text-center max-w-xs shadow-lg">
+                <FileImage className="h-8 w-8 text-primary/40 mx-auto mb-2" />
+                <p className="text-sm font-medium mb-1">Canvas is ready</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {!doc.projectId ? "Create a project in the workflow panel, then import CSV files." : "Import CSV files from Step 3 in the workflow panel."}
+                </p>
+                {!doc.projectId && (
+                  <Button size="sm" className="gap-1.5" onClick={createDraftProject} data-testid="empty-create-project">
+                    <Plus className="h-3.5 w-3.5" /> Create Map Project
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -4516,6 +4526,8 @@ function WorkflowPanel({
   onPublish,
   onSelectCemetery,
   onTabChange,
+  existingDraft,
+  onLoadExistingDraft,
 }: {
   tab: WorkflowTab;
   doc: MapDoc;
@@ -4540,6 +4552,8 @@ function WorkflowPanel({
   onPublish: () => void;
   onSelectCemetery: (id: number | null) => void;
   onTabChange: (tab: WorkflowTab) => void;
+  existingDraft: { name: string; spots: number; plots: number } | null;
+  onLoadExistingDraft: () => void;
 }) {
   const selectedCemetery = cemeteries.find((c) => c.id === doc.cemeteryId);
 
@@ -4683,8 +4697,24 @@ function WorkflowPanel({
                   {/* Step 2: Project */}
                   {step.id === "project" && (
                     <>
+                      {/* Existing draft notice — user must explicitly load it */}
+                      {existingDraft && (
+                        <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 space-y-1.5">
+                          <div className="text-[11px] font-semibold text-blue-800 flex items-center gap-1.5">
+                            <FolderOpen className="h-3.5 w-3.5" /> Existing draft found
+                          </div>
+                          <div className="text-[10px] text-blue-700 leading-snug">
+                            <span className="font-medium">{existingDraft.name}</span>
+                            {" — "}{existingDraft.spots} spots, {existingDraft.plots} plots
+                          </div>
+                          <Button size="sm" className="h-7 w-full gap-1.5 text-[11px] bg-blue-600 hover:bg-blue-700 text-white" onClick={onLoadExistingDraft}>
+                            <FolderOpen className="h-3 w-3" /> Load existing draft
+                          </Button>
+                          <p className="text-[10px] text-blue-600">Or create a new project below to start fresh.</p>
+                        </div>
+                      )}
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Give this map a name and create a draft. A cemetery can have multiple map projects (e.g. different sections or seasonal imports).
+                        Name your project and create a draft. One cemetery can have multiple saved projects.
                       </p>
                       <div className="space-y-1">
                         <Label className="text-[11px]">Project name</Label>
@@ -4698,11 +4728,11 @@ function WorkflowPanel({
                       </div>
                       <Button size="sm" className="h-8 w-full gap-1.5 text-xs" onClick={onCreateDraft} disabled={!hasCemetery}>
                         <Plus className="h-3.5 w-3.5" />
-                        Create map project
+                        Create new map project
                       </Button>
                       {hasProject && (
                         <p className="text-[10px] text-emerald-600 flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> Project created — proceed to Import CSVs
+                          <CheckCircle2 className="h-3 w-3" /> Project created — go to Import CSVs
                         </p>
                       )}
                     </>
