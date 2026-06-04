@@ -393,10 +393,12 @@ function createCoordinateSystem(points: Array<{ x: number; y: number }>): Coordi
   const pad = 80;
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  // Determine scale to fit within max viewport, preserving exact aspect ratio.
-  // Canvas is then sized to exactly contain the scaled content — no empty space.
-  const scale = Math.min((2400 - pad * 2) / spanX, (2000 - pad * 2) / spanY);
-  const width = Math.max(900, Math.ceil(spanX * scale + pad * 2));
+  // Scale so each burial spot (4 units wide) renders at ~28–32 px — readable text.
+  // Target ~4000 px along the longer axis; canvas grows to fit, no artificial cap.
+  // The canvas will be large and scrollable, matching large-format print output.
+  const longSide = Math.max(spanX, spanY);
+  const scale = Math.max(2, Math.min(24, (4000 - pad * 2) / longSide));
+  const width  = Math.max(900,  Math.ceil(spanX * scale + pad * 2));
   const height = Math.max(650, Math.ceil(spanY * scale + pad * 2));
   return { minX, minY, maxX, maxY, scale, pad, width, height };
 }
@@ -4382,6 +4384,20 @@ function InteractiveMapPreview({
     }
   };
 
+  // Compute proportional spot box size from coordinate scale so the preview
+  // matches the PDF: a 4-unit-wide × 8-unit-tall grave at the map scale.
+  const cs = doc.coordinateSystem;
+  const spotScale = cs ? cs.scale : 4;
+  const spotW = Math.max(22, Math.round(4 * spotScale));   // 4 ft × scale
+  const spotH = Math.max(11, Math.round(8 * spotScale));   // 8 ft × scale
+  const spotFontPx = Math.max(5, Math.min(9, Math.floor(spotW / 5.5)));
+
+  // Scale bar: measure how many feet 96 px represents, round to nice number.
+  const NICE_FEET = [5, 10, 20, 25, 50, 100, 200, 500];
+  const rawBarFt = 96 / spotScale;
+  const barFt = NICE_FEET.find(n => n >= rawBarFt) ?? Math.round(rawBarFt);
+  const barPx = Math.round(barFt * spotScale);
+
   return (
     <div className="h-[calc(100vh-7rem)] w-full overflow-auto rounded border border-[#d8d4c8] bg-[#e8e4d8] p-4">
     <div
@@ -4389,10 +4405,8 @@ function InteractiveMapPreview({
       style={{
         width: doc.imgWidth,
         height: doc.imgHeight,
-        maxWidth: "min(100%, calc((100vh - 9rem) * 0.72))",
-        maxHeight: "calc(100vh - 9rem)",
-        aspectRatio: `${doc.imgWidth} / ${doc.imgHeight}`,
         margin: "0 auto",
+        flexShrink: 0,
       }}
       data-testid="interactive-map-preview"
       onPointerDown={onPreviewPointerDown}
@@ -4446,25 +4460,36 @@ function InteractiveMapPreview({
             const active = selectedSpot?.id === spot.id;
             const label = spot.name || spot.temporaryId || "Unknown";
             const position = mapSpotPercent(spot, doc.imgWidth, doc.imgHeight);
+            const dob = spot.dob ? String(spot.dob).slice(-4) : null;
+            const dod = spot.dod ? String(spot.dod).slice(-4) : null;
             return (
               <button
                 key={spot.id}
                 type="button"
                 data-spot-button="true"
-                onClick={() => {
-                  setSelectedId(spot.id);
-                  onSelectSpot(spot.id);
-                }}
+                onClick={() => { setSelectedId(spot.id); onSelectSpot(spot.id); }}
                 className={cn(
-                  "group absolute -translate-x-1/2 -translate-y-1/2 border border-[#9ca3af] bg-white px-1 py-0.5 text-center text-[6px] font-semibold leading-none shadow-sm transition hover:z-20 hover:scale-125",
-                  visible ? "opacity-100" : "opacity-15 grayscale",
-                  active && "z-20 ring-2 ring-[#0f766e] ring-offset-1 ring-offset-white",
+                  "absolute overflow-hidden border border-[#b0b0a8] bg-white text-center leading-tight shadow-sm transition-[box-shadow,transform] hover:z-20 hover:shadow-md",
+                  visible ? "opacity-100" : "opacity-20 grayscale",
+                  active ? "z-20 shadow-lg ring-2 ring-[#0f766e]" : "",
                 )}
-                style={{ left: position.left, top: position.top, borderTopColor: meta.color, borderTopWidth: 3 }}
-                title={`${label}${spot.dob || spot.dod ? ` (${spot.dob ?? "?"}-${spot.dod ?? "?"})` : ""}`}
+                style={{
+                  left: position.left,
+                  top: position.top,
+                  transform: "translate(-50%, -50%)",
+                  width: spotW,
+                  height: spotH,
+                  borderTopColor: meta.color,
+                  borderTopWidth: 3,
+                  fontSize: spotFontPx,
+                  fontFamily: "ui-sans-serif,system-ui,sans-serif",
+                }}
+                title={`${label}${dob || dod ? ` · ${dob ?? "?"}–${dod ?? "?"}` : ""}`}
               >
-                <span className="block max-w-[42px] truncate">{label}</span>
-                {(spot.dob || spot.dod) && <span className="block max-w-[42px] truncate font-normal">{spot.dob ?? "?"}-{spot.dod ?? "?"}</span>}
+                <span className="block w-full truncate px-[1px] font-semibold">{label}</span>
+                {(dob || dod) && (
+                  <span className="block w-full truncate px-[1px] font-normal opacity-75">{dob ?? "?"}–{dod ?? "?"}</span>
+                )}
               </button>
             );
           })}
@@ -4546,11 +4571,11 @@ function InteractiveMapPreview({
           </div>
         </div>
         <div className="mt-2">
-          <div className="h-1 w-24 bg-[#243225]" />
-          <div className="mt-1 flex justify-between text-[10px] text-[#576657]">
+          <div className="h-1 bg-[#243225]" style={{ width: barPx }} />
+          <div className="mt-1 flex justify-between text-[10px] text-[#576657]" style={{ width: barPx }}>
             <span>0</span>
-            <span>20</span>
-            <span>40 ft</span>
+            <span>{Math.round(barFt / 2)}</span>
+            <span>{barFt} ft</span>
           </div>
         </div>
       </div>
