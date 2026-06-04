@@ -390,12 +390,14 @@ function createCoordinateSystem(points: Array<{ x: number; y: number }>): Coordi
   const maxX = Math.max(...source.map((point) => point.x));
   const minY = Math.min(...source.map((point) => point.y));
   const maxY = Math.max(...source.map((point) => point.y));
-  const pad = 72;
+  const pad = 80;
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const width = Math.max(900, Math.min(2200, spanX * 12 + pad * 2));
-  const height = Math.max(650, Math.min(1800, spanY * 12 + pad * 2));
-  const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+  // Determine scale to fit within max viewport, preserving exact aspect ratio.
+  // Canvas is then sized to exactly contain the scaled content — no empty space.
+  const scale = Math.min((2400 - pad * 2) / spanX, (2000 - pad * 2) / spanY);
+  const width = Math.max(900, Math.ceil(spanX * scale + pad * 2));
+  const height = Math.max(650, Math.ceil(spanY * scale + pad * 2));
   return { minX, minY, maxX, maxY, scale, pad, width, height };
 }
 
@@ -2797,7 +2799,7 @@ function MapMakerEditor() {
 
         <div className="flex-1" />
 
-        {/* View toggle */}
+        {/* View toggle — 2D / 3D only */}
         <div className="hidden sm:flex items-center rounded-md border border-border bg-muted/30 p-0.5 gap-0.5">
           <button type="button" onClick={() => setView("2d")} data-testid="view-2d" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors", view === "2d" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
             <Square className="h-3 w-3" /> 2D
@@ -2805,10 +2807,20 @@ function MapMakerEditor() {
           <button type="button" onClick={() => setView("3d")} data-testid="view-3d" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors", view === "3d" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
             <Box className="h-3 w-3" /> 3D
           </button>
-          <button type="button" onClick={openPreviewUrl} data-testid="view-preview" className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors">
-            <Eye className="h-3 w-3" /> Preview
-          </button>
         </div>
+
+        {/* Preview Map — prominent standalone button */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openPreviewUrl}
+          data-testid="view-preview"
+          className="h-8 gap-1.5 hidden sm:inline-flex border-primary/40 text-primary hover:bg-primary/5"
+          disabled={!doc.cemeteryId}
+          title={doc.cemeteryId ? "Open live map preview" : "Publish the map first to preview"}
+        >
+          <Eye className="h-3.5 w-3.5" /> Preview Map
+        </Button>
 
         <Separator orientation="vertical" className="h-6 mx-1 hidden md:block" />
 
@@ -3204,6 +3216,64 @@ function MapMakerEditor() {
 
                   {showImage && doc.image && (
                     <image href={doc.image} width={doc.imgWidth} height={doc.imgHeight} preserveAspectRatio="xMidYMid slice" />
+                  )}
+
+                  {/* Cemetery grid overlay — A-D columns, 1-5 rows, matching reference map layout */}
+                  {doc.coordinateSystem && (
+                    <g pointerEvents="none" opacity="0.55">
+                      {/* Vertical column dividers at 25% intervals */}
+                      {[1, 2, 3].map((i) => (
+                        <line key={`col-${i}`}
+                          x1={doc.imgWidth * i / 4} y1={0}
+                          x2={doc.imgWidth * i / 4} y2={doc.imgHeight}
+                          stroke="#94a3b8" strokeWidth="0.8" strokeDasharray="6 4"
+                        />
+                      ))}
+                      {/* Horizontal row dividers at 20% intervals */}
+                      {[1, 2, 3, 4].map((i) => (
+                        <line key={`row-${i}`}
+                          x1={0} y1={doc.imgHeight * i / 5}
+                          x2={doc.imgWidth} y2={doc.imgHeight * i / 5}
+                          stroke="#94a3b8" strokeWidth="0.8" strokeDasharray="6 4"
+                        />
+                      ))}
+                      {/* Column labels top */}
+                      {["A", "B", "C", "D"].map((label, i) => (
+                        <text key={`cl-${label}`}
+                          x={doc.imgWidth * (i + 0.5) / 4} y={14}
+                          textAnchor="middle" fontSize="13" fontWeight="700"
+                          fill="#64748b" fontFamily="ui-sans-serif,system-ui,sans-serif"
+                        >{label}</text>
+                      ))}
+                      {/* Column labels bottom */}
+                      {["A", "B", "C", "D"].map((label, i) => (
+                        <text key={`cb-${label}`}
+                          x={doc.imgWidth * (i + 0.5) / 4} y={doc.imgHeight - 4}
+                          textAnchor="middle" fontSize="13" fontWeight="700"
+                          fill="#64748b" fontFamily="ui-sans-serif,system-ui,sans-serif"
+                        >{label}</text>
+                      ))}
+                      {/* Row labels left */}
+                      {["1", "2", "3", "4", "5"].map((label, i) => (
+                        <text key={`rl-${label}`}
+                          x={14} y={doc.imgHeight * (i + 0.5) / 5}
+                          textAnchor="middle" dominantBaseline="middle" fontSize="13" fontWeight="700"
+                          fill="#64748b" fontFamily="ui-sans-serif,system-ui,sans-serif"
+                        >{label}</text>
+                      ))}
+                      {/* Row labels right */}
+                      {["1", "2", "3", "4", "5"].map((label, i) => (
+                        <text key={`rr-${label}`}
+                          x={doc.imgWidth - 14} y={doc.imgHeight * (i + 0.5) / 5}
+                          textAnchor="middle" dominantBaseline="middle" fontSize="13" fontWeight="700"
+                          fill="#64748b" fontFamily="ui-sans-serif,system-ui,sans-serif"
+                        >{label}</text>
+                      ))}
+                      {/* Border rect */}
+                      <rect x={1} y={1} width={doc.imgWidth - 2} height={doc.imgHeight - 2}
+                        fill="none" stroke="#94a3b8" strokeWidth="1.5"
+                      />
+                    </g>
                   )}
 
                   {/* 3D plot shadows */}
