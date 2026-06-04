@@ -1643,14 +1643,14 @@ function MapMakerEditor() {
   }, [cemeteries, doc.cemeteryId]);
 
   const openPreviewUrl = useCallback(() => {
-    // If already published, open the live map in a new tab.
-    if (publishedUrl) {
-      window.open(withBasePath(publishedUrl), "_blank", "noopener,noreferrer");
+    const url = publishedUrl ?? mapPreviewUrl;
+    if (!url) {
+      setSaveError("Select a cemetery first to open the map preview.");
+      setTimeout(() => setSaveError(null), 4000);
       return;
     }
-    // Draft preview — switch to inline preview mode (no publish required).
-    setView((v) => v === "preview" ? "2d" : "preview");
-  }, [publishedUrl]);
+    window.open(withBasePath(url), "_blank", "noopener,noreferrer");
+  }, [mapPreviewUrl, publishedUrl]);
 
   const save = async () => {
     const safeName = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "untitled";
@@ -2842,18 +2842,17 @@ function MapMakerEditor() {
           </button>
         </div>
 
-        {/* Preview Map — works on draft and published maps */}
+        {/* Preview Map — always opens in new window */}
         <Button
           size="sm"
-          variant={view === "preview" ? "default" : "outline"}
+          variant="outline"
           onClick={openPreviewUrl}
           data-testid="view-preview"
           className="h-8 gap-1.5 hidden sm:inline-flex"
-          disabled={!doc.cemeteryId || (doc.plots.length === 0 && doc.spots.length === 0)}
-          title={publishedUrl ? "Open published live map" : "Preview draft map (toggle)"}
+          disabled={!doc.cemeteryId}
+          title="Open map preview in new window"
         >
-          <Eye className="h-3.5 w-3.5" />
-          {view === "preview" ? "Exit Preview" : "Preview Map"}
+          <ExternalLink className="h-3.5 w-3.5" /> Preview Map
         </Button>
 
         <Separator orientation="vertical" className="h-6 mx-1 hidden md:block" />
