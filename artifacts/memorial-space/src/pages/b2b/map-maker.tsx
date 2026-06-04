@@ -4399,67 +4399,81 @@ function InteractiveMapPreview({
   const barPx = Math.round(barFt * spotScale);
 
   return (
-    <div className="h-[calc(100vh-7rem)] w-full overflow-auto rounded border border-[#d8d4c8] bg-[#e8e4d8] p-4">
-    <div
-      className="relative overflow-hidden rounded-sm bg-[#f7f5ee] text-[#1d2a22] shadow-2xl shadow-black/25 ring-1 ring-black/10"
-      style={{
-        width: doc.imgWidth,
-        height: doc.imgHeight,
-        margin: "0 auto",
-        flexShrink: 0,
-      }}
-      data-testid="interactive-map-preview"
-      onPointerDown={onPreviewPointerDown}
-      onPointerMove={onPreviewPointerMove}
-      onPointerUp={onPreviewPointerUp}
-      onPointerCancel={onPreviewPointerUp}
-    >
-      <div className="absolute left-6 top-8 z-30 flex flex-col items-center gap-1 text-[#101813]">
-        <div className="text-sm font-semibold">N</div>
-        <div className="relative h-16 w-16">
-          <div className="absolute left-1/2 top-0 h-16 w-px -translate-x-1/2 bg-[#101813]" />
-          <div className="absolute left-0 top-1/2 h-px w-16 -translate-y-1/2 bg-[#101813]" />
-          <div className="absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
-          <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
-        </div>
-        <div className="flex w-20 items-center justify-between text-sm font-semibold"><span>W</span><span>E</span></div>
-        <div className="text-sm font-semibold">S</div>
-      </div>
-
+    <div className="h-[calc(100vh-7rem)] w-full overflow-auto rounded border border-[#d8d4c8] bg-[#e8e4d8] p-6">
+      {/* Outer map container — native pixel size, scrollable */}
       <div
-        className="absolute inset-x-[9%] bottom-[7%] top-[4%]"
-        style={{
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: "center center",
-          transition: panMode ? "none" : "transform 120ms ease-out",
-        }}
+        className="relative rounded-sm bg-white shadow-2xl shadow-black/30 ring-1 ring-black/10"
+        style={{ width: doc.imgWidth, height: doc.imgHeight, margin: "0 auto", flexShrink: 0 }}
+        data-testid="interactive-map-preview"
+        onPointerDown={onPreviewPointerDown}
+        onPointerMove={onPreviewPointerMove}
+        onPointerUp={onPreviewPointerUp}
+        onPointerCancel={onPreviewPointerUp}
       >
-        <div className="absolute inset-0 border border-[#c9c9c3] bg-white shadow-[inset_0_0_0_10px_rgba(0,0,0,0.04)]" />
-        {MAP_GRID_COLUMNS.map((label, index) => (
-          <div key={`top-${label}`} className="absolute top-0 -translate-y-full text-center text-[10px] font-semibold" style={{ left: `${(index + 0.5) * 25}%`, width: "25%" }}>{label}</div>
-        ))}
-        {MAP_GRID_COLUMNS.map((label, index) => (
-          <div key={`bottom-${label}`} className="absolute bottom-0 translate-y-full text-center text-[10px] font-semibold" style={{ left: `${index * 25}%`, width: "25%" }}>{label}</div>
-        ))}
-        {MAP_GRID_ROWS.map((label, index) => (
-          <div key={`left-${label}`} className="absolute right-full -translate-y-1/2 pr-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
-        ))}
-        {MAP_GRID_ROWS.map((label, index) => (
-          <div key={`right-${label}`} className="absolute left-full -translate-y-1/2 pl-1 text-[11px] font-semibold" style={{ top: `${(index + 0.5) * 20}%` }}>{label}</div>
-        ))}
-        {MAP_GRID_COLUMNS.slice(1).map((label, index) => (
-          <div key={`v-${label}`} className="absolute top-0 h-full w-px bg-[#f0b7b7]/70" style={{ left: `${(index + 1) * 25}%` }} />
-        ))}
-        {MAP_GRID_ROWS.slice(1).map((label, index) => (
-          <div key={`h-${label}`} className="absolute left-0 h-px w-full bg-[#f0b7b7]/70" style={{ top: `${(index + 1) * 20}%` }} />
-        ))}
-        <div className="absolute inset-0 z-10">
+        {/* ── Single pan/zoom layer covering the FULL canvas ── */}
+        {/* Spots positioned at absolute pixel coords (spot.x, spot.y) = exact canvas position */}
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "center center",
+            transition: panMode ? "none" : "transform 120ms ease-out",
+          }}
+        >
+          {/* White background + border */}
+          <div className="absolute inset-0 border-2 border-[#6b7280] bg-white" />
+
+          {/* Background image */}
+          {doc.image && (
+            <img
+              src={doc.image}
+              alt=""
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+            />
+          )}
+
+          {/* Grid lines: A-D columns at 25%, 1-5 rows at 20% */}
+          {[1, 2, 3].map((i) => (
+            <div key={`vc-${i}`} className="absolute bottom-0 top-0 w-px bg-[#94a3b8]/35" style={{ left: `${i * 25}%` }} />
+          ))}
+          {[1, 2, 3, 4].map((i) => (
+            <div key={`hr-${i}`} className="absolute left-0 right-0 h-px bg-[#94a3b8]/35" style={{ top: `${i * 20}%` }} />
+          ))}
+
+          {/* Column labels A-D top + bottom */}
+          {MAP_GRID_COLUMNS.map((label, i) => (
+            <div key={`clt-${label}`} className="pointer-events-none absolute text-[11px] font-bold text-[#374151]" style={{ left: `${(i + 0.5) * 25}%`, top: 5, transform: "translateX(-50%)" }}>{label}</div>
+          ))}
+          {MAP_GRID_COLUMNS.map((label, i) => (
+            <div key={`clb-${label}`} className="pointer-events-none absolute text-[11px] font-bold text-[#374151]" style={{ left: `${(i + 0.5) * 25}%`, bottom: 34, transform: "translateX(-50%)" }}>{label}</div>
+          ))}
+          {/* Row labels 1-5 left + right */}
+          {MAP_GRID_ROWS.map((label, i) => (
+            <div key={`rll-${label}`} className="pointer-events-none absolute text-[11px] font-bold text-[#374151]" style={{ top: `${(i + 0.5) * 20}%`, left: 5, transform: "translateY(-50%)" }}>{label}</div>
+          ))}
+          {MAP_GRID_ROWS.map((label, i) => (
+            <div key={`rlr-${label}`} className="pointer-events-none absolute text-[11px] font-bold text-[#374151]" style={{ top: `${(i + 0.5) * 20}%`, right: 5, transform: "translateY(-50%)" }}>{label}</div>
+          ))}
+
+          {/* North compass — top-left of canvas */}
+          <div className="pointer-events-none absolute left-10 top-10 flex flex-col items-center gap-0.5 text-[#101813]">
+            <div className="text-xs font-bold">N</div>
+            <div className="relative h-10 w-10">
+              <div className="absolute left-1/2 top-0 h-10 w-px -translate-x-1/2 bg-[#101813]" />
+              <div className="absolute left-0 top-1/2 h-px w-10 -translate-y-1/2 bg-[#101813]" />
+              <div className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#101813] bg-white" />
+              <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#101813]" />
+            </div>
+            <div className="flex w-14 items-center justify-between text-xs font-bold"><span>W</span><span>E</span></div>
+            <div className="text-xs font-bold">S</div>
+          </div>
+
+          {/* ── Burial spots at EXACT pixel coords ── */}
           {doc.spots.map((spot) => {
             const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
             const visible = matchedIds.has(spot.id);
             const active = selectedSpot?.id === spot.id;
             const label = spot.name || spot.temporaryId || "Unknown";
-            const position = mapSpotPercent(spot, doc.imgWidth, doc.imgHeight);
             const dob = spot.dob ? String(spot.dob).slice(-4) : null;
             const dod = spot.dod ? String(spot.dod).slice(-4) : null;
             return (
@@ -4469,13 +4483,13 @@ function InteractiveMapPreview({
                 data-spot-button="true"
                 onClick={() => { setSelectedId(spot.id); onSelectSpot(spot.id); }}
                 className={cn(
-                  "absolute overflow-hidden border border-[#b0b0a8] bg-white text-center leading-tight shadow-sm transition-[box-shadow,transform] hover:z-20 hover:shadow-md",
+                  "absolute overflow-hidden border border-[#b0b0a8] bg-white text-center leading-tight shadow-sm transition hover:z-20 hover:shadow-md hover:scale-110",
                   visible ? "opacity-100" : "opacity-20 grayscale",
-                  active ? "z-20 shadow-lg ring-2 ring-[#0f766e]" : "",
+                  active && "z-20 shadow-lg ring-2 ring-[#0f766e]",
                 )}
                 style={{
-                  left: position.left,
-                  top: position.top,
+                  left: spot.x,
+                  top: spot.y,
                   transform: "translate(-50%, -50%)",
                   width: spotW,
                   height: spotH,
@@ -4487,120 +4501,87 @@ function InteractiveMapPreview({
                 title={`${label}${dob || dod ? ` · ${dob ?? "?"}–${dod ?? "?"}` : ""}`}
               >
                 <span className="block w-full truncate px-[1px] font-semibold">{label}</span>
-                {(dob || dod) && (
-                  <span className="block w-full truncate px-[1px] font-normal opacity-75">{dob ?? "?"}–{dod ?? "?"}</span>
-                )}
+                {(dob || dod) && <span className="block w-full truncate px-[1px] font-normal opacity-75">{dob ?? "?"}–{dod ?? "?"}</span>}
               </button>
             );
           })}
-        </div>
-      </div>
 
-      <div className="absolute right-6 top-6 z-30 w-[360px] rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-3 shadow-lg">
-        <div className="mb-2 text-[10px] uppercase tracking-[0.22em] text-[#576657]">Search & Filters</div>
-        <div className="grid gap-2">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search name, ID, notes"
-            className="h-8 bg-white/90 text-xs"
-            data-testid="preview-search"
-          />
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="h-8 bg-white/90 text-xs" data-testid="preview-category">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {spotTypes.map((type) => (
-                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="grid grid-cols-2 gap-2">
-            <Input value={dobFrom} onChange={(event) => setDobFrom(event.target.value)} placeholder="DOB from" className="h-8 bg-white/90 text-xs" />
-            <Input value={dobTo} onChange={(event) => setDobTo(event.target.value)} placeholder="DOB to" className="h-8 bg-white/90 text-xs" />
-            <Input value={dodFrom} onChange={(event) => setDodFrom(event.target.value)} placeholder="DOD from" className="h-8 bg-white/90 text-xs" />
-            <Input value={dodTo} onChange={(event) => setDodTo(event.target.value)} placeholder="DOD to" className="h-8 bg-white/90 text-xs" />
+          {/* Map title + date — bottom center of canvas */}
+          <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
+            <div className="text-sm font-bold leading-tight text-[#1d2a22]">{cemetery?.name ?? doc.name}</div>
+            <div className="mt-0.5 text-[10px] text-[#576657]">
+              Cemetery Overview · {new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="absolute left-1/2 top-4 z-40 flex -translate-x-1/2 items-center gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(2.5, z + 0.1))} title="Zoom in">
-          <ZoomIn className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.55, z - 0.1))} title="Zoom out">
-          <ZoomOut className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="icon"
-          variant={panMode ? "default" : "ghost"}
-          className="h-7 w-7"
-          onClick={() => setPanMode((v) => !v)}
-          title="Pan mode"
-        >
-          <Hand className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-            setPanMode(false);
-          }}
-          title="Fit map"
-        >
-          <Maximize className="h-3.5 w-3.5" />
-        </Button>
-        <span className="px-2 text-[10px] font-semibold text-[#576657]">{Math.round(zoom * 100)}%</span>
-      </div>
+        {/* ══ Fixed UI overlays — NOT inside the pan/zoom transform ══ */}
 
-      <div className="absolute bottom-16 right-7 z-20 w-36 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-2 text-[9px] shadow">
-        <div>
+        {/* Zoom controls — top center */}
+        <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-1 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-1.5 shadow">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title="Zoom in"><ZoomIn className="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.15, z - 0.15))} title="Zoom out"><ZoomOut className="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant={panMode ? "default" : "ghost"} className="h-7 w-7" onClick={() => setPanMode((v) => !v)} title="Pan / drag"><Hand className="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setPanMode(false); }} title="Reset zoom"><Maximize className="h-3.5 w-3.5" /></Button>
+          <span className="px-2 text-[10px] font-semibold text-[#576657]">{Math.round(zoom * 100)}%</span>
+        </div>
+
+        {/* Search & filter panel — top right */}
+        <div className="absolute right-4 top-3 z-40 w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-3 shadow-lg">
+          <div className="mb-2 text-[10px] uppercase tracking-[0.22em] text-[#576657]">Find a burial</div>
+          <div className="grid gap-2">
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, ID, notes" className="h-8 bg-white/90 text-xs" data-testid="preview-search" />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="h-8 bg-white/90 text-xs" data-testid="preview-category"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {spotTypes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <Input value={dobFrom} onChange={(e) => setDobFrom(e.target.value)} placeholder="DOB from" className="h-8 bg-white/90 text-xs" />
+              <Input value={dobTo} onChange={(e) => setDobTo(e.target.value)} placeholder="DOB to" className="h-8 bg-white/90 text-xs" />
+              <Input value={dodFrom} onChange={(e) => setDodFrom(e.target.value)} placeholder="DOD from" className="h-8 bg-white/90 text-xs" />
+              <Input value={dodTo} onChange={(e) => setDodTo(e.target.value)} placeholder="DOD to" className="h-8 bg-white/90 text-xs" />
+            </div>
+          </div>
+        </div>
+
+        {/* Legend + scale bar — bottom right */}
+        <div className="absolute bottom-4 right-4 z-40 w-36 rounded border border-[#27382d]/20 bg-[#fffdf6]/95 p-2 text-[9px] shadow">
           <div className="mb-1 text-[10px] uppercase tracking-wider text-[#576657]">Legend</div>
-          <div className="grid gap-y-1">
-            {spotTypes.map((type) => (
-              <div key={type.id} className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 border border-white shadow-sm" style={{ backgroundColor: type.color }} />
-                <span className="truncate">{type.name}</span>
+          <div className="grid gap-y-1 mb-2">
+            {spotTypes.map((t) => (
+              <div key={t.id} className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 shrink-0 border border-white shadow-sm" style={{ backgroundColor: t.color }} />
+                <span className="truncate">{t.name}</span>
               </div>
             ))}
           </div>
-        </div>
-        <div className="mt-2">
+          <div className="h-px w-full bg-[#d1d5db] mb-1.5" />
           <div className="h-1 bg-[#243225]" style={{ width: barPx }} />
-          <div className="mt-1 flex justify-between text-[10px] text-[#576657]" style={{ width: barPx }}>
+          <div className="mt-0.5 flex justify-between text-[10px] text-[#576657]" style={{ width: barPx }}>
             <span>0</span>
             <span>{Math.round(barFt / 2)}</span>
             <span>{barFt} ft</span>
           </div>
         </div>
-      </div>
 
-      <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 text-center">
-        <div className="text-lg font-semibold leading-none">{cemetery?.name ?? doc.name}</div>
-        <div className="mt-1 text-xs leading-tight text-[#576657]">
-          Cemetery Overview<br />{new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
-        </div>
-      </div>
-
-      {selectedSpot && (
-        <div className="fixed right-6 top-24 z-[70] w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
-          <div className="text-[10px] uppercase tracking-wider text-[#576657]">Burial details</div>
-          <div className="mt-1 text-base font-semibold">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <FieldMini label="DOB" value={selectedSpot.dob} />
-            <FieldMini label="DOD" value={selectedSpot.dod} />
-            <FieldMini label="Category" value={(spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).name} />
-            <FieldMini label="Image" value={selectedSpot.imageFileName || fileBaseName(selectedSpot.imagePath ?? "")} />
+        {/* Selected spot detail panel */}
+        {selectedSpot && (
+          <div className="absolute right-4 top-64 z-50 w-72 rounded border border-[#27382d]/25 bg-[#fffdf6]/95 p-4 shadow-xl">
+            <div className="mb-0.5 text-[10px] uppercase tracking-wider text-[#576657]">Burial details</div>
+            <div className="text-base font-semibold">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <FieldMini label="DOB" value={selectedSpot.dob} />
+              <FieldMini label="DOD" value={selectedSpot.dod} />
+              <FieldMini label="Category" value={(spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).name} />
+              <FieldMini label="Image" value={selectedSpot.imageFileName || fileBaseName(selectedSpot.imagePath ?? "")} />
+            </div>
+            {selectedSpot.notes && <p className="mt-2 text-xs text-[#576657]">{selectedSpot.notes}</p>}
           </div>
-          {selectedSpot.notes && <p className="mt-2 text-xs text-[#576657]">{selectedSpot.notes}</p>}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </div>
   );
 }
