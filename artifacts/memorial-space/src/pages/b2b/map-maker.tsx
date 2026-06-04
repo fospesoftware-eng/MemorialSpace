@@ -2726,184 +2726,115 @@ function MapMakerEditor() {
       data-testid="map-maker-root"
     >
       {/* ============ Top toolbar ============ */}
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 gap-y-2 border-b border-border bg-card px-2 py-2 sm:px-3">
-        {/* Back to dashboard */}
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-card px-2 sm:px-3">
+        {/* Back */}
         <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="h-9 px-2" data-testid="btn-back-app" title="Back to dashboard">
+          <Button variant="ghost" size="sm" className="h-8 px-2 gap-1.5" data-testid="btn-back-app">
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden md:inline ml-1.5 text-xs">Back</span>
+            <span className="hidden sm:inline text-xs">Dashboard</span>
           </Button>
         </Link>
 
-        <Separator orientation="vertical" className="h-7" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* Toggle left panel */}
-        <Button
-          variant="ghost" size="sm"
-          className="h-9 w-9 p-0"
-          onClick={() => setLeftCollapsed((v) => !v)}
-          data-testid="btn-toggle-left"
-          title={leftCollapsed ? "Show tools panel" : "Hide tools panel"}
-        >
+        {/* Left panel toggle */}
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => setLeftCollapsed((v) => !v)} data-testid="btn-toggle-left" title={leftCollapsed ? "Show panel" : "Hide panel"}>
           {leftCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
 
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="h-8 w-8 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
-            <Layers className="h-4 w-4 text-primary" />
+        {/* Project identity */}
+        <div className="flex items-center gap-2 min-w-0 flex-1 max-w-xs">
+          <div className="h-7 w-7 rounded bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+            <Layers className="h-3.5 w-3.5 text-primary" />
           </div>
           <div className="min-w-0">
             <Input
               value={doc.name === DEFAULT_DOC.name ? "" : doc.name}
               onChange={(e) => setDoc((d) => ({ ...d, name: e.target.value }))}
-              placeholder="Project name"
-              className="h-7 w-32 sm:w-44 lg:w-56 text-sm font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-2"
+              placeholder="Project name…"
+              className="h-6 w-32 sm:w-40 lg:w-48 text-[13px] font-semibold border-transparent bg-transparent focus:bg-background focus:border-input px-1.5 py-0"
               data-testid="input-map-name"
             />
-            <div className="text-[10px] text-muted-foreground px-2 hidden sm:block">
-              {counts.totalPlots} plots · {counts.totalSpots} spots · saved {timeAgo(doc.updatedAt)}
-            </div>
+            {doc.cemeteryId && (
+              <div className="text-[10px] text-muted-foreground px-1.5 leading-none">
+                {cemeteries.find((c) => c.id === doc.cemeteryId)?.name ?? ""} · {counts.totalSpots} spots
+              </div>
+            )}
           </div>
         </div>
 
-        <Separator orientation="vertical" className="h-7 hidden md:block" />
+        <div className="flex-1" />
 
-        <div className="hidden min-w-[220px] max-w-[300px] flex-col gap-1 lg:flex">
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Cemetery
-            </span>
-            <Link href="/organizations" className="text-[10px] font-medium text-primary hover:underline">
-              Create
-            </Link>
-          </div>
-          <Select
-            value={doc.cemeteryId ? String(doc.cemeteryId) : "none"}
-            onValueChange={(value) => void loadCemeteryMap(value === "none" ? null : Number(value))}
-          >
-            <SelectTrigger className="h-7 text-xs" data-testid="top-select-map-cemetery">
-              <SelectValue placeholder="Select cemetery" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Select cemetery</SelectItem>
-              {cemeteries.map((cemetery) => (
-                <SelectItem key={cemetery.id} value={String(cemetery.id)}>
-                  {cemetery.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* View toggle */}
+        <div className="hidden sm:flex items-center rounded-md border border-border bg-muted/30 p-0.5 gap-0.5">
+          <button type="button" onClick={() => setView("2d")} data-testid="view-2d" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors", view === "2d" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            <Square className="h-3 w-3" /> 2D
+          </button>
+          <button type="button" onClick={() => setView("3d")} data-testid="view-3d" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors", view === "3d" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            <Box className="h-3 w-3" /> 3D
+          </button>
+          <button type="button" onClick={openPreviewUrl} data-testid="view-preview" className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Eye className="h-3 w-3" /> Preview
+          </button>
         </div>
 
-        <Link href="/organizations" className="lg:hidden">
-          <Button variant={doc.cemeteryId ? "ghost" : "outline"} size="sm" className="h-8 px-2" title="Select or create cemetery">
-            <Database className="h-3.5 w-3.5" />
-            <span className="ml-1.5 hidden sm:inline text-xs">
-              {doc.cemeteryId ? "Cemetery" : "Select cemetery"}
-            </span>
-          </Button>
-        </Link>
+        <Separator orientation="vertical" className="h-6 mx-1 hidden md:block" />
 
-        <Separator orientation="vertical" className="h-7 hidden md:block" />
-
-        {/* View 2D/3D */}
-        <div className="hidden md:flex items-center gap-1">
-          <Button size="sm" variant={view === "2d" ? "default" : "outline"} onClick={() => setView("2d")} data-testid="view-2d" className="h-8">
-            <Square className="h-3.5 w-3.5 mr-1.5" /> 2D
-          </Button>
-          <Button size="sm" variant={view === "3d" ? "default" : "outline"} onClick={() => setView("3d")} data-testid="view-3d" className="h-8">
-            <Box className="h-3.5 w-3.5 mr-1.5" /> 3D
-          </Button>
-          <Button size="sm" variant="outline" onClick={openPreviewUrl} data-testid="view-preview" className="h-8">
-            <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
-          </Button>
-        </div>
-
-        {view === "3d" && (
-          <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-md bg-muted">
-            <Label className="text-xs text-muted-foreground">Tilt</Label>
-            <Slider value={[tilt]} onValueChange={([v]) => setTilt(v)} min={20} max={75} step={1} className="w-24" />
-            <span className="text-xs tabular-nums text-muted-foreground w-8">{tilt}°</span>
-          </div>
-        )}
-
-        <Separator orientation="vertical" className="h-7 hidden md:block" />
-
-        {/* Zoom controls */}
-        <div className="hidden md:flex items-center gap-1">
-          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} data-testid="zoom-out" title="Zoom out">
+        {/* Zoom strip */}
+        <div className="hidden md:flex items-center gap-0.5">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} data-testid="zoom-out" title="Zoom out">
             <ZoomOut className="h-3.5 w-3.5" />
           </Button>
-          <button
-            type="button"
-            onClick={() => setZoom(1)}
-            className="text-xs tabular-nums text-muted-foreground w-12 text-center hover:text-foreground"
-            title="Reset to 100%"
-            data-testid="zoom-reset"
-          >
+          <button type="button" onClick={() => setZoom(1)} className="text-[11px] tabular-nums text-muted-foreground w-10 text-center hover:text-foreground" title="Reset zoom" data-testid="zoom-reset">
             {Math.round(zoom * 100)}%
           </button>
-          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} data-testid="zoom-in" title="Zoom in">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} data-testid="zoom-in" title="Zoom in">
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={fitToScreen} data-testid="zoom-fit" title="Fit to screen">
+          <Button size="sm" variant="ghost" className="h-7 px-1.5" onClick={fitToScreen} data-testid="zoom-fit" title="Fit to screen">
             <Maximize className="h-3.5 w-3.5 mr-1" />
             <span className="hidden lg:inline text-xs">Fit</span>
           </Button>
         </div>
 
-        <div className="flex-1" />
+        <Separator orientation="vertical" className="h-6 mx-0.5 hidden md:block" />
 
-        {/* Visibility toggles (compact) */}
-        <div className="hidden lg:flex items-center gap-0.5">
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowImage((v) => !v)} data-testid="toggle-image" title="Toggle background image">
-            {showImage ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
-            <span className="text-xs">Image</span>
-          </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowLabels((v) => !v)} title="Toggle labels">
-            {showLabels ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
-            <span className="text-xs">Labels</span>
-          </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setShowSpots((v) => !v)} data-testid="toggle-spots" title="Toggle burial spots">
-            {showSpots ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
-            <span className="text-xs">Spots</span>
-          </Button>
+        {/* Visibility toggles */}
+        <div className="hidden lg:flex items-center rounded-md border border-border bg-muted/30 p-0.5 gap-0.5">
+          <button type="button" onClick={() => setShowImage((v) => !v)} data-testid="toggle-image" title="Toggle background image" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors", showImage ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            {showImage ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />} Img
+          </button>
+          <button type="button" onClick={() => setShowLabels((v) => !v)} title="Toggle labels" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors", showLabels ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            {showLabels ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />} Labels
+          </button>
+          <button type="button" onClick={() => setShowSpots((v) => !v)} data-testid="toggle-spots" title="Toggle burial spots" className={cn("flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors", showSpots ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            {showSpots ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />} Spots
+          </button>
         </div>
 
-        <Separator orientation="vertical" className="h-7" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
-        <Button size="sm" variant="outline" onClick={exportJson} data-testid="export-json" className="h-8 hidden md:inline-flex">
-          <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+        {/* Save Draft + Publish Live — clearly separated primary actions */}
+        <Button size="sm" variant="outline" onClick={save} data-testid="save-map" className="h-8 gap-1.5 hidden sm:inline-flex">
+          <Save className="h-3.5 w-3.5" /> Save Draft
         </Button>
-        <Button size="sm" variant="outline" onClick={exportPdf} data-testid="export-pdf" className="h-8 hidden md:inline-flex">
-          <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
-        </Button>
-        <Button size="sm" onClick={save} data-testid="save-map" className="h-8">
-          <Save className="h-3.5 w-3.5 mr-1.5" /> Save
-        </Button>
-
-        <Separator orientation="vertical" className="h-7" />
-
-        {/* Browser fullscreen toggle */}
         <Button
           size="sm"
-          variant="ghost"
-          className="h-9 w-9 p-0"
-          onClick={enterFullscreen}
-          data-testid="btn-fullscreen"
-          title={isFullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen"}
+          onClick={publishMap}
+          disabled={isPublishing || !doc.cemeteryId}
+          data-testid="publish-live-map-top"
+          className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white hidden sm:inline-flex"
         >
-          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          {isPublishing ? "Publishing…" : "Publish Live"}
         </Button>
 
-        {/* Toggle right panel */}
-        <Button
-          variant="ghost" size="sm"
-          className="h-9 w-9 p-0"
-          onClick={() => setRightCollapsed((v) => !v)}
-          data-testid="btn-toggle-right"
-          title={rightCollapsed ? "Show inspector" : "Hide inspector"}
-        >
+        <Separator orientation="vertical" className="h-6 mx-0.5" />
+
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={enterFullscreen} data-testid="btn-fullscreen" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setRightCollapsed((v) => !v)} data-testid="btn-toggle-right" title={rightCollapsed ? "Show inspector" : "Hide inspector"}>
           {rightCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
       </div>
@@ -2940,13 +2871,18 @@ function MapMakerEditor() {
           <ScrollArea className="flex-1">
             <div className="p-3 border-b border-border bg-muted/20">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Map Maker Workflow</div>
-                  <div className="mt-0.5 text-xs font-medium text-muted-foreground">
-                    Follow the steps below
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+                    <Layers className="h-3.5 w-3.5 text-primary" />
                   </div>
+                  <span className="text-[12px] font-semibold">Workflow</span>
                 </div>
-                <Badge variant={doc.projectStatus === "published" ? "default" : "outline"} className="shrink-0">{doc.projectStatus}</Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant={doc.projectStatus === "published" ? "default" : "outline"} className="shrink-0 text-[10px]">{doc.projectStatus}</Badge>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" title="New map" onClick={() => { setDoc(DEFAULT_DOC); setSelection(null); setWorkflowTab("project"); }}>
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
 
               <WorkflowPanel
@@ -3127,25 +3063,54 @@ function MapMakerEditor() {
           onDragLeave={onCanvasDragLeave}
           onDrop={onCanvasDrop}
         >
-          {/* Empty state — hidden once the user starts using a creation tool so it can't intercept canvas clicks. */}
+          {/* Empty state */}
           {tool === "select" && !doc.image && doc.plots.length === 0 && doc.spots.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-6">
-              <div className="text-center max-w-md pointer-events-auto bg-card/85 backdrop-blur border-2 border-dashed border-primary/40 rounded-xl px-8 py-10 shadow-xl">
-                <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-4">
-                  <FileImage className="h-7 w-7 text-primary" />
+              <div className="pointer-events-auto bg-card/90 backdrop-blur-sm border border-border rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                {/* Header */}
+                <div className="bg-primary/8 border-b border-border px-6 py-5 text-center">
+                  <div className="mx-auto h-12 w-12 rounded-xl bg-primary/15 flex items-center justify-center mb-3">
+                    <Layers className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="text-base font-bold">Cemetery Map Maker</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Follow 5 simple steps to build your map</p>
                 </div>
-                <h3 className="text-xl font-semibold mb-1">Start your cemetery map</h3>
-                <p className="text-sm text-muted-foreground mb-5">
-                  Select a cemetery, enter a project name, then create a draft. Import all CSV files together to generate the interactive map.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button size="sm" onClick={createDraftProject} data-testid="empty-create-project">
-                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Create map project
-                  </Button>
+                {/* Steps */}
+                <div className="px-6 py-4 space-y-3">
+                  {[
+                    { num: 1, icon: Database, label: "Select a Cemetery", desc: "Choose from the left panel", done: Boolean(doc.cemeteryId) },
+                    { num: 2, icon: Plus, label: "Create a Project", desc: "Name your map and save a draft", done: Boolean(doc.projectId) },
+                    { num: 3, icon: FileSpreadsheet, label: "Import CSV Data", desc: "Upload GPR, burial and other files", done: false },
+                    { num: 4, icon: GitMerge, label: "Sync Headstones", desc: "Link headstone images to spots", done: false },
+                    { num: 5, icon: Send, label: "Publish Live", desc: "Generate a permanent map URL", done: false },
+                  ].map((step) => {
+                    const Icon = step.icon;
+                    return (
+                      <div key={step.num} className="flex items-center gap-3">
+                        <div className={cn("h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold", step.done ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground")}>
+                          {step.done ? <CheckCircle2 className="h-4 w-4" /> : step.num}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className={cn("text-[12px] font-semibold", step.done ? "text-emerald-700" : "text-foreground")}>{step.label}</div>
+                          <div className="text-[10px] text-muted-foreground">{step.desc}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-4">
-                  Tip: press <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">F</kbd> for browser fullscreen.
-                </p>
+                {/* CTA */}
+                <div className="px-6 pb-5 flex flex-col gap-2">
+                  {!doc.cemeteryId ? (
+                    <p className="text-[11px] text-center text-amber-600 font-medium">← Select a cemetery in the left panel to begin</p>
+                  ) : (
+                    <Button size="sm" className="w-full gap-1.5" onClick={createDraftProject} data-testid="empty-create-project">
+                      <Plus className="h-3.5 w-3.5" /> Create Map Project
+                    </Button>
+                  )}
+                  <p className="text-[10px] text-center text-muted-foreground">
+                    Tip: press <kbd className="px-1 py-0.5 bg-muted rounded">F</kbd> for fullscreen
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -3613,9 +3578,16 @@ function MapMakerEditor() {
             </div>
           </ScrollArea>
 
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border border-border rounded px-2 py-1 pointer-events-none">
-            <Hand className="h-3 w-3" />
-            <span>Hotkeys: <kbd className="px-1 bg-muted rounded">V</kbd> Select · <kbd className="px-1 bg-muted rounded">R</kbd> Plot · <kbd className="px-1 bg-muted rounded">C</kbd> Circle · <kbd className="px-1 bg-muted rounded">G</kbd> Polygon · <kbd className="px-1 bg-muted rounded">P</kbd> Path · <kbd className="px-1 bg-muted rounded">S</kbd> Spot · <kbd className="px-1 bg-muted rounded">H</kbd> Pan · <kbd className="px-1 bg-muted rounded">⌫</kbd> Delete</span>
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background/90 backdrop-blur border border-border rounded-md px-2 py-1 pointer-events-none">
+            <kbd className="px-1 bg-muted rounded">V</kbd>Select
+            <span className="opacity-40">·</span>
+            <kbd className="px-1 bg-muted rounded">R</kbd>Plot
+            <span className="opacity-40">·</span>
+            <kbd className="px-1 bg-muted rounded">S</kbd>Spot
+            <span className="opacity-40">·</span>
+            <kbd className="px-1 bg-muted rounded">H</kbd>Pan
+            <span className="opacity-40">·</span>
+            <kbd className="px-1 bg-muted rounded">⌫</kbd>Del
           </div>
 
           {saveError && (
@@ -3653,18 +3625,25 @@ function MapMakerEditor() {
           </aside>
         ) : (
         <aside className="w-72 lg:w-80 shrink-0 border-l border-border bg-card flex flex-col">
+          {/* Right panel header */}
+          <div className="flex h-10 items-center justify-between border-b border-border px-3">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              {selectedSpot ? "Burial Spot" : selectedPlot ? "Plot" : "Inspector"}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[11px]" onClick={() => { setDoc(DEFAULT_DOC); setSelection(null); setWorkflowTab("project"); }} data-testid="new-map">
+                <Plus className="h-3 w-3" /> New Map
+              </Button>
+              {selection && (
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setSelection(null)} aria-label="Deselect">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
           <ScrollArea className="flex-1">
             {/* SELECTED ITEM */}
             <div className="p-3 border-b border-border">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
-                <span>{selectedSpot ? "Burial Spot" : selectedPlot ? "Selected Plot" : "Inspector"}</span>
-                {selection && (
-                  <button onClick={() => setSelection(null)} className="text-muted-foreground hover:text-foreground" aria-label="Deselect">
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-
               {selectedPlot && (
                 <PlotEditor
                   plot={selectedPlot}
@@ -3765,11 +3744,24 @@ function MapMakerEditor() {
                   ))}
                 </div>
               )}
-              <Button size="sm" variant="outline" className="w-full mt-3" onClick={() => { setDoc(DEFAULT_DOC); setSelection(null); }} data-testid="new-map">
-                <Plus className="h-3.5 w-3.5 mr-1.5" /> New empty map
-              </Button>
             </div>
           </ScrollArea>
+          {/* Bottom action strip */}
+          <div className="border-t border-border p-2 flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs h-8" onClick={save} data-testid="save-map-panel">
+              <Save className="h-3.5 w-3.5" /> Save Draft
+            </Button>
+            <Button
+              size="sm"
+              onClick={publishMap}
+              disabled={isPublishing || !doc.cemeteryId}
+              data-testid="publish-live-map-panel"
+              className="flex-1 gap-1.5 text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {isPublishing ? "Publishing…" : "Publish Live"}
+            </Button>
+          </div>
         </aside>
         )}
       </div>
