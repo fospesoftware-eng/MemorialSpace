@@ -110,6 +110,10 @@ export interface BurialSpot {
     inscription?: string;
     veteranMarker?: string;
   };
+  /** Public memorial page code — present after hydration from the qr_codes table. */
+  memorialCode?: string | null;
+  /** Pre-rendered QR image URL from the qr_codes table. */
+  qrImageUrl?: string | null;
 }
 
 /** Hard cap so a single spot can't grow without bound and bust localStorage. */

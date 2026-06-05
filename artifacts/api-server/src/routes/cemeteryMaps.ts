@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import { db, organizationsTable, plotsTable, burialsTable } from "@workspace/db";
+import { db, organizationsTable, plotsTable, burialsTable, qrCodesTable } from "@workspace/db";
 
 const authedRouter: IRouter = Router();
 const publicRouter: IRouter = Router();
@@ -320,8 +320,11 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
     : [];
   if (!spots.length) return payload;
 
-  const plots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
-  const burials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+  const [plots, burials, qrCodes] = await Promise.all([
+    db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId)),
+    db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId)),
+    db.select().from(qrCodesTable).where(eq(qrCodesTable.organizationId, organizationId)),
+  ]);
   const byMapSpotId = new Map<string, (typeof plots)[number]>();
   const byPlotNumber = new Map<string, (typeof plots)[number]>();
   for (const plot of plots) {
@@ -330,6 +333,11 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
     const mapSpotId = asStringOrNull(meta.mapSpotId);
     if (mapSpotId) byMapSpotId.set(mapSpotId, plot);
   }
+  // QR code lookup by burialId
+  const qrByBurial = new Map<number, (typeof qrCodes)[number]>();
+  for (const qr of qrCodes) {
+    if (qr.burialId) qrByBurial.set(qr.burialId, qr);
+  }
 
   const hydratedSpots = spots.map((spot, index) => {
     const spotId = asStringOrNull(spot.id);
@@ -337,6 +345,7 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
     const plot = (spotId ? byMapSpotId.get(spotId) : null) ?? byPlotNumber.get(plotNumber.toLowerCase());
     if (!plot) return spot;
     const burial = burials.find((item) => item.plotId === plot.id) ?? null;
+    const qr = burial ? qrByBurial.get(burial.id) ?? null : null;
     const geo = parseGeoJsonMeta(plot.geoJson);
     return {
       ...spot,
@@ -356,6 +365,9 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
       imageFileName: asStringOrNull(geo.imageFileName) ?? spot.imageFileName,
       notes: burial?.notes ?? plot.notes ?? spot.notes,
       reviewStatus: "published",
+      // Memorial QR code fields (null when not yet generated)
+      memorialCode: qr?.code ?? null,
+      qrImageUrl: qr?.qrImageUrl ?? null,
     };
   });
 

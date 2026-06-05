@@ -7,7 +7,9 @@ import {
   Maximize2, Minimize2, ChevronLeft, ChevronRight, ArrowLeft, Maximize, Settings as SettingsIcon,
   Spline, Circle as CircleIcon, Hexagon, SquareDashed, FileSpreadsheet,
   GitMerge, AlertTriangle, CheckCircle2, Send, Database, ListChecks, ImagePlus, ExternalLink,
+  QrCode, ChevronDown, ChevronUp, ScanLine,
 } from "lucide-react";
+import { buildMemorialQrImageUrl, buildMemorialUrl } from "@/components/burial-details";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -3996,9 +3998,11 @@ function PublicFullScreenMap({
   const [dodTo, setDodTo] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [panMode, setPanMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const mapScrollRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
   const spotTypeMap = useMemo(() => new Map(spotTypes.map((type) => [type.id, type])), [spotTypes]);
 
   // Coordinate scale for proportional spot boxes
@@ -4029,11 +4033,45 @@ function PublicFullScreenMap({
   const selectedSpot = selectedId ? doc.spots.find((s) => s.id === selectedId) ?? null : null;
   const visibleIds = new Set(visibleSpots.map((s) => s.id));
 
+  // Pan handlers — drag to scroll the map container
+  const onMapPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panMode) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-public-map-spot='true']")) return;
+    const el = mapScrollRef.current;
+    if (!el) return;
+    panRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: el.scrollLeft,
+      startScrollTop: el.scrollTop,
+    };
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, [panMode]);
+
+  const onMapPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panRef.current || panRef.current.pointerId !== e.pointerId) return;
+    const el = mapScrollRef.current;
+    if (!el) return;
+    el.scrollLeft = panRef.current.startScrollLeft - (e.clientX - panRef.current.startX);
+    el.scrollTop  = panRef.current.startScrollTop  - (e.clientY - panRef.current.startY);
+  }, []);
+
+  const onMapPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panRef.current || panRef.current.pointerId !== e.pointerId) return;
+    const el = mapScrollRef.current;
+    if (el?.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    panRef.current = null;
+  }, []);
+
   // Zoom with scroll wheel on the map
   const onMapWheel = useCallback((e: React.WheelEvent) => {
+    if (panMode) return; // let natural scroll happen when not zooming
     e.preventDefault();
     setZoom((z) => Math.max(0.15, Math.min(4, z - e.deltaY * 0.001)));
-  }, []);
+  }, [panMode]);
 
   return (
     <div className={cn("flex flex-col bg-[#111812] text-[#1d2a22]", fullscreen ? "fixed inset-0 z-[100]" : "min-h-screen")}>
@@ -4050,12 +4088,16 @@ function PublicFullScreenMap({
             <span className="shrink-0 text-[10px] text-[#576657]">{visibleSpots.length}/{doc.spots.length} spots</span>
           </div>
         </div>
-        {/* Zoom controls */}
+        {/* Pan + Zoom controls */}
         <div className="hidden items-center gap-0.5 sm:flex">
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => setZoom((z) => Math.min(4, z + 0.2))} title="Zoom in"><ZoomIn className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" className={cn("h-8 w-8 hover:bg-white/10", panMode ? "bg-white/20 text-white" : "text-[#b8c4b4]")} onClick={() => setPanMode((v) => !v)} title="Pan / drag map (H)">
+            <Hand className="h-4 w-4" />
+          </Button>
+          <Separator orientation="vertical" className="h-4 bg-white/15 mx-0.5" />
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => setZoom((z) => Math.min(4, z + 0.2))} title="Zoom in (+)"><ZoomIn className="h-4 w-4" /></Button>
           <button type="button" onClick={() => setZoom(1)} className="w-12 text-center text-[11px] font-semibold text-[#b8c4b4] hover:text-white">{Math.round(zoom * 100)}%</button>
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => setZoom((z) => Math.max(0.15, z - 0.2))} title="Zoom out"><ZoomOut className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => { setZoom(1); if (mapScrollRef.current) { mapScrollRef.current.scrollTo({ left: 0, top: 0 }); } }} title="Reset"><RotateCcw className="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => setZoom((z) => Math.max(0.15, z - 0.2))} title="Zoom out (-)"><ZoomOut className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-[#b8c4b4] hover:bg-white/10" onClick={() => { setZoom(1); if (mapScrollRef.current) { mapScrollRef.current.scrollTo({ left: 0, top: 0 }); } }} title="Reset view"><RotateCcw className="h-3.5 w-3.5" /></Button>
         </div>
         <Separator orientation="vertical" className="h-5 bg-white/15" />
         <Button size="sm" variant="ghost" className={cn("h-8 gap-1.5 text-[11px]", sidebarOpen ? "text-white bg-white/10" : "text-[#b8c4b4] hover:bg-white/10 hover:text-white")} onClick={() => setSidebarOpen((v) => !v)}>
@@ -4150,12 +4192,16 @@ function PublicFullScreenMap({
           </aside>
         )}
 
-        {/* ── Map area: native size, scroll to navigate ── */}
+        {/* ── Map area: native size, scroll or pan-drag to navigate ── */}
         <div
           ref={mapScrollRef}
           className="relative flex-1 overflow-auto bg-[#1a1f1a]"
           onWheel={onMapWheel}
-          style={{ cursor: "default" }}
+          onPointerDown={onMapPointerDown}
+          onPointerMove={onMapPointerMove}
+          onPointerUp={onMapPointerUp}
+          onPointerCancel={onMapPointerUp}
+          style={{ cursor: panMode ? "grab" : "default" }}
         >
           {/* The map canvas at exact pixel coords × zoom */}
           <div
@@ -4258,49 +4304,135 @@ function PublicFullScreenMap({
           </div>
         </div>
 
-        {/* ── Selected spot detail panel ── */}
-        {selectedSpot && (
-          <aside className="flex w-72 shrink-0 flex-col border-l border-white/10 bg-[#0e1510]/90">
-            <div className="flex items-center justify-between border-b border-white/10 p-3">
-              <div className="text-[10px] uppercase tracking-widest text-[#576657]">Burial details</div>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-[#576657] hover:bg-white/10 hover:text-white" onClick={() => setSelectedId(null)}>
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <ScrollArea className="flex-1 p-4">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: (spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).color }} />
-                <span className="text-[10px] text-[#576657]">{(spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE).name}</span>
+        {/* ── Selected spot full detail panel ── */}
+        {selectedSpot && (() => {
+          const meta = spotTypeMap.get(selectedSpot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
+          const memorialUrl = selectedSpot.memorialCode
+            ? buildMemorialUrl({ memorialCode: selectedSpot.memorialCode })
+            : null;
+          const qrSrc = selectedSpot.qrImageUrl
+            ?? (memorialUrl ? buildMemorialQrImageUrl(memorialUrl, 200) : null);
+          const allImages = [
+            ...(selectedSpot.headstoneImages ?? []),
+            ...(selectedSpot.imagePath && !selectedSpot.headstoneImages?.length ? [selectedSpot.imagePath] : []),
+          ].filter(Boolean) as string[];
+          const age = (() => {
+            if (!selectedSpot.dob) return null;
+            const s = new Date(selectedSpot.dob);
+            const e = selectedSpot.dod ? new Date(selectedSpot.dod) : new Date();
+            if (isNaN(s.valueOf()) || isNaN(e.valueOf())) return null;
+            let a = e.getFullYear() - s.getFullYear();
+            const m = e.getMonth() - s.getMonth();
+            if (m < 0 || (m === 0 && e.getDate() < s.getDate())) a--;
+            return a >= 0 && a < 200 ? a : null;
+          })();
+
+          return (
+            <aside className="flex w-80 shrink-0 flex-col border-l border-white/10 bg-[#0c120e]">
+              {/* Panel header */}
+              <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                <div className="h-7 w-7 shrink-0 rounded-full flex items-center justify-center border border-white/20" style={{ backgroundColor: meta.color }}>
+                  <span className="text-[9px] font-bold text-white">{meta.name.slice(0, 2).toUpperCase()}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[9px] uppercase tracking-widest text-[#576657]">{meta.name}</div>
+                  <div className="text-[11px] font-semibold text-[#b8c4b4] truncate">{selectedSpot.temporaryId || selectedSpot.id}</div>
+                </div>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-[#576657] hover:bg-white/10 hover:text-white" onClick={() => setSelectedId(null)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               </div>
-              <h2 className="text-base font-bold text-white">{selectedSpot.name || selectedSpot.temporaryId || "Unknown burial"}</h2>
-              <div className="mt-4 space-y-3">
-                {[
-                  { label: "Plot / ID", value: selectedSpot.temporaryId },
-                  { label: "Date of birth", value: selectedSpot.dob },
-                  { label: "Date of death", value: selectedSpot.dod },
-                  { label: "Veteran status", value: selectedSpot.veteranStatus },
-                ].filter((f) => f.value).map(({ label, value }) => (
-                  <div key={label}>
-                    <div className="text-[10px] uppercase tracking-wider text-[#576657]">{label}</div>
-                    <div className="mt-0.5 text-sm text-[#fffdf6]">{value}</div>
-                  </div>
-                ))}
-                {selectedSpot.notes && (
+
+              <ScrollArea className="flex-1">
+                <div className="space-y-5 p-4">
+                  {/* Name + dates */}
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-[#576657]">Notes</div>
-                    <p className="mt-0.5 text-sm leading-relaxed text-[#b8c4b4]">{selectedSpot.notes}</p>
+                    <h2 className="text-xl font-bold leading-tight text-white">{selectedSpot.name || "Unknown burial"}</h2>
+                    {(selectedSpot.dob || selectedSpot.dod) && (
+                      <div className="mt-1.5 flex items-center gap-2 text-sm text-[#b8c4b4]">
+                        <span>{selectedSpot.dob ?? "?"}</span>
+                        <span className="text-[#576657]">–</span>
+                        <span>{selectedSpot.dod ?? "?"}</span>
+                        {age !== null && <span className="text-[#576657]">· {age} yrs</span>}
+                      </div>
+                    )}
                   </div>
-                )}
-                {(selectedSpot.imagePath || selectedSpot.imageFileName) && (
-                  <div>
-                    <div className="mb-1 text-[10px] uppercase tracking-wider text-[#576657]">Headstone</div>
-                    <img src={selectedSpot.imagePath ?? ""} alt="Headstone" className="w-full rounded border border-white/10 object-cover shadow" />
+
+                  {/* Key fields */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Plot / ID", value: selectedSpot.temporaryId },
+                      { label: "Veteran status", value: selectedSpot.veteranStatus },
+                      { label: "Date of birth", value: selectedSpot.dob },
+                      { label: "Date of death", value: selectedSpot.dod },
+                    ].filter((f) => f.value).map(({ label, value }) => (
+                      <div key={label}>
+                        <div className="text-[9px] uppercase tracking-wider text-[#576657]">{label}</div>
+                        <div className="mt-0.5 text-xs font-medium text-[#fffdf6]">{value}</div>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            </ScrollArea>
-          </aside>
-        )}
+
+                  {/* Notes */}
+                  {selectedSpot.notes && (
+                    <div>
+                      <div className="mb-1 text-[9px] uppercase tracking-wider text-[#576657]">Notes</div>
+                      <p className="text-xs leading-relaxed text-[#b8c4b4]">{selectedSpot.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Headstone images gallery */}
+                  {allImages.length > 0 && (
+                    <div>
+                      <div className="mb-2 text-[9px] uppercase tracking-wider text-[#576657]">Headstone photos ({allImages.length})</div>
+                      <div className={cn("grid gap-2", allImages.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+                        {allImages.map((src, i) => (
+                          <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded border border-white/10 hover:border-white/30 transition">
+                            <img src={src} alt={`Headstone ${i + 1}`} className="w-full object-cover" style={{ maxHeight: allImages.length === 1 ? 220 : 120 }} />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QR Code + Memorial page */}
+                  {qrSrc && (
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                      <div className="mb-2 flex items-center gap-2">
+                        <QrCode className="h-4 w-4 text-[#576657]" />
+                        <span className="text-[10px] uppercase tracking-wider text-[#576657]">Memorial QR Code</span>
+                      </div>
+                      <div className="flex items-start gap-4">
+                        <img src={qrSrc} alt="Memorial QR code" className="h-24 w-24 shrink-0 rounded border border-white/10 bg-white p-1" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-[#b8c4b4] leading-relaxed">Scan to open the memorial page for {selectedSpot.name || "this burial"}.</p>
+                          {memorialUrl && (
+                            <a
+                              href={memorialUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-flex items-center gap-1 rounded border border-[#3d7a5a]/50 bg-[#1e3a28] px-2.5 py-1.5 text-[11px] font-medium text-[#6dbb8a] hover:bg-[#243d2c] transition"
+                            >
+                              <ExternalLink className="h-3 w-3" /> Open memorial page
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI inscription data */}
+                  {selectedSpot.aiData?.inscription && (
+                    <div>
+                      <div className="mb-1 text-[9px] uppercase tracking-wider text-[#576657]">Inscription (AI extracted)</div>
+                      <p className="text-xs leading-relaxed text-[#b8c4b4] italic">"{selectedSpot.aiData.inscription}"</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </aside>
+          );
+        })()}
       </div>
     </div>
   );
