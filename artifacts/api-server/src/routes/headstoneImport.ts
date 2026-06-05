@@ -3,9 +3,9 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { db, platformAiSettingsTable } from "@workspace/db";
+import { db, platformAiSettingsTable, plotsTable, burialsTable } from "@workspace/db";
 import { asyncHandler } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -338,10 +338,106 @@ router.get(
       return;
     }
     const folder = headstoneFolder(organizationId);
+
+    // Load manifest if it exists
+    type ManifestImage = {
+      imageFileName: string;
+      storedPath: string;
+      people: Array<{ name: string; dateOfBirth?: string | null; dateOfDeath?: string | null }>;
+      isFamilyHeadstone?: boolean;
+      inscriptionText?: string;
+      confidence?: number;
+      status?: string;
+      verifiedAt?: string;
+    };
+    let manifestImages: ManifestImage[] = [];
+    try {
+      const raw = await readFile(path.join(folder.absolute, "headstone-manifest.json"), "utf8");
+      const parsed = JSON.parse(raw) as { images?: ManifestImage[] };
+      manifestImages = parsed.images ?? [];
+    } catch {
+      // No manifest yet — fall through to folder scan
+    }
+
+    // Discover image files in the folder (supplement manifest with any unprocessed files)
+    const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+    let folderFiles: string[] = [];
+    try {
+      const entries = await readdir(folder.absolute);
+      folderFiles = entries.filter((f) => IMAGE_EXTS.has(path.extname(f).toLowerCase()));
+    } catch {
+      // Folder doesn't exist yet
+    }
+
+    const manifestSet = new Set(manifestImages.map((m) => m.imageFileName));
+    const unprocessed = folderFiles
+      .filter((f) => !manifestSet.has(f))
+      .map((f) => ({
+        imageFileName: f,
+        storedPath: `${folder.publicBase}/${encodeURIComponent(f)}`,
+        people: [],
+        status: "unprocessed" as const,
+      }));
+
+    const allImages = [...manifestImages, ...unprocessed];
+
+    // Join with burial spots — match by imagePath / imageFileName stored in plots.geoJson
+    const plots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
+    const burials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+    const burialByPlot = new Map(burials.map((b) => [b.plotId, b]));
+
+    // Build lookup: filename → plot+burial
+    const plotByFilename = new Map<string, { plot: typeof plots[number]; burial: typeof burials[number] | null }>();
+    for (const plot of plots) {
+      let geo: Record<string, unknown> = {};
+      try { if (plot.geoJson) geo = JSON.parse(plot.geoJson); } catch { /**/ }
+      const fn = (geo.imageFileName as string | undefined) ?? (geo.imagePath as string | undefined);
+      if (fn) {
+        const base = fn.replace(/^.*[\\/]/, "");
+        plotByFilename.set(base.toLowerCase(), { plot, burial: burialByPlot.get(plot.id) ?? null });
+      }
+    }
+    // Also match on burial.photoUrl filename
+    for (const burial of burials) {
+      if (!burial.photoUrl) continue;
+      const base = burial.photoUrl.replace(/^.*[\\/]/, "").replace(/\?.*$/, "");
+      if (!plotByFilename.has(base.toLowerCase())) {
+        const plot = plots.find((p) => p.id === burial.plotId) ?? null;
+        if (plot) plotByFilename.set(base.toLowerCase(), { plot, burial });
+      }
+    }
+
+    const enriched = allImages.map((img) => {
+      const linked = plotByFilename.get(img.imageFileName.toLowerCase()) ?? null;
+      return {
+        ...img,
+        storedPath: img.storedPath ?? `${folder.publicBase}/${encodeURIComponent(img.imageFileName)}`,
+        linkedPlot: linked
+          ? {
+              plotId: linked.plot.id,
+              plotNumber: linked.plot.plotNumber,
+              section: linked.plot.section,
+              row: linked.plot.row,
+              status: linked.plot.status,
+            }
+          : null,
+        linkedBurial: linked?.burial
+          ? {
+              burialId: linked.burial.id,
+              deceasedName: linked.burial.deceasedName,
+              deceasedDob: linked.burial.deceasedDob,
+              deceasedDod: linked.burial.deceasedDod,
+            }
+          : null,
+      };
+    });
+
     res.json({
       organizationId,
       folder: folder.publicBase,
-      manifestPath: `${folder.publicBase}/headstone-manifest.json`,
+      totalImages: enriched.length,
+      linkedCount: enriched.filter((i) => i.linkedPlot).length,
+      images: enriched,
     });
   }),
 );

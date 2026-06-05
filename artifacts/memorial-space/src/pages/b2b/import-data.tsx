@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, FileSpreadsheet, GitMerge, ScanText, Upload } from "lucide-react";
+import { ArrowRight, BookImage, FileSpreadsheet, GitMerge, ScanText, Upload } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -26,6 +26,14 @@ const importOptions = [
     href: "/import-data/headstones",
     icon: ScanText,
     status: "Ready",
+  },
+  {
+    title: "Headstone Library",
+    description:
+      "Browse all headstone images uploaded for a cemetery. See which images are linked to burial spots and view the AI-extracted inscription text and names.",
+    href: "/import-data/headstone-library",
+    icon: BookImage,
+    status: "Library",
   },
 ];
 
