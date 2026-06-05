@@ -98,7 +98,9 @@ function addWorkflowHint() {
 function enhanceMapMakerWorkflow() {
   if (!isMapMakerPage()) return;
   renameSaveButton();
-  addPublishButton();
+  // addPublishButton() removed — Publish Live button is now a React component
+  // in the top bar (data-testid="publish-live-map-top"). The DOM-injection
+  // approach caused a duplicate button whenever Step 5 was not the active tab.
   addWorkflowHint();
 }
 

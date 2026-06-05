@@ -814,9 +814,9 @@ function MapMakerEditor() {
   }, [backgroundsErr]);
 
   // Status messages auto-dismiss
-  const flashStatus = useCallback((msg: string) => {
+  const flashStatus = useCallback((msg: string, durationMs = 4000) => {
     setStatusMessage(msg);
-    setTimeout(() => setStatusMessage((cur) => (cur === msg ? null : cur)), 3500);
+    setTimeout(() => setStatusMessage((cur) => (cur === msg ? null : cur)), durationMs);
   }, []);
 
   // ----- Browser fullscreen API -----
@@ -2731,14 +2731,15 @@ function MapMakerEditor() {
       const synced = body?.syncedSpots ?? publishedDoc.spots.length;
       const warning = typeof body?.syncWarning === "string" ? body.syncWarning : null;
       addImportLog(warning ? `Map published. ${warning}` : `Map published. ${synced} burial spots synced to the database.`);
-      setWorkflowTab("publish");
+      // Stay on current step — don't switch to Step 5, which disorients the user.
+      // The top bar shows "Open Live Map" button immediately after publish.
       setFitRequest((v) => v + 1);
       if (warning) {
         setSaveError(warning);
         setTimeout(() => setSaveError(null), 9000);
-        flashStatus("Published live map; sync needs review");
+        flashStatus("Map published — sync needs review");
       } else {
-        flashStatus("Published live map and synced Burial Spots + Map View");
+        flashStatus(`✓ Map published! ${synced} burial spots synced. Click "Open Live Map" in the top bar.`, 7000);
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Could not publish map.");
@@ -3976,7 +3977,15 @@ function MapMakerEditor() {
 
       {/* Status toast (centred bottom) */}
       {statusMessage && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-3 py-2 rounded-md shadow-lg z-50 pointer-events-none" role="status">
+        <div
+          role="status"
+          className={cn(
+            "absolute bottom-5 left-1/2 -translate-x-1/2 max-w-sm text-center text-sm font-medium px-4 py-2.5 rounded-lg shadow-xl z-50 pointer-events-none transition-opacity",
+            statusMessage.startsWith("✓")
+              ? "bg-emerald-600 text-white"
+              : "bg-gray-900 text-white",
+          )}
+        >
           {statusMessage}
         </div>
       )}
