@@ -78,6 +78,31 @@ publicRouter.get("/memorials", async (req, res) => {
     })));
 });
 
+// Look up a memorial by QR code string — used by /memorial/:code public URLs
+// for orgs that have no slug. The code is always stored uppercased.
+publicRouter.get("/memorial/by-code/:code", async (req, res) => {
+  const code = String(req.params.code ?? "").toUpperCase();
+  if (!/^[A-Z0-9]{8,64}$/.test(code)) {
+    res.status(400).json({ error: "Invalid memorial code" });
+    return;
+  }
+  const [qr] = await db
+    .select()
+    .from(qrCodesTable)
+    .where(eq(qrCodesTable.code, code));
+  if (!qr || qr.memorialId == null) {
+    res.status(404).json({ error: "Memorial not found" });
+    return;
+  }
+  const [memorial] = await db
+    .select()
+    .from(memorialsTable)
+    .where(eq(memorialsTable.id, qr.memorialId));
+  if (!memorial) { res.status(404).json({ error: "Memorial not found" }); return; }
+  if (!isAuthorizedToRead(memorial, req)) { res.status(403).json({ error: "Access denied" }); return; }
+  res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
+});
+
 publicRouter.get("/memorials/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));

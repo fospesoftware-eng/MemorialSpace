@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "wouter";
 import { useGetMemorial, useListTributes, useCreateTribute, getListTributesQueryKey, getGetMemorialQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,14 +12,35 @@ import { format } from "date-fns";
 
 export default function PublicMemorial() {
   const { id } = useParams<{ id: string }>();
-  const memorialId = Number(id);
   const queryClient = useQueryClient();
 
-  const { data: memorial, isLoading } = useGetMemorial(memorialId, {
-    query: { enabled: !!memorialId, queryKey: getGetMemorialQueryKey(memorialId) }
+  // id may be a numeric DB id OR a hex QR code string (e.g. "A1C936707778574E")
+  const isCodeBased = id != null && !/^\d+$/.test(id);
+  const memorialId = isCodeBased ? NaN : Number(id);
+
+  // Numeric-id path (legacy links)
+  const { data: memorialById, isLoading: loadingById } = useGetMemorial(memorialId, {
+    query: { enabled: !isCodeBased && !!memorialId, queryKey: getGetMemorialQueryKey(memorialId) }
   });
-  const { data: tributes } = useListTributes(memorialId, {
-    query: { enabled: !!memorialId, queryKey: getListTributesQueryKey(memorialId) }
+
+  // Code-based path (/memorial/A1C936...)
+  const { data: memorialByCode, isLoading: loadingByCode } = useQuery({
+    queryKey: ["memorial-by-code", id],
+    enabled: isCodeBased && !!id,
+    queryFn: async () => {
+      const res = await fetch(`/memorial/by-code/${id}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const memorial = isCodeBased ? memorialByCode : memorialById;
+  const isLoading = isCodeBased ? loadingByCode : loadingById;
+
+  // For tributes we need the resolved numeric memorial ID
+  const resolvedMemorialId = memorial?.id ?? NaN;
+  const { data: tributes } = useListTributes(resolvedMemorialId, {
+    query: { enabled: !!resolvedMemorialId, queryKey: getListTributesQueryKey(resolvedMemorialId) }
   });
   const createTribute = useCreateTribute();
   const [form, setForm] = useState({ authorName: "", authorEmail: "", message: "" });
@@ -28,10 +49,10 @@ export default function PublicMemorial() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createTribute.mutate(
-      { id: memorialId, data: { authorName: form.authorName, authorEmail: form.authorEmail, message: form.message } },
+      { id: resolvedMemorialId, data: { authorName: form.authorName, authorEmail: form.authorEmail, message: form.message } },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListTributesQueryKey(memorialId) });
+          queryClient.invalidateQueries({ queryKey: getListTributesQueryKey(resolvedMemorialId) });
           setForm({ authorName: "", authorEmail: "", message: "" });
           setSubmitted(true);
           setTimeout(() => setSubmitted(false), 3000);
