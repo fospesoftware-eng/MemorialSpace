@@ -2902,10 +2902,36 @@ function MapMakerEditor() {
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* Save Draft — single top-bar action. Publish is in Workflow Step 5 only. */}
+        {/* Save Draft */}
         <Button size="sm" variant="outline" onClick={save} data-testid="save-map" className="h-8 gap-1.5 hidden sm:inline-flex" disabled={!doc.cemeteryId}>
           <Save className="h-3.5 w-3.5" /> Save Draft
         </Button>
+
+        {/* Publish Live — shown when draft not yet published */}
+        {doc.cemeteryId && doc.projectStatus !== "published" && (
+          <Button
+            size="sm"
+            onClick={publishMap}
+            disabled={isPublishing}
+            data-testid="publish-live-map-top"
+            className="h-8 gap-1.5 hidden sm:inline-flex bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            {isPublishing ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {isPublishing ? "Publishing…" : "Publish Live"}
+          </Button>
+        )}
+
+        {/* Open Live Map — shown when already published */}
+        {doc.projectStatus === "published" && publishedUrl && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => window.open(withBasePath(publishedUrl), "_blank", "noopener,noreferrer")}
+            className="h-8 gap-1.5 hidden sm:inline-flex border-emerald-500 text-emerald-700 hover:bg-emerald-50"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Open Live Map
+          </Button>
+        )}
 
         <Separator orientation="vertical" className="h-6 mx-0.5" />
 
