@@ -14,7 +14,17 @@ router.get("/burials", async (req, res) => {
   if (plotId) conditions.push(eq(burialsTable.plotId, Number(plotId)));
   const q = db.select().from(burialsTable).orderBy(desc(burialsTable.id)).limit(limit).offset(offset);
   const burials = conditions.length ? await q.where(and(...conditions)) : await q;
-  res.json(burials);
+  const result = burials.map((b) => ({
+    ...b,
+    headstoneImages: (() => {
+      try {
+        return b.headstoneImages ? JSON.parse(b.headstoneImages) : [];
+      } catch {
+        return b.photoUrl ? [b.photoUrl] : [];
+      }
+    })(),
+  }));
+  res.json(result);
 });
 
 router.post("/burials", async (req, res) => {
@@ -26,7 +36,16 @@ router.get("/burials/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [burial] = await db.select().from(burialsTable).where(eq(burialsTable.id, id));
   if (!burial) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(burial);
+  res.json({
+    ...burial,
+    headstoneImages: (() => {
+      try {
+        return burial.headstoneImages ? JSON.parse(burial.headstoneImages) : [];
+      } catch {
+        return burial.photoUrl ? [burial.photoUrl] : [];
+      }
+    })(),
+  });
 });
 
 router.put("/burials/:id", async (req, res) => {

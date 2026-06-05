@@ -12,11 +12,14 @@ import { Plus, Search, Users, QrCode as QrCodeIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { BurialDetailSheet, type BurialRecord } from "@/components/plot-detail-sheet";
+import { useAuth } from "@/lib/auth";
 
-const ORG_ID = 1;
+
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 export default function Burials() {
+  const { user } = useAuth();
+  const ORG_ID = user?.organizationId ?? 0;
   const [search, setSearch] = useState("");
   const [selectedBurial, setSelectedBurial] = useState<BurialRecord | null>(null);
   const [bulking, setBulking] = useState(false);

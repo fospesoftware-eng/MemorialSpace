@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, date, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { plotsTable } from "./plots";
@@ -15,6 +15,11 @@ export const burialsTable = pgTable("burials", {
   religion: text("religion"),
   notes: text("notes"),
   photoUrl: text("photo_url"),
+  spotTypeId: text("spot_type_id"),
+  veteranStatus: text("veteran_status"),
+  headstoneImages: text("headstone_images"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

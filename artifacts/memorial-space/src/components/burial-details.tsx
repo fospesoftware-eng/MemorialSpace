@@ -50,6 +50,7 @@ export type BurialDetailsData = {
   dod?: string | null;
   /** Optional spot-type id (matches map-maker SpotType). Falls back to "civilian". */
   spotTypeId?: string | null;
+  veteranStatus?: string | null;
   /** Ordered list of headstone photo URLs. Falls back to `photoUrl` as a single item. */
   headstoneImages?: string[] | null;
   photoUrl?: string | null;
@@ -190,6 +191,11 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
               <span className={isPublic ? "opacity-70" : "text-sidebar-foreground/50"}> · age {age}</span>
             )}
           </div>
+          {burial.veteranStatus && (
+            <div className="mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground/80 inline-block">
+              ⚔️ {burial.veteranStatus}
+            </div>
+          )}
         </div>
       </div>
 
@@ -355,11 +361,23 @@ export function BurialDetails({ burial, variant = "admin", siteSlug, className }
             </div>
           )}
           {(burial.lat != null || burial.lon != null) && (
-            <div className="px-3 pb-2 flex items-center gap-1.5 text-[10px] text-sidebar-foreground/60">
-              <MapPin className="h-2.5 w-2.5" />
-              <span className="tabular-nums">
-                {burial.lat != null ? burial.lat.toFixed(4) : "—"}, {burial.lon != null ? burial.lon.toFixed(4) : "—"}
-              </span>
+            <div className="px-3 pb-2 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/60">
+                <MapPin className="h-2.5 w-2.5" />
+                <span className="tabular-nums">
+                  {burial.lat != null ? burial.lat.toFixed(6) : "—"},
+                  {burial.lon != null ? burial.lon.toFixed(6) : "—"}
+                </span>
+              </div>
+              <a
+                href={`https://www.google.com/maps?q=${burial.lat},${burial.lon}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-sidebar-accent/40 hover:bg-sidebar-accent text-sidebar-foreground text-[11px] font-medium transition-colors"
+              >
+                <MapPin className="h-3 w-3" />
+                Navigate in Google Maps
+              </a>
             </div>
           )}
           {burial.notes && (

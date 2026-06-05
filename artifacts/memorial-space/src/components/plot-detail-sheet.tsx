@@ -73,6 +73,11 @@ function BurialQrPanel({
     religion: string | null;
     photoUrl: string | null;
     notes: string | null;
+    headstoneImages?: string[] | null;
+    spotTypeId?: string | null;
+    veteranStatus?: string | null;
+    lat?: number | null;
+    lon?: number | null;
   };
 }) {
   const [qr, setQr] = useState<QrRow | null>(null);
@@ -148,7 +153,12 @@ function BurialQrPanel({
           burialDate: burial.burialDate,
           religion: burial.religion,
           photoUrl: burial.photoUrl,
+          headstoneImages: burial.headstoneImages ?? (burial.photoUrl ? [burial.photoUrl] : []),
+          spotTypeId: burial.spotTypeId ?? null,
+          veteranStatus: burial.veteranStatus ?? null,
           notes: burial.notes,
+          lat: burial.lat ?? null,
+          lon: burial.lon ?? null,
           memorialCode: qr?.code ?? null,
           qrImageUrl: qr?.qrImageUrl ?? null,
           editPin: qr?.editPin ?? null,
@@ -340,7 +350,14 @@ export function PlotDetailSheet({
                               burialDate: b.burialDate,
                               religion: b.religion,
                               photoUrl: b.photoUrl,
+                              headstoneImages: Array.isArray(b.headstoneImages)
+                                ? b.headstoneImages
+                                : b.photoUrl ? [b.photoUrl] : [],
+                              spotTypeId: b.spotTypeId ?? null,
+                              veteranStatus: b.veteranStatus ?? null,
                               notes: b.notes,
+                              lat: b.latitude ?? null,
+                              lon: b.longitude ?? null,
                             }}
                           />
                           <BurialFamilyLinks burialId={b.id} />
@@ -373,6 +390,11 @@ export type BurialRecord = {
   religion: string | null;
   photoUrl: string | null;
   notes: string | null;
+  headstoneImages?: string[] | null;
+  spotTypeId?: string | null;
+  veteranStatus?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export function BurialDetailSheet({
@@ -417,7 +439,14 @@ export function BurialDetailSheet({
                     burialDate: burial.burialDate,
                     religion: burial.religion,
                     photoUrl: burial.photoUrl,
+                    headstoneImages: Array.isArray((burial as any).headstoneImages)
+                      ? (burial as any).headstoneImages
+                      : burial.photoUrl ? [burial.photoUrl] : [],
+                    spotTypeId: (burial as any).spotTypeId ?? null,
+                    veteranStatus: (burial as any).veteranStatus ?? null,
                     notes: burial.notes,
+                    lat: (burial as any).latitude ?? null,
+                    lon: (burial as any).longitude ?? null,
                   }}
                 />
                 <BurialFamilyLinks burialId={burial.id} />

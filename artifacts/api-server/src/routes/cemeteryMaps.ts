@@ -268,6 +268,16 @@ async function syncPublishedSpotsToGlobal(
           deceasedDod,
           notes: burialNotes || burial.notes,
           photoUrl: imagePath ?? burial.photoUrl,
+          spotTypeId: asStringOrNull(spot.spotTypeId) ?? null,
+          veteranStatus: asStringOrNull(spot.veteranStatus) ?? null,
+          latitude: asFiniteNumber(spot.lat) ?? null,
+          longitude: asFiniteNumber(spot.lon) ?? null,
+          headstoneImages: (() => {
+            const ip = asStringOrNull(spot.imagePath);
+            const ifn = asStringOrNull(spot.imageFileName);
+            const img = ip ?? ifn;
+            return img ? JSON.stringify([img]) : null;
+          })(),
         }).where(eq(burialsTable.id, burial.id)).returning();
         const idx = existingBurials.findIndex((item) => item.id === burial.id);
         if (idx >= 0) existingBurials[idx] = updated;
@@ -280,6 +290,16 @@ async function syncPublishedSpotsToGlobal(
           deceasedDod,
           notes: burialNotes || null,
           photoUrl: imagePath,
+          spotTypeId: asStringOrNull(spot.spotTypeId) ?? null,
+          veteranStatus: asStringOrNull(spot.veteranStatus) ?? null,
+          latitude: asFiniteNumber(spot.lat) ?? null,
+          longitude: asFiniteNumber(spot.lon) ?? null,
+          headstoneImages: (() => {
+            const ip = asStringOrNull(spot.imagePath);
+            const ifn = asStringOrNull(spot.imageFileName);
+            const img = ip ?? ifn;
+            return img ? JSON.stringify([img]) : null;
+          })(),
         }).returning();
         existingBurials.push(inserted);
       }
@@ -357,8 +377,10 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
       name: burial?.deceasedName ?? spot.name,
       dob: burial?.deceasedDob ?? spot.dob,
       dod: burial?.deceasedDod ?? spot.dod,
-      lat: plot.latitude ?? spot.lat,
-      lon: plot.longitude ?? spot.lon,
+      lat: plot.latitude ?? burial?.latitude ?? spot.lat ?? null,
+      lon: plot.longitude ?? burial?.longitude ?? spot.lon ?? null,
+      spotTypeId: burial?.spotTypeId ?? spot.spotTypeId ?? null,
+      veteranStatus: burial?.veteranStatus ?? spot.veteranStatus ?? null,
       gprX: asFiniteNumber(geo.gprX) ?? spot.gprX,
       gprY: asFiniteNumber(geo.gprY) ?? spot.gprY,
       gprZ: asFiniteNumber(geo.gprZ) ?? spot.gprZ,

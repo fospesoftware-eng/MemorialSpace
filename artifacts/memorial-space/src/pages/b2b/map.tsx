@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useGetMapData,
   useListOrganizations,
+  useListBurials,
   getGetMapDataQueryKey,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
@@ -83,6 +84,19 @@ export default function MapPage() {
       refetchOnWindowFocus: true,
     },
   });
+
+  const { data: allBurials } = useListBurials(
+    { organizationId: selectedOrgId ?? 0 },
+    { query: { enabled: selectedOrgId != null } },
+  );
+
+  const burialByPlotId = useMemo(() => {
+    const map = new Map<number, any>();
+    for (const b of allBurials ?? []) {
+      if (!map.has(b.plotId)) map.set(b.plotId, b);
+    }
+    return map;
+  }, [allBurials]);
 
   const groupedPlots = useMemo(() => groupPlots(data?.plots), [data?.plots]);
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
@@ -314,6 +328,11 @@ export default function MapPage() {
                   <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 xl:grid-cols-12 gap-3">
                     {group.plots.map((plot: any) => {
                       const spot = spotByPlotNumber.get(plot.plotNumber.toLowerCase());
+                      const burial = burialByPlotId.get(plot.id);
+                      const displayName = burial?.deceasedName ?? spot?.name ?? null;
+                      const lat = burial?.latitude ?? plot.latitude;
+                      const lon = burial?.longitude ?? plot.longitude;
+                      const hasGps = lat != null && lon != null;
                       return (
                         <button
                           type="button"
@@ -325,16 +344,22 @@ export default function MapPage() {
                               ? "border-primary scale-110 shadow-lg z-10"
                               : "border-transparent hover:scale-105"
                           } ${getStatusColor(plot.status)}`}
-                          title={`${spot?.name ? `${spot.name} — ` : ""}Spot ${plot.plotNumber} · ${plot.status}`}
+                          title={[
+                            displayName ?? `Spot ${plot.plotNumber}`,
+                            `Status: ${plot.status}`,
+                            hasGps ? `GPS: ${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}` : null,
+                            burial?.veteranStatus ?? null,
+                          ].filter(Boolean).join(" · ")}
                         >
                           <span className="truncate w-full text-center leading-tight">
                             {plot.plotNumber}
                           </span>
-                          {spot?.name && (
+                          {displayName && (
                             <span className="truncate w-full text-center leading-tight text-[8px] opacity-80">
-                              {spot.name.split(" ")[0]}
+                              {displayName.split(" ")[0]}
                             </span>
                           )}
+                          {hasGps && <span className="text-[6px] opacity-50">📍</span>}
                           {spot?.qrImageUrl && (
                             <QrCode className="h-2 w-2 opacity-60 shrink-0" />
                           )}
