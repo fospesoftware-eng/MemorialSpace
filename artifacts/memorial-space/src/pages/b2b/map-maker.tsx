@@ -3823,57 +3823,87 @@ function MapMakerEditor() {
               </div>
             </div>
 
-            <div className="p-3">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
-                <span>Published Maps</span>
-                <Badge variant="outline" className="h-4 text-[9px] tabular-nums">{publishedMaps.length}</Badge>
+            {/* ── Published Maps ── */}
+            <div className="border-b border-border p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="text-[11px] font-semibold text-foreground">Published Maps</span>
+                </div>
+                <Badge className="h-5 rounded-sm bg-emerald-100 text-emerald-700 text-[9px] border-emerald-200 tabular-nums">
+                  {publishedMaps.length} live
+                </Badge>
               </div>
               {publishedMaps.length === 0 ? (
-                <p className="text-xs text-muted-foreground mb-3">Publish a map to list it here as a permanent live map.</p>
+                <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center">
+                  <Send className="h-4 w-4 text-muted-foreground mx-auto mb-1.5" />
+                  <p className="text-[11px] text-muted-foreground">No published maps yet.<br />Use Workflow Step 5 to publish.</p>
+                </div>
               ) : (
-                <div className="space-y-1 mb-3">
+                <div className="space-y-1.5">
                   {publishedMaps.map((m) => (
-                    <div key={`${m.projectId}-${m.updatedAt}`} className="flex items-center gap-1 rounded-md border border-border bg-background p-2">
-                      <button
-                        type="button"
-                        onClick={() => window.open(withBasePath(m.url), "_blank", "noopener,noreferrer")}
-                        className="flex-1 min-w-0 text-left"
-                      >
-                        <div className="text-xs font-medium truncate">{m.name}</div>
-                        <div className="text-[10px] text-muted-foreground">{timeAgo(m.updatedAt)}</div>
-                      </button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => window.open(withBasePath(m.url), "_blank", "noopener,noreferrer")}
-                        title="Open published map"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    <button
+                      key={`${m.projectId}-${m.updatedAt}`}
+                      type="button"
+                      onClick={() => window.open(withBasePath(m.url), "_blank", "noopener,noreferrer")}
+                      className="group w-full flex items-center gap-2.5 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-2 text-left transition-colors"
+                      title="Open live map in new tab"
+                    >
+                      <div className="h-7 w-7 shrink-0 rounded-md bg-emerald-600 flex items-center justify-center">
+                        <ExternalLink className="h-3.5 w-3.5 text-white" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-semibold text-emerald-900 truncate">{m.name}</div>
+                        <div className="text-[10px] text-emerald-600">{timeAgo(m.updatedAt)} · Opens new tab</div>
+                      </div>
+                      <ExternalLink className="h-3.5 w-3.5 text-emerald-400 group-hover:text-emerald-700 shrink-0" />
+                    </button>
                   ))}
                 </div>
               )}
+            </div>
 
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 flex items-center justify-between">
-                <span>Saved Maps</span>
-                <Badge variant="outline" className="h-4 text-[9px] tabular-nums">{savedMaps.length}</Badge>
+            {/* ── Draft Maps ── */}
+            <div className="p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span className="text-[11px] font-semibold text-foreground">Draft Maps</span>
+                </div>
+                <Badge variant="outline" className="h-5 rounded-sm text-[9px] tabular-nums">
+                  {savedMaps.length} saved
+                </Badge>
               </div>
               {savedMaps.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Click <strong>Save</strong> to keep this map. Saved maps appear here.</p>
+                <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center">
+                  <Save className="h-4 w-4 text-muted-foreground mx-auto mb-1.5" />
+                  <p className="text-[11px] text-muted-foreground">No drafts yet.<br />Click <strong>Save Draft</strong> to save your work.</p>
+                </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {savedMaps.map((m) => (
-                    <div key={m.key} className="flex items-center gap-1 rounded-md border border-border bg-background p-2">
-                      <button type="button" onClick={() => load(m.key)} data-testid={`load-${m.key}`} className="flex-1 min-w-0 text-left">
-                        <div className="text-xs font-medium truncate">{m.name}</div>
-                        <div className="text-[10px] text-muted-foreground">{timeAgo(m.updatedAt)}</div>
+                    <div key={m.key} className="group flex items-center gap-2 rounded-md border border-border bg-background hover:bg-muted/40 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => load(m.key)}
+                        data-testid={`load-${m.key}`}
+                        className="flex flex-1 items-center gap-2.5 min-w-0 px-2.5 py-2 text-left"
+                        title="Load this draft into workspace"
+                      >
+                        <div className="h-7 w-7 shrink-0 rounded-md bg-muted border border-border flex items-center justify-center">
+                          <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-medium truncate">{m.name}</div>
+                          <div className="text-[10px] text-muted-foreground">{timeAgo(m.updatedAt)} · Load to edit</div>
+                        </div>
                       </button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => load(m.key)}>
-                        <FolderOpen className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeMap(m.key)}>
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-7 w-7 p-0 mr-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeMap(m.key)}
+                        title="Delete draft"
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
