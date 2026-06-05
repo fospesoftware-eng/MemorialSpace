@@ -86,6 +86,7 @@ type VerifyResponse = {
   verifiedCount: number;
   needsManualEntryCount: number;
   imageCount: number;
+  syncedToBurials: number;
   folder: string;
   manifestPath: string;
 };
@@ -378,9 +379,11 @@ export default function HeadstoneImportPage() {
           <CheckCircle2 className="h-4 w-4" />
           <AlertTitle>Headstone verification saved</AlertTitle>
           <AlertDescription>
-            Saved {success.imageCount} image records in {success.folder}.{" "}
-            {success.verifiedCount} verified,{" "}
-            {success.needsManualEntryCount} still missing names.
+            Saved {success.imageCount} image records. {success.verifiedCount} verified,{" "}
+            {success.needsManualEntryCount} still missing names.{" "}
+            {success.syncedToBurials > 0
+              ? `${success.syncedToBurials} burial record${success.syncedToBurials === 1 ? "" : "s"} updated with headstone image.`
+              : "No matching burial records found — open the plot and link manually if needed."}
           </AlertDescription>
         </Alert>
       )}

@@ -319,10 +319,85 @@ router.post(
       "utf8",
     );
 
+    // --- Sync verified headstone data into the burials table ---
+    // Load all plots + burials for this org so we can match by image filename.
+    const { eq: eqOp, and: andOp, or: orOp } = await import("drizzle-orm");
+    const plots = await db.select().from(plotsTable).where(eqOp(plotsTable.organizationId, organizationId));
+    const burials = await db.select().from(burialsTable).where(eqOp(burialsTable.organizationId, organizationId));
+
+    // Build lookup: lowercase base filename → burial record
+    const burialByPlotId = new Map(burials.map((b) => [b.plotId, b]));
+    const burialByFilename = new Map<string, { burial: typeof burials[number]; plot: typeof plots[number] }>();
+    for (const plot of plots) {
+      let geo: Record<string, unknown> = {};
+      try { if (plot.geoJson) geo = JSON.parse(plot.geoJson); } catch { /**/ }
+      const fn = (geo.imageFileName as string | undefined) ?? (geo.imagePath as string | undefined);
+      if (fn) {
+        const base = fn.replace(/^.*[\\/]/, "").toLowerCase();
+        const burial = burialByPlotId.get(plot.id);
+        if (burial) burialByFilename.set(base, { burial, plot });
+      }
+    }
+    // Also match on burial.photoUrl filename
+    for (const burial of burials) {
+      if (!burial.photoUrl) continue;
+      const base = burial.photoUrl.replace(/^.*[\\/]/, "").replace(/\?.*$/, "").toLowerCase();
+      if (!burialByFilename.has(base)) {
+        const plot = plots.find((p) => p.id === burial.plotId);
+        if (plot) burialByFilename.set(base, { burial, plot });
+      }
+    }
+
+    let syncedCount = 0;
+    for (const row of verifiedRows) {
+      if (row.status !== "verified") continue;
+      const primary = row.people[0];
+      if (!primary) continue;
+
+      const publicImagePath = `${folder.publicBase}/${encodeURIComponent(row.imageFileName)}`;
+      const headstoneImages = JSON.stringify([publicImagePath]);
+
+      const matched = burialByFilename.get(row.imageFileName.toLowerCase());
+      if (matched) {
+        // Update existing burial: always set headstoneImages + photoUrl;
+        // only fill name/dates if they were blank before.
+        const { burial } = matched;
+        await db
+          .update(burialsTable)
+          .set({
+            headstoneImages,
+            photoUrl: burial.photoUrl ?? publicImagePath,
+            deceasedName: burial.deceasedName || asText(primary.name) || burial.deceasedName,
+            deceasedDob: burial.deceasedDob ?? primary.dateOfBirth ?? null,
+            deceasedDod: burial.deceasedDod ?? primary.dateOfDeath ?? null,
+          })
+          .where(eqOp(burialsTable.id, burial.id));
+        syncedCount++;
+      } else if (asText(primary.name)) {
+        // Try to find a burial by name (case-insensitive exact match)
+        const nameMatch = burials.find(
+          (b) => b.deceasedName?.trim().toLowerCase() === asText(primary.name).toLowerCase(),
+        );
+        if (nameMatch) {
+          await db
+            .update(burialsTable)
+            .set({
+              headstoneImages,
+              photoUrl: nameMatch.photoUrl ?? publicImagePath,
+              deceasedDob: nameMatch.deceasedDob ?? primary.dateOfBirth ?? null,
+              deceasedDod: nameMatch.deceasedDod ?? primary.dateOfDeath ?? null,
+            })
+            .where(eqOp(burialsTable.id, nameMatch.id));
+          syncedCount++;
+        }
+      }
+    }
+
     res.json({
       verifiedCount: verifiedRows.filter((row) => row.status === "verified").length,
       needsManualEntryCount: verifiedRows.filter((row) => row.status === "needs_manual_entry").length,
       imageCount: verifiedRows.length,
+      syncedToBurials: syncedCount,
       folder: folder.publicBase,
       manifestPath: `${folder.publicBase}/headstone-manifest.json`,
     });
