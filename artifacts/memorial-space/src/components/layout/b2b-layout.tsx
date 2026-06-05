@@ -88,7 +88,7 @@ const navigation: NavigationSection[] = [
         badge: "AI",
       },
       {
-        name: "Map View",
+        name: "Grid View",
         href: "/map",
         icon: Map,
         description: "View the active cemetery map",

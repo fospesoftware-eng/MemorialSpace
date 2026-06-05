@@ -4089,7 +4089,7 @@ function PublicFullScreenMap({
   const [panMode, setPanMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState<"map" | "grid">("map");
+  const [viewMode, setViewMode] = useState<"map" | "grid">("grid");
   const mapScrollRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
   const spotTypeMap = useMemo(() => new Map(spotTypes.map((type) => [type.id, type])), [spotTypes]);
@@ -4122,20 +4122,25 @@ function PublicFullScreenMap({
   const selectedSpot = selectedId ? doc.spots.find((s) => s.id === selectedId) ?? null : null;
   const visibleIds = new Set(visibleSpots.map((s) => s.id));
 
-  // Grid sections: group visibleSpots by A-D column × 1-5 row (matching the map grid).
-  // Section label = column letter + row number, e.g. "A1", "B3", "D5".
+  // Grid sections: group visibleSpots by row number (Row 1 = A1 B1 C1 D1, Row 2 = A2 B2 C2 D2 …).
+  // Spots within each row are sorted by column A → D.
   const gridSections = useMemo(() => {
     const COL = ["A", "B", "C", "D"];
-    const map = new Map<string, typeof doc.spots>();
+    const rowMap = new Map<string, { col: string; spot: typeof visibleSpots[number] }[]>();
     for (const spot of visibleSpots) {
       const col = COL[Math.min(3, Math.floor((spot.x / Math.max(doc.imgWidth, 1)) * 4))];
       const row = Math.min(5, Math.floor((spot.y / Math.max(doc.imgHeight, 1)) * 5) + 1);
-      const key = `${col}${row}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(spot);
+      const rowKey = `Row ${row}`;
+      if (!rowMap.has(rowKey)) rowMap.set(rowKey, []);
+      rowMap.get(rowKey)!.push({ col, spot });
     }
-    // Sort A1 → A5 → B1 → … → D5
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    // Sort rows 1 → 5, spots within each row by column A → D
+    return Array.from(rowMap.entries())
+      .sort(([a], [b]) => parseInt(a.slice(4)) - parseInt(b.slice(4)))
+      .map(([key, entries]) => [
+        key,
+        entries.sort((a, b) => a.col.localeCompare(b.col)).map((e) => e.spot),
+      ] as [string, typeof visibleSpots]);
   }, [doc.imgHeight, doc.imgWidth, visibleSpots]);
 
   // Pan handlers — drag to scroll the map container
@@ -4332,10 +4337,10 @@ function PublicFullScreenMap({
                     {/* Section header */}
                     <div className="flex items-center gap-3 border-b border-white/10 bg-[#141d14] px-4 py-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-[#1e3a28]">
-                        <span className="text-sm font-bold text-white">{sectionKey}</span>
+                        <span className="text-sm font-bold text-white">{sectionKey.replace("Row ", "")}</span>
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white">Grid {sectionKey}</div>
+                        <div className="text-sm font-bold text-white">{sectionKey}</div>
                         <div className="text-[10px] text-[#576657]">{spots.length} burial spot{spots.length !== 1 ? "s" : ""}</div>
                       </div>
                     </div>

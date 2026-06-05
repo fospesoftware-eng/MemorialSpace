@@ -557,5 +557,67 @@ publicRouter.get("/cemetery-maps/public/:slug", async (req, res) => {
   });
 });
 
+authedRouter.post("/cemetery-maps/rebuild-all", async (_req, res) => {
+  const orgs = await db.select().from(organizationsTable);
+  const results: Array<{ organizationId: number; slug: string; status: string }> = [];
+
+  for (const org of orgs) {
+    const folder = mapFolder(org.id);
+    const published = await readJson<MapPayload>(path.join(folder.absolute, "published-map.json"));
+    if (!published?.doc) {
+      results.push({ organizationId: org.id, slug: org.slug, status: "skipped (no published map)" });
+      continue;
+    }
+
+    try {
+      const doc = published.doc as Record<string, unknown>;
+      const spots = Array.isArray(doc.spots)
+        ? (doc.spots as Array<Record<string, unknown>>).filter((s) => s && typeof s === "object")
+        : [];
+
+      const rawPoints = spots
+        .filter((s) => Number.isFinite(Number(s.gprX)) && Number.isFinite(Number(s.gprY)))
+        .map((s) => ({ x: Number(s.gprX), y: Number(s.gprY) }));
+
+      if (rawPoints.length < 2) {
+        results.push({ organizationId: org.id, slug: org.slug, status: "skipped (insufficient GPR data)" });
+        continue;
+      }
+
+      const minX = Math.min(...rawPoints.map((p) => p.x));
+      const maxX = Math.max(...rawPoints.map((p) => p.x));
+      const minY = Math.min(...rawPoints.map((p) => p.y));
+      const maxY = Math.max(...rawPoints.map((p) => p.y));
+      const pad = 80;
+      const spanX = Math.max(1, maxX - minX);
+      const spanY = Math.max(1, maxY - minY);
+      const longSide = Math.max(spanX, spanY);
+      const scale = Math.max(2, Math.min(24, (4000 - pad * 2) / longSide));
+      const imgWidth = Math.max(900, Math.ceil(spanX * scale + pad * 2));
+      const imgHeight = Math.max(650, Math.ceil(spanY * scale + pad * 2));
+
+      const updatedSpots = spots.map((s) => {
+        const gprX = Number(s.gprX);
+        const gprY = Number(s.gprY);
+        if (!Number.isFinite(gprX) || !Number.isFinite(gprY)) return s;
+        return {
+          ...s,
+          x: pad + (gprX - minX) * scale,
+          y: pad + (maxY - gprY) * scale,
+        };
+      });
+
+      const updatedDoc = { ...doc, imgWidth, imgHeight, spots: updatedSpots };
+      const updatedPayload: MapPayload = { ...published, doc: updatedDoc };
+      await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(updatedPayload, null, 2), "utf8");
+      results.push({ organizationId: org.id, slug: org.slug, status: `rebuilt (${updatedSpots.length} spots, scale=${scale.toFixed(2)})` });
+    } catch (err) {
+      results.push({ organizationId: org.id, slug: org.slug, status: `error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  res.json({ ok: true, rebuilt: results.filter((r) => r.status.startsWith("rebuilt")).length, results });
+});
+
 export { publicRouter as cemeteryMapsPublicRouter };
 export default authedRouter;

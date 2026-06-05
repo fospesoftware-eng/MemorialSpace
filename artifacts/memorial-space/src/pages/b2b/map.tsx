@@ -30,6 +30,8 @@ type PublishedSpot = {
   imageFileName?: string;
   imagePath?: string;
   notes?: string;
+  memorialCode?: string | null;
+  qrImageUrl?: string | null;
 };
 
 type PublishedDoc = {
@@ -201,7 +203,7 @@ export default function MapPage() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Map View</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Grid View</h1>
           <p className="text-muted-foreground mt-1">
             View the selected cemetery live map and synced burial spots.
           </p>
@@ -410,23 +412,42 @@ export default function MapPage() {
               </div>
             </div>
 
-            <aside className="rounded border bg-background p-4">
+            <aside className="rounded border bg-background p-4 overflow-auto max-h-[calc(100vh-18rem)]">
               {selectedPublishedSpot ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Burial Spot</div>
                     <h3 className="mt-1 text-lg font-semibold">
                       {selectedPublishedSpot.name || selectedPublishedSpot.temporaryId || "Unknown burial"}
                     </h3>
                   </div>
+                  {selectedPublishedSpot.imagePath && (
+                    <img
+                      src={selectedPublishedSpot.imagePath}
+                      alt="Headstone"
+                      className="w-full rounded-md object-cover max-h-40 border"
+                    />
+                  )}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <Info label="Plot" value={selectedPublishedSpot.temporaryId} />
                     <Info label="DOB" value={selectedPublishedSpot.dob} />
                     <Info label="DOD" value={selectedPublishedSpot.dod} />
-                    <Info label="Image" value={selectedPublishedSpot.imageFileName || selectedPublishedSpot.imagePath} />
                   </div>
                   {selectedPublishedSpot.notes && (
                     <p className="text-sm text-muted-foreground whitespace-pre-line">{selectedPublishedSpot.notes}</p>
+                  )}
+                  {selectedPublishedSpot.qrImageUrl && (
+                    <div className="space-y-1.5 border-t pt-3">
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Memorial QR Code</div>
+                      <img
+                        src={selectedPublishedSpot.qrImageUrl}
+                        alt="QR Code"
+                        className="w-28 h-28 border rounded-md"
+                      />
+                      {selectedPublishedSpot.memorialCode && (
+                        <p className="text-xs font-mono text-muted-foreground">{selectedPublishedSpot.memorialCode}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
