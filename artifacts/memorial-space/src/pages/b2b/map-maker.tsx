@@ -775,6 +775,9 @@ function MapMakerEditor() {
   // closing edge).
   const [pathCursor, setPathCursor] = useState<{ x: number; y: number } | null>(null);
   const viewRef = useRef<View>("2d");
+  // Set to true by load() so a concurrent loadCemeteryMap async callback
+  // doesn't clobber the manually loaded draft with an existingDraft banner.
+  const skipExistingDraftRef = useRef(false);
 
   useEffect(() => { viewRef.current = view; }, [view]);
 
@@ -881,8 +884,10 @@ function MapMakerEditor() {
         try {
           const m = migrateDoc(JSON.parse(localStorage.getItem(k)!));
           if (m.projectStatus === "published") continue;
+          // When a cemetery IS selected: only show drafts for that cemetery.
+          // When NO cemetery is selected: show ALL drafts so the user can always
+          // find and load them (removed the "hide foreign-cemetery drafts" filter).
           if (doc.cemeteryId && m.cemeteryId !== doc.cemeteryId) continue;
-          if (!doc.cemeteryId && m.cemeteryId) continue;
           list.push({ key: k, name: m.name ?? "(unnamed)", updatedAt: m.updatedAt ?? 0, cemeteryId: m.cemeteryId });
         } catch {}
       }
@@ -960,13 +965,19 @@ function MapMakerEditor() {
       const payload = body?.draft?.doc ? body.draft : body?.published?.doc ? body.published : null;
       if (payload?.doc) {
         const loaded = migrateDoc(payload.doc);
-        // Do NOT auto-load — store the summary so user can choose to load it explicitly
+        // If load() was called while this async request was in flight, skip
+        // showing the existingDraft banner — the user already has content loaded.
+        if (skipExistingDraftRef.current) {
+          skipExistingDraftRef.current = false;
+        } else {
+        // Do NOT auto-load — store the summary so user can choose explicitly
         setExistingDraft({
           name: loaded.name || (cemetery?.name ? `${cemetery.name} Map Project` : "Existing map"),
           spots: loaded.spots.length,
           plots: loaded.plots.length,
           payload: { ...payload, doc: { ...loaded, cemeteryId } },
         });
+        }
       }
       if (body?.published?.doc && typeof body.permanentUrl === "string") {
         setPublishedUrl(body.permanentUrl);
@@ -1692,20 +1703,23 @@ function MapMakerEditor() {
   const load = (key: string) => {
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return;
+      if (!raw) { setSaveError("Draft not found in storage."); setTimeout(() => setSaveError(null), 4000); return; }
       const loaded = migrateDoc(JSON.parse(raw));
+      // Prevent any in-flight loadCemeteryMap async callback from overriding
+      // this manual load with an existingDraft banner.
+      skipExistingDraftRef.current = true;
       setDoc(loaded);
       setSelection(null);
       setMergeReview(null);
-      setExistingDraft(null);       // clear any "existing draft found" banner
-      setView("2d");                // always open in editor, never preview overlay
-      setWorkflowTab("import");     // go straight to the useful step
+      setExistingDraft(null);
+      setView("2d");
+      setWorkflowTab(loaded.spots.length > 0 || loaded.plots.length > 0 ? "import" : "project");
       setFitRequest((v) => v + 1);
       flashStatus(`Loaded: ${loaded.name}`);
       void refreshPublishedMaps(loaded.cemeteryId);
       refreshSaved();
     } catch {
-      setSaveError("Could not load map from storage.");
+      setSaveError("Could not load draft — file may be corrupted.");
       setTimeout(() => setSaveError(null), 5000);
     }
   };
@@ -3170,8 +3184,8 @@ function MapMakerEditor() {
           onDragLeave={onCanvasDragLeave}
           onDrop={onCanvasDrop}
         >
-          {/* Full-screen start state: no cemetery selected yet */}
-          {!doc.cemeteryId && (
+          {/* Full-screen start state: shown only when no cemetery AND no content */}
+          {!doc.cemeteryId && doc.spots.length === 0 && doc.plots.length === 0 && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm pointer-events-auto">
               <div className="w-full max-w-md px-6 text-center">
                 <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20">
@@ -3928,7 +3942,9 @@ function MapMakerEditor() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-medium truncate">{m.name}</div>
-                          <div className="text-[10px] text-muted-foreground">{timeAgo(m.updatedAt)} · Load to edit</div>
+                          <div className="text-[10px] text-muted-foreground truncate">
+                            {m.cemeteryId ? (cemeteries.find((c) => c.id === m.cemeteryId)?.name ?? `Cemetery #${m.cemeteryId}`) : "Local draft"} · {timeAgo(m.updatedAt)}
+                          </div>
                         </div>
                       </button>
                       <Button
