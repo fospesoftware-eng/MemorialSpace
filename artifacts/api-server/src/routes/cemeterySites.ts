@@ -622,7 +622,10 @@ router.get("/c/:slug/find-grave", async (req, res) => {
       religion: r.religion,
       photoUrl: r.photoUrl,
       plotLabel: r.plotNumber ?? `Plot #${r.plotId}`,
+      // memorialCode drives the /c/:slug/memorial/:code deep-link.
+      // Fall back to the burial id so every result is always clickable.
       memorialCode: r.memorialCode ?? null,
+      burialId: r.id,
     })),
   });
 });

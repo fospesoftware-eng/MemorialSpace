@@ -14,16 +14,17 @@ export default function PublicMemorial() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
-  // id may be a numeric DB id OR a hex QR code string (e.g. "A1C936707778574E")
-  const isCodeBased = id != null && !/^\d+$/.test(id);
-  const memorialId = isCodeBased ? NaN : Number(id);
+  // Detect which URL pattern we're on
+  const isByBurial = typeof window !== "undefined" && window.location.pathname.includes("/by-burial/");
+  const isCodeBased = !isByBurial && id != null && !/^\d+$/.test(id);
+  const memorialId = isCodeBased || isByBurial ? NaN : Number(id);
 
-  // Numeric-id path (legacy links)
+  // Numeric-id path (legacy links like /memorial/123)
   const { data: memorialById, isLoading: loadingById } = useGetMemorial(memorialId, {
-    query: { enabled: !isCodeBased && !!memorialId, queryKey: getGetMemorialQueryKey(memorialId) }
+    query: { enabled: !isCodeBased && !isByBurial && !!memorialId, queryKey: getGetMemorialQueryKey(memorialId) }
   });
 
-  // Code-based path (/memorial/A1C936...)
+  // QR code path (/memorial/A1C936...)
   const { data: memorialByCode, isLoading: loadingByCode } = useQuery({
     queryKey: ["memorial-by-code", id],
     enabled: isCodeBased && !!id,
@@ -34,8 +35,19 @@ export default function PublicMemorial() {
     },
   });
 
-  const memorial = isCodeBased ? memorialByCode : memorialById;
-  const isLoading = isCodeBased ? loadingByCode : loadingById;
+  // Burial-id fallback (/memorial/by-burial/456)
+  const { data: memorialByBurial, isLoading: loadingByBurial } = useQuery({
+    queryKey: ["memorial-by-burial", id],
+    enabled: isByBurial && !!id,
+    queryFn: async () => {
+      const res = await fetch(`/api/memorial/by-burial/${id}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const memorial = isByBurial ? memorialByBurial : isCodeBased ? memorialByCode : memorialById;
+  const isLoading = isByBurial ? loadingByBurial : isCodeBased ? loadingByCode : loadingById;
 
   // For tributes we need the resolved numeric memorial ID
   const resolvedMemorialId = memorial?.id ?? NaN;

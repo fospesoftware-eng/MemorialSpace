@@ -103,6 +103,54 @@ publicRouter.get("/memorial/by-code/:code", async (req, res) => {
   res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
 });
 
+// Look up a memorial by burial id — fallback for graves that have no QR code yet.
+// Returns the memorial if one is linked; otherwise returns burial-only data so
+// the public detail page can still render the person's name, dates and photo.
+publicRouter.get("/memorial/by-burial/:burialId", async (req, res) => {
+  const burialId = Number(req.params.burialId);
+  if (!Number.isInteger(burialId) || burialId <= 0) {
+    res.status(400).json({ error: "Invalid burial id" });
+    return;
+  }
+  const [burial] = await db
+    .select()
+    .from(burialsTable)
+    .where(eq(burialsTable.id, burialId))
+    .limit(1);
+  if (!burial) { res.status(404).json({ error: "Not found" }); return; }
+
+  // Look for a linked memorial via qrCodesTable
+  const [qr] = await db
+    .select()
+    .from(qrCodesTable)
+    .where(eq(qrCodesTable.burialId, burialId))
+    .limit(1);
+
+  if (qr?.memorialId) {
+    const [memorial] = await db
+      .select()
+      .from(memorialsTable)
+      .where(eq(memorialsTable.id, qr.memorialId))
+      .limit(1);
+    if (memorial) {
+      res.json({ ...memorial, photos: memorial.photos ? JSON.parse(memorial.photos) : [] });
+      return;
+    }
+  }
+
+  // No memorial exists yet — synthesise one from burial data so the page renders
+  res.json({
+    id: null,
+    burialId: burial.id,
+    title: burial.deceasedName,
+    biography: burial.notes ?? null,
+    photos: burial.photoUrl ? [burial.photoUrl] : [],
+    isPublic: true,
+    viewCount: 0,
+    organizationId: burial.organizationId,
+  });
+});
+
 publicRouter.get("/memorials/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [memorial] = await db.select().from(memorialsTable).where(eq(memorialsTable.id, id));

@@ -169,7 +169,13 @@ export function CemeterySiteFindGrave({ slug, site }: Props) {
 
             <div className="space-y-4" data-testid="grave-results">
               {results.map((r) => {
-                const memorialHref = r.memorialCode ? `/c/${slug}/memorial/${r.memorialCode}` : null;
+                // Prefer the branded cemetery memorial page; fall back to the
+              // standalone /memorial/:code page (works even without a QR code).
+              const memorialHref = r.memorialCode
+                ? `/c/${slug}/memorial/${r.memorialCode}`
+                : r.burialId
+                  ? `/memorial/by-burial/${r.burialId}`
+                  : null;
                 const card = (
                   <div className="py-5 px-5 flex items-start gap-4">
                     {/* Avatar / photo */}
