@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
-import { db, organizationsTable, plotsTable, burialsTable, qrCodesTable } from "@workspace/db";
+import { db, organizationsTable, plotsTable, burialsTable, qrCodesTable, memorialsTable } from "@workspace/db";
 
 const authedRouter: IRouter = Router();
 const publicRouter: IRouter = Router();
@@ -431,6 +432,58 @@ authedRouter.put("/cemetery-maps", async (req, res) => {
   res.json({ ok: true, organizationId: org.id, slug: org.slug, projectId, ...mapUrls(org.slug), publicBase: folder.publicBase });
 });
 
+// Auto-generate QR codes for every burial in an org that doesn't already
+// have one. Idempotent — safe to call on every publish.
+async function autoGenerateQrCodes(
+  organizationId: number,
+  orgSlug: string,
+  origin: string,
+): Promise<number> {
+  const burials = await db.select({ id: burialsTable.id, deceasedName: burialsTable.deceasedName, plotId: burialsTable.plotId })
+    .from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+  if (!burials.length) return 0;
+
+  const existingQrs = await db.select({ burialId: qrCodesTable.burialId })
+    .from(qrCodesTable).where(eq(qrCodesTable.organizationId, organizationId));
+  const covered = new Set(existingQrs.map((q) => q.burialId).filter((x): x is number => x != null));
+
+  const todo = burials.filter((b) => !covered.has(b.id));
+  let created = 0;
+  for (const burial of todo) {
+    const code = crypto.randomBytes(8).toString("hex").toUpperCase();
+    const memorialUrl = orgSlug
+      ? `${origin}/c/${orgSlug}/memorial/${code}`
+      : `${origin}/memorial/${code}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(memorialUrl)}`;
+    const editPin = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+    try {
+      await db.transaction(async (tx) => {
+        const [memorial] = await tx.insert(memorialsTable).values({
+          burialId: burial.id,
+          organizationId,
+          title: burial.deceasedName,
+          biography: null,
+          photos: null,
+          isPublic: true,
+        }).returning({ id: memorialsTable.id });
+        await tx.insert(qrCodesTable).values({
+          code,
+          burialId: burial.id,
+          plotId: burial.plotId ?? undefined,
+          memorialId: memorial.id,
+          organizationId,
+          qrImageUrl,
+          editPin,
+        });
+      });
+      created++;
+    } catch {
+      // skip — will be picked up on next publish or manual generate
+    }
+  }
+  return created;
+}
+
 authedRouter.post("/cemetery-maps/publish", async (req, res) => {
   const organizationId = requestedCemeteryId(req);
   if (!organizationId) {
@@ -460,12 +513,24 @@ authedRouter.post("/cemetery-maps/publish", async (req, res) => {
     req.log?.error({ err, organizationId: org.id, projectId }, "Published map saved but burial spot sync failed");
     syncWarning = "Map was published, but Burial Spots sync needs attention. Check imported dates/spot data and publish again.";
   }
+
+  // Auto-generate QR codes for any burials that don't have one yet
+  let qrGenerated = 0;
+  try {
+    const proto = (String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim()) || "https";
+    const origin = req.get("host") ? `${proto}://${req.get("host")}` : "https://memorialspace.app";
+    qrGenerated = await autoGenerateQrCodes(org.id, org.slug, origin);
+  } catch (err) {
+    req.log?.warn({ err, organizationId: org.id }, "QR code auto-generation failed on publish");
+  }
+
   res.json({
     ok: true,
     organizationId: org.id,
     slug: org.slug,
     projectId,
     syncedSpots: globalSpots.length,
+    qrGenerated,
     syncWarning,
     ...mapUrls(org.slug),
     publicBase: folder.publicBase,

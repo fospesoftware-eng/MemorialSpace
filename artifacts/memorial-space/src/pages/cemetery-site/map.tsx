@@ -318,6 +318,7 @@ export function CemeterySiteMap({ slug, site }: Props) {
                     dod: selected.burial.diedYear,
                     photoUrl: selected.burial.photoUrl,
                     memorialCode: selected.burial.memorialCode,
+                    qrImageUrl: selected.burial.qrImageUrl,
                   }}
                 />
               ) : (

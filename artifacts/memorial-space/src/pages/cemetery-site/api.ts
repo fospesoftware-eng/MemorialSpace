@@ -73,6 +73,7 @@ export type PublicMapPlot = {
     diedYear: string | null;
     photoUrl: string | null;
     memorialCode: string | null;
+    qrImageUrl: string | null;
   } | null;
 };
 

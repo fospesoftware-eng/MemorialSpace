@@ -19,13 +19,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, MapPin } from "lucide-react";
+import { Plus, QrCode, Search, MapPin } from "lucide-react";
 import { PlotDetailSheet } from "@/components/plot-detail-sheet";
 
 export default function Plots() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
+  const [qrGenerating, setQrGenerating] = useState(false);
+  const [qrResult, setQrResult] = useState<{ created: number; total: number } | null>(null);
   const { data: orgs, isLoading: orgsLoading } = useListOrganizations();
   const defaultOrgId = user?.organizationId ?? undefined;
   const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>(defaultOrgId);
@@ -97,12 +99,45 @@ export default function Plots() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={!selectedOrgId || qrGenerating}
+            onClick={async () => {
+              if (!selectedOrgId) return;
+              setQrGenerating(true);
+              setQrResult(null);
+              try {
+                const res = await fetch("/api/qr-codes/bulk-generate", {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ organizationId: selectedOrgId }),
+                });
+                const body = await res.json();
+                setQrResult({ created: body.created ?? 0, total: body.total ?? 0 });
+              } finally {
+                setQrGenerating(false);
+              }
+            }}
+          >
+            <QrCode className="h-4 w-4" />
+            {qrGenerating ? "Generating…" : "Generate QR Codes"}
+          </Button>
           <Button className="gap-2" disabled={!selectedOrgId}>
             <Plus className="h-4 w-4" />
             Add Burial Spot
           </Button>
         </div>
       </div>
+
+      {qrResult && (
+        <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+          {qrResult.created > 0
+            ? `Generated ${qrResult.created} new QR code${qrResult.created !== 1 ? "s" : ""} (${qrResult.total} total burials).`
+            : `All ${qrResult.total} burial${qrResult.total !== 1 ? "s" : ""} already have QR codes.`}
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-4 bg-card p-4 border rounded-xl shadow-sm">
         <div className="relative flex-1 max-w-sm">

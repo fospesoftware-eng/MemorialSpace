@@ -660,6 +660,7 @@ router.get("/c/:slug/map", async (req, res) => {
       .select({
         code: qrCodesTable.code,
         burialId: qrCodesTable.burialId,
+        qrImageUrl: qrCodesTable.qrImageUrl,
       })
       .from(qrCodesTable)
       .where(eq(qrCodesTable.organizationId, orgId)),
@@ -675,8 +676,12 @@ router.get("/c/:slug/map", async (req, res) => {
   for (const b of burials) burialByPlot.set(b.plotId, b);
 
   const codeByBurial = new Map<number, string>();
+  const qrImageByBurial = new Map<number, string>();
   for (const q of qrs) {
-    if (q.burialId != null) codeByBurial.set(q.burialId, q.code);
+    if (q.burialId != null) {
+      codeByBurial.set(q.burialId, q.code);
+      if (q.qrImageUrl) qrImageByBurial.set(q.burialId, q.qrImageUrl);
+    }
   }
 
   const sections = Array.from(
@@ -702,6 +707,7 @@ router.get("/c/:slug/map", async (req, res) => {
               diedYear: yearOnly(burial.dod),
               photoUrl: burial.photoUrl,
               memorialCode: codeByBurial.get(burial.id) ?? null,
+              qrImageUrl: qrImageByBurial.get(burial.id) ?? null,
             }
           : null,
       };
