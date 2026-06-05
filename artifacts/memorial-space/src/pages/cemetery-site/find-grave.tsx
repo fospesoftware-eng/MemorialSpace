@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, MapPin } from "lucide-react";
+import { Search, MapPin, ChevronRight } from "lucide-react";
 import { THEMES, isThemeKey, type ThemeKey } from "./themes";
 import { usePublicGraveSearch, type PublicSite } from "./api";
 
@@ -108,59 +108,93 @@ export function CemeterySiteFindGrave({ slug, site }: Props) {
           <p style={{ color: "hsl(var(--site-muted-fg))" }} className="text-sm mb-3">
             {data.results.length} result{data.results.length === 1 ? "" : "s"} for "{query}"
           </p>
-          {data.results.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                background: "hsl(var(--site-card))",
-                border: "1px solid hsl(var(--site-border))",
-                borderRadius: "var(--site-radius)",
-              }}
-              className="p-5 flex gap-4 items-center hover:shadow-md transition-shadow"
-              data-testid={`grave-result-${r.id}`}
-            >
-              <div
-                style={{
-                  background: r.photoUrl
-                    ? `url(${r.photoUrl}) center/cover`
-                    : "hsl(var(--site-muted))",
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "var(--site-radius)",
-                }}
-                className="shrink-0 flex items-center justify-center"
-              >
-                {!r.photoUrl ? (
-                  <span style={{ color: "hsl(var(--site-muted-fg))" }} className="text-xs">
-                    No photo
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 style={{ fontFamily: theme.fontHeading }} className="text-lg font-semibold truncate">
-                  {r.name}
-                </h3>
+          {data.results.map((r) => {
+            const memorialHref = r.memorialCode
+              ? `/c/${slug}/memorial/${r.memorialCode}`
+              : null;
+            const Inner = (
+              <>
                 <div
-                  style={{ color: "hsl(var(--site-muted-fg))" }}
-                  className="text-sm flex items-center gap-3 flex-wrap mt-1"
+                  style={{
+                    background: r.photoUrl
+                      ? `url(${r.photoUrl}) center/cover`
+                      : "hsl(var(--site-muted))",
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "var(--site-radius)",
+                    flexShrink: 0,
+                  }}
+                  className="flex items-center justify-center"
                 >
-                  {r.bornYear || r.diedYear ? (
-                    <span>
-                      {r.bornYear ?? "?"} – {r.diedYear ?? "?"}
+                  {!r.photoUrl ? (
+                    <span style={{ color: "hsl(var(--site-muted-fg))" }} className="text-xs">
+                      No photo
                     </span>
                   ) : null}
-                  {r.religion ? <span>· {r.religion}</span> : null}
                 </div>
-                <div
-                  className="text-sm flex items-center gap-1.5 mt-1.5"
-                  style={{ color: "hsl(var(--site-primary))" }}
-                >
-                  <MapPin className="h-3.5 w-3.5" />
-                  {r.plotLabel}
+                <div className="flex-1 min-w-0">
+                  <h3 style={{ fontFamily: theme.fontHeading }} className="text-lg font-semibold truncate">
+                    {r.name}
+                  </h3>
+                  <div
+                    style={{ color: "hsl(var(--site-muted-fg))" }}
+                    className="text-sm flex items-center gap-3 flex-wrap mt-1"
+                  >
+                    {r.bornYear || r.diedYear ? (
+                      <span>{r.bornYear ?? "?"} – {r.diedYear ?? "?"}</span>
+                    ) : null}
+                    {r.religion ? <span>· {r.religion}</span> : null}
+                  </div>
+                  <div
+                    className="text-sm flex items-center gap-1.5 mt-1.5"
+                    style={{ color: "hsl(var(--site-primary))" }}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    {r.plotLabel}
+                  </div>
                 </div>
+                {memorialHref && (
+                  <div style={{ color: "hsl(var(--site-primary))" }} className="shrink-0 flex flex-col items-center gap-1">
+                    <ChevronRight className="h-5 w-5" />
+                    <span className="text-[10px] font-medium uppercase tracking-wider">View</span>
+                  </div>
+                )}
+              </>
+            );
+            return memorialHref ? (
+              <a
+                key={r.id}
+                href={memorialHref}
+                style={{
+                  background: "hsl(var(--site-card))",
+                  border: "1px solid hsl(var(--site-border))",
+                  borderRadius: "var(--site-radius)",
+                  textDecoration: "none",
+                  color: "inherit",
+                  display: "flex",
+                  gap: "1rem",
+                  alignItems: "center",
+                }}
+                className="p-5 hover:shadow-md hover:opacity-90 transition-all cursor-pointer"
+                data-testid={`grave-result-${r.id}`}
+              >
+                {Inner}
+              </a>
+            ) : (
+              <div
+                key={r.id}
+                style={{
+                  background: "hsl(var(--site-card))",
+                  border: "1px solid hsl(var(--site-border))",
+                  borderRadius: "var(--site-radius)",
+                }}
+                className="p-5 flex gap-4 items-center"
+                data-testid={`grave-result-${r.id}`}
+              >
+                {Inner}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
     </div>

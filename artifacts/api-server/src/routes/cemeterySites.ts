@@ -586,13 +586,18 @@ router.get("/c/:slug/find-grave", async (req, res) => {
       religion: burialsTable.religion,
       photoUrl: burialsTable.photoUrl,
       plotId: burialsTable.plotId,
-      // Plot identifier — we expose it as a label so visitors can find
-      // the grave on the cemetery's map. The schema field name varies
-      // across cemeteries; we coalesce to the row id as a safe fallback.
       plotNumber: plotsTable.plotNumber,
+      memorialCode: qrCodesTable.code,
     })
     .from(burialsTable)
     .leftJoin(plotsTable, eq(burialsTable.plotId, plotsTable.id))
+    .leftJoin(
+      qrCodesTable,
+      and(
+        eq(qrCodesTable.burialId, burialsTable.id),
+        eq(qrCodesTable.organizationId, ctx.org.id),
+      ),
+    )
     .where(
       and(
         eq(burialsTable.organizationId, ctx.org.id),
@@ -617,6 +622,7 @@ router.get("/c/:slug/find-grave", async (req, res) => {
       religion: r.religion,
       photoUrl: r.photoUrl,
       plotLabel: r.plotNumber ?? `Plot #${r.plotId}`,
+      memorialCode: r.memorialCode ?? null,
     })),
   });
 });
