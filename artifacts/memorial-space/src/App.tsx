@@ -375,10 +375,10 @@ function Router() {
       <Route path="/store">
         <SaasMarketingRoutes><PublicShop /></SaasMarketingRoutes>
       </Route>
+      {/* More-specific route must come first — burial id fallback for graves without a QR code */}
+      <Route path="/memorial/by-burial/:id" component={PublicMemorial} />
       {/* Standalone public memorial page — used by QR codes for orgs without a slug */}
       <Route path="/memorial/:id" component={PublicMemorial} />
-      {/* Fallback: graves without a QR code link here; resolved server-side by burial id */}
-      <Route path="/memorial/by-burial/:id" component={PublicMemorial} />
       <Route path="/">
         <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>
       </Route>

@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { db } from "@workspace/db";
-import { memorialsTable, tributesTable, qrCodesTable, organizationsTable } from "@workspace/db";
+import { memorialsTable, tributesTable, qrCodesTable, organizationsTable, burialsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
 const publicRouter = Router();
