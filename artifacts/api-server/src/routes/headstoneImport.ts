@@ -320,25 +320,38 @@ router.post(
     );
 
     // --- Sync verified headstone data into the burials table ---
-    // Load all plots + burials for this org so we can match by image filename.
-    const { eq: eqOp, and: andOp, or: orOp } = await import("drizzle-orm");
+    const { eq: eqOp } = await import("drizzle-orm");
     const plots = await db.select().from(plotsTable).where(eqOp(plotsTable.organizationId, organizationId));
     const burials = await db.select().from(burialsTable).where(eqOp(burialsTable.organizationId, organizationId));
 
-    // Build lookup: lowercase base filename → burial record
     const burialByPlotId = new Map(burials.map((b) => [b.plotId, b]));
+
+    // Build TWO lookups by lowercase image filename:
+    //   plotByFilename  — plot matched regardless of whether a burial exists yet
+    //   burialByFilename — plot + existing burial (for update path)
+    const plotByFilename = new Map<string, typeof plots[number]>();
     const burialByFilename = new Map<string, { burial: typeof burials[number]; plot: typeof plots[number] }>();
+
     for (const plot of plots) {
       let geo: Record<string, unknown> = {};
       try { if (plot.geoJson) geo = JSON.parse(plot.geoJson); } catch { /**/ }
       const fn = (geo.imageFileName as string | undefined) ?? (geo.imagePath as string | undefined);
       if (fn) {
         const base = fn.replace(/^.*[\\/]/, "").toLowerCase();
+        plotByFilename.set(base, plot);
         const burial = burialByPlotId.get(plot.id);
         if (burial) burialByFilename.set(base, { burial, plot });
       }
+      // Also match by plotNumber (e.g. filename "CSV-711.jpg" → plotNumber "CSV-711")
+      if (plot.plotNumber) {
+        const byNumber = plot.plotNumber.toLowerCase();
+        if (!plotByFilename.has(byNumber)) plotByFilename.set(byNumber, plot);
+        const burial = burialByPlotId.get(plot.id);
+        if (burial && !burialByFilename.has(byNumber)) burialByFilename.set(byNumber, { burial, plot });
+      }
     }
-    // Also match on burial.photoUrl filename
+
+    // Also match via burial.photoUrl filename
     for (const burial of burials) {
       if (!burial.photoUrl) continue;
       const base = burial.photoUrl.replace(/^.*[\\/]/, "").replace(/\?.*$/, "").toLowerCase();
@@ -357,38 +370,66 @@ router.post(
       const publicImagePath = `${folder.publicBase}/${encodeURIComponent(row.imageFileName)}`;
       const headstoneImages = JSON.stringify([publicImagePath]);
 
-      const matched = burialByFilename.get(row.imageFileName.toLowerCase());
-      if (matched) {
-        // Update existing burial: always set headstoneImages + photoUrl;
-        // only fill name/dates if they were blank before.
-        const { burial } = matched;
+      // Strip extension for plot-number matching (e.g. "CSV-711.jpg" → "CSV-711")
+      const fileBase = row.imageFileName.toLowerCase();
+      const fileBaseStem = fileBase.replace(/\.[^.]+$/, "");
+
+      const existingMatch = burialByFilename.get(fileBase) ?? burialByFilename.get(fileBaseStem);
+
+      if (existingMatch) {
+        // UPDATE existing burial
+        const { burial } = existingMatch;
         await db
           .update(burialsTable)
           .set({
             headstoneImages,
             photoUrl: burial.photoUrl ?? publicImagePath,
-            deceasedName: burial.deceasedName || asText(primary.name) || burial.deceasedName,
+            deceasedName: burial.deceasedName || asText(primary.name),
             deceasedDob: burial.deceasedDob ?? primary.dateOfBirth ?? null,
             deceasedDod: burial.deceasedDod ?? primary.dateOfDeath ?? null,
           })
           .where(eqOp(burialsTable.id, burial.id));
         syncedCount++;
-      } else if (asText(primary.name)) {
-        // Try to find a burial by name (case-insensitive exact match)
-        const nameMatch = burials.find(
-          (b) => b.deceasedName?.trim().toLowerCase() === asText(primary.name).toLowerCase(),
-        );
-        if (nameMatch) {
-          await db
-            .update(burialsTable)
-            .set({
-              headstoneImages,
-              photoUrl: nameMatch.photoUrl ?? publicImagePath,
-              deceasedDob: nameMatch.deceasedDob ?? primary.dateOfBirth ?? null,
-              deceasedDod: nameMatch.deceasedDod ?? primary.dateOfDeath ?? null,
-            })
-            .where(eqOp(burialsTable.id, nameMatch.id));
+      } else {
+        // No burial yet — try to find the plot and CREATE one
+        const matchedPlot = plotByFilename.get(fileBase) ?? plotByFilename.get(fileBaseStem);
+
+        if (matchedPlot && asText(primary.name)) {
+          // Create burial record linked to the matched plot
+          await db.insert(burialsTable).values({
+            organizationId,
+            plotId: matchedPlot.id,
+            deceasedName: asText(primary.name),
+            deceasedDob: primary.dateOfBirth ?? null,
+            deceasedDod: primary.dateOfDeath ?? null,
+            photoUrl: publicImagePath,
+            headstoneImages,
+          });
+          // Mark the plot as occupied if it was available
+          if (matchedPlot.status === "available") {
+            await db
+              .update(plotsTable)
+              .set({ status: "occupied" })
+              .where(eqOp(plotsTable.id, matchedPlot.id));
+          }
           syncedCount++;
+        } else if (asText(primary.name)) {
+          // Last resort: match by deceased name
+          const nameMatch = burials.find(
+            (b) => b.deceasedName?.trim().toLowerCase() === asText(primary.name).toLowerCase(),
+          );
+          if (nameMatch) {
+            await db
+              .update(burialsTable)
+              .set({
+                headstoneImages,
+                photoUrl: nameMatch.photoUrl ?? publicImagePath,
+                deceasedDob: nameMatch.deceasedDob ?? primary.dateOfBirth ?? null,
+                deceasedDod: nameMatch.deceasedDod ?? primary.dateOfDeath ?? null,
+              })
+              .where(eqOp(burialsTable.id, nameMatch.id));
+            syncedCount++;
+          }
         }
       }
     }
