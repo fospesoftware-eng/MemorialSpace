@@ -319,119 +319,79 @@ router.post(
       "utf8",
     );
 
-    // --- Sync verified headstone data into the burials table ---
+    // --- Sync verified headstone data into burials + plots ---
+    // The primary match is simple: image filename stem == plot number
+    // (e.g. "CSV-711.jpg" → plotNumber "CSV-711"). Plots already exist from CSV import.
     const { eq: eqOp } = await import("drizzle-orm");
     const plots = await db.select().from(plotsTable).where(eqOp(plotsTable.organizationId, organizationId));
     const burials = await db.select().from(burialsTable).where(eqOp(burialsTable.organizationId, organizationId));
 
+    // Index plots by plotNumber (lowercase) for fast lookup
+    const plotByNumber = new Map(plots.map((p) => [p.plotNumber.toLowerCase(), p]));
+    // Index existing burials by plotId
     const burialByPlotId = new Map(burials.map((b) => [b.plotId, b]));
 
-    // Build TWO lookups by lowercase image filename:
-    //   plotByFilename  — plot matched regardless of whether a burial exists yet
-    //   burialByFilename — plot + existing burial (for update path)
-    const plotByFilename = new Map<string, typeof plots[number]>();
-    const burialByFilename = new Map<string, { burial: typeof burials[number]; plot: typeof plots[number] }>();
-
-    for (const plot of plots) {
-      let geo: Record<string, unknown> = {};
-      try { if (plot.geoJson) geo = JSON.parse(plot.geoJson); } catch { /**/ }
-      const fn = (geo.imageFileName as string | undefined) ?? (geo.imagePath as string | undefined);
-      if (fn) {
-        const base = fn.replace(/^.*[\\/]/, "").toLowerCase();
-        plotByFilename.set(base, plot);
-        const burial = burialByPlotId.get(plot.id);
-        if (burial) burialByFilename.set(base, { burial, plot });
-      }
-      // Also match by plotNumber (e.g. filename "CSV-711.jpg" → plotNumber "CSV-711")
-      if (plot.plotNumber) {
-        const byNumber = plot.plotNumber.toLowerCase();
-        if (!plotByFilename.has(byNumber)) plotByFilename.set(byNumber, plot);
-        const burial = burialByPlotId.get(plot.id);
-        if (burial && !burialByFilename.has(byNumber)) burialByFilename.set(byNumber, { burial, plot });
-      }
-    }
-
-    // Also match via burial.photoUrl filename
-    for (const burial of burials) {
-      if (!burial.photoUrl) continue;
-      const base = burial.photoUrl.replace(/^.*[\\/]/, "").replace(/\?.*$/, "").toLowerCase();
-      if (!burialByFilename.has(base)) {
-        const plot = plots.find((p) => p.id === burial.plotId);
-        if (plot) burialByFilename.set(base, { burial, plot });
-      }
-    }
-
     let syncedCount = 0;
+
     for (const row of verifiedRows) {
       if (row.status !== "verified") continue;
       const primary = row.people[0];
-      if (!primary) continue;
+      if (!primary || !asText(primary.name)) continue;
 
       const publicImagePath = `${folder.publicBase}/${encodeURIComponent(row.imageFileName)}`;
       const headstoneImages = JSON.stringify([publicImagePath]);
 
-      // Strip extension for plot-number matching (e.g. "CSV-711.jpg" → "CSV-711")
-      const fileBase = row.imageFileName.toLowerCase();
-      const fileBaseStem = fileBase.replace(/\.[^.]+$/, "");
+      // Primary match: strip extension → plotNumber  (CSV-711.jpg → CSV-711)
+      const stem = row.imageFileName.replace(/\.[^.]+$/, "").toLowerCase();
+      const matchedPlot = plotByNumber.get(stem) ?? plotByNumber.get(row.imageFileName.toLowerCase());
 
-      const existingMatch = burialByFilename.get(fileBase) ?? burialByFilename.get(fileBaseStem);
+      if (!matchedPlot) continue; // no plot found for this image — skip
 
-      if (existingMatch) {
-        // UPDATE existing burial
-        const { burial } = existingMatch;
+      const existingBurial = burialByPlotId.get(matchedPlot.id);
+
+      if (existingBurial) {
+        // UPDATE: always write headstoneImages; fill blanks only
         await db
           .update(burialsTable)
           .set({
             headstoneImages,
-            photoUrl: burial.photoUrl ?? publicImagePath,
-            deceasedName: burial.deceasedName || asText(primary.name),
-            deceasedDob: burial.deceasedDob ?? primary.dateOfBirth ?? null,
-            deceasedDod: burial.deceasedDod ?? primary.dateOfDeath ?? null,
+            photoUrl: existingBurial.photoUrl ?? publicImagePath,
+            deceasedName: existingBurial.deceasedName || asText(primary.name),
+            deceasedDob: existingBurial.deceasedDob ?? primary.dateOfBirth ?? null,
+            deceasedDod: existingBurial.deceasedDod ?? primary.dateOfDeath ?? null,
           })
-          .where(eqOp(burialsTable.id, burial.id));
-        syncedCount++;
+          .where(eqOp(burialsTable.id, existingBurial.id));
       } else {
-        // No burial yet — try to find the plot and CREATE one
-        const matchedPlot = plotByFilename.get(fileBase) ?? plotByFilename.get(fileBaseStem);
-
-        if (matchedPlot && asText(primary.name)) {
-          // Create burial record linked to the matched plot
-          await db.insert(burialsTable).values({
-            organizationId,
-            plotId: matchedPlot.id,
-            deceasedName: asText(primary.name),
-            deceasedDob: primary.dateOfBirth ?? null,
-            deceasedDod: primary.dateOfDeath ?? null,
-            photoUrl: publicImagePath,
-            headstoneImages,
-          });
-          // Mark the plot as occupied if it was available
-          if (matchedPlot.status === "available") {
-            await db
-              .update(plotsTable)
-              .set({ status: "occupied" })
-              .where(eqOp(plotsTable.id, matchedPlot.id));
-          }
-          syncedCount++;
-        } else if (asText(primary.name)) {
-          // Last resort: match by deceased name
-          const nameMatch = burials.find(
-            (b) => b.deceasedName?.trim().toLowerCase() === asText(primary.name).toLowerCase(),
-          );
-          if (nameMatch) {
-            await db
-              .update(burialsTable)
-              .set({
-                headstoneImages,
-                photoUrl: nameMatch.photoUrl ?? publicImagePath,
-                deceasedDob: nameMatch.deceasedDob ?? primary.dateOfBirth ?? null,
-                deceasedDod: nameMatch.deceasedDod ?? primary.dateOfDeath ?? null,
-              })
-              .where(eqOp(burialsTable.id, nameMatch.id));
-            syncedCount++;
-          }
+        // CREATE: new burial linked to the matched plot
+        await db.insert(burialsTable).values({
+          organizationId,
+          plotId: matchedPlot.id,
+          deceasedName: asText(primary.name),
+          deceasedDob: primary.dateOfBirth ?? null,
+          deceasedDod: primary.dateOfDeath ?? null,
+          photoUrl: publicImagePath,
+          headstoneImages,
+        });
+        // Mark plot occupied if it was available
+        if (matchedPlot.status === "available") {
+          await db
+            .update(plotsTable)
+            .set({ status: "occupied" })
+            .where(eqOp(plotsTable.id, matchedPlot.id));
         }
       }
+
+      // Always write imageFileName into plot geoJson so the library stays linked
+      let geo: Record<string, unknown> = {};
+      try { if (matchedPlot.geoJson) geo = JSON.parse(matchedPlot.geoJson); } catch { /**/ }
+      geo.imageFileName = row.imageFileName;
+      geo.imagePath = publicImagePath;
+      await db
+        .update(plotsTable)
+        .set({ geoJson: JSON.stringify(geo) })
+        .where(eqOp(plotsTable.id, matchedPlot.id));
+
+      syncedCount++;
     }
 
     res.json({

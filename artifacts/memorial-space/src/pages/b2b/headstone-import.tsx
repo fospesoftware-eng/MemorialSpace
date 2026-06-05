@@ -377,13 +377,12 @@ export default function HeadstoneImportPage() {
       {success && (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>Headstone verification saved</AlertTitle>
+          <AlertTitle>Headstones synced to map</AlertTitle>
           <AlertDescription>
-            Saved {success.imageCount} image records. {success.verifiedCount} verified,{" "}
-            {success.needsManualEntryCount} still missing names.{" "}
             {success.syncedToBurials > 0
-              ? `${success.syncedToBurials} burial record${success.syncedToBurials === 1 ? "" : "s"} updated with headstone image.`
-              : "No matching burial records found — open the plot and link manually if needed."}
+              ? `${success.syncedToBurials} burial spot${success.syncedToBurials === 1 ? "" : "s"} updated — headstone images are now visible in Burial Spots and Grid View.`
+              : "No plots matched by filename. Make sure image filenames match your plot numbers (e.g. CSV-711.jpg for plot CSV-711)."}
+            {success.needsManualEntryCount > 0 && ` ${success.needsManualEntryCount} image${success.needsManualEntryCount === 1 ? "" : "s"} still need a name.`}
           </AlertDescription>
         </Alert>
       )}
@@ -473,7 +472,7 @@ export default function HeadstoneImportPage() {
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              {saving ? "Saving..." : "Save verification"}
+              {saving ? "Syncing..." : "Save & Sync to Map"}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
