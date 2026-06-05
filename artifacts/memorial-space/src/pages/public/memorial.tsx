@@ -28,7 +28,7 @@ export default function PublicMemorial() {
     queryKey: ["memorial-by-code", id],
     enabled: isCodeBased && !!id,
     queryFn: async () => {
-      const res = await fetch(`/memorial/by-code/${id}`);
+      const res = await fetch(`/api/memorial/by-code/${id}`, { credentials: "include" });
       if (!res.ok) return null;
       return res.json();
     },

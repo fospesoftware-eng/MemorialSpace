@@ -375,6 +375,8 @@ function Router() {
       <Route path="/store">
         <SaasMarketingRoutes><PublicShop /></SaasMarketingRoutes>
       </Route>
+      {/* Standalone public memorial page — used by QR codes for orgs without a slug */}
+      <Route path="/memorial/:id" component={PublicMemorial} />
       <Route path="/">
         <SaasMarketingRoutes><SaasHome /></SaasMarketingRoutes>
       </Route>
