@@ -1697,10 +1697,17 @@ function MapMakerEditor() {
       setDoc(loaded);
       setSelection(null);
       setMergeReview(null);
-      setView(loaded.spots.length || loaded.plots.length ? "2d" : "preview");
-      setFitRequest((value) => value + 1);
+      setExistingDraft(null);       // clear any "existing draft found" banner
+      setView("2d");                // always open in editor, never preview overlay
+      setWorkflowTab("import");     // go straight to the useful step
+      setFitRequest((v) => v + 1);
+      flashStatus(`Loaded: ${loaded.name}`);
       void refreshPublishedMaps(loaded.cemeteryId);
-    } catch {}
+      refreshSaved();
+    } catch {
+      setSaveError("Could not load map from storage.");
+      setTimeout(() => setSaveError(null), 5000);
+    }
   };
 
   const removeMap = (key: string) => {
