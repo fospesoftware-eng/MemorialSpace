@@ -53,23 +53,68 @@ router.get("/qr-codes", async (req, res) => {
 // org has no slug we still generate the QR but encode a fallback URL —
 // the operator can regenerate after publishing their site.
 router.post("/qr-codes", async (req, res) => {
-  const code = crypto.randomBytes(8).toString("hex").toUpperCase();
   const orgId = Number(req.body?.organizationId);
-  let memorialUrl = `${publicOrigin(req)}/memorial/${code}`;
-  if (Number.isFinite(orgId) && orgId > 0) {
-    const [org] = await db
-      .select({ slug: organizationsTable.slug })
-      .from(organizationsTable)
-      .where(eq(organizationsTable.id, orgId));
-    if (org?.slug) {
-      memorialUrl = `${publicOrigin(req)}/c/${org.slug}/memorial/${code}`;
-    }
+  if (!Number.isFinite(orgId) || orgId <= 0) {
+    res.status(400).json({ error: "organizationId is required" });
+    return;
   }
+
+  // Verify the org exists and get its slug for the memorial URL
+  const [org] = await db
+    .select({ id: organizationsTable.id, slug: organizationsTable.slug })
+    .from(organizationsTable)
+    .where(eq(organizationsTable.id, orgId));
+  if (!org) {
+    res.status(404).json({ error: "Organization not found" });
+    return;
+  }
+
+  const burialId = req.body?.burialId != null ? Number(req.body.burialId) : undefined;
+  const plotId   = req.body?.plotId   != null ? Number(req.body.plotId)   : undefined;
+  const memorialId = req.body?.memorialId != null ? Number(req.body.memorialId) : undefined;
+
+  const code = crypto.randomBytes(8).toString("hex").toUpperCase();
+  const memorialUrl = org.slug
+    ? `${publicOrigin(req)}/c/${org.slug}/memorial/${code}`
+    : `${publicOrigin(req)}/memorial/${code}`;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(memorialUrl)}`;
   const editPin = newEditPin();
+
+  // Create a stub memorial row so the QR code has a destination page
+  let resolvedMemorialId = memorialId;
+  if (!resolvedMemorialId && burialId) {
+    try {
+      const burialName = await db
+        .select({ name: burialsTable.deceasedName })
+        .from(burialsTable)
+        .where(eq(burialsTable.id, burialId))
+        .limit(1)
+        .then((r) => r[0]?.name ?? null);
+      const [memorial] = await db.insert(memorialsTable).values({
+        burialId,
+        organizationId: orgId,
+        title: burialName,
+        biography: null,
+        photos: null,
+        isPublic: true,
+      }).returning({ id: memorialsTable.id });
+      resolvedMemorialId = memorial.id;
+    } catch {
+      // Memorial creation is best-effort; QR still works without it
+    }
+  }
+
   const [qrCode] = await db
     .insert(qrCodesTable)
-    .values({ ...req.body, code, qrImageUrl, editPin })
+    .values({
+      code,
+      organizationId: orgId,
+      burialId: Number.isFinite(burialId) ? burialId : undefined,
+      plotId: Number.isFinite(plotId) ? plotId : undefined,
+      memorialId: resolvedMemorialId,
+      qrImageUrl,
+      editPin,
+    })
     .returning();
   res.status(201).json(qrCode);
 });

@@ -1,16 +1,14 @@
 /**
- * Reusable plot detail Sheet. Opens when a burial spot row/cell is clicked
- * in the Grid View, Burial Spots list, or Cemetery Map.
+ * Reusable plot detail Sheet — opens when a burial spot is clicked in the
+ * Grid View, Burial Spots list, or Cemetery Map.
  */
-import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListPlots,
   useListBurials,
   useListQrCodes,
   useGetOrganization,
   getListBurialsQueryKey,
-  getListQrCodesQueryKey,
 } from "@workspace/api-client-react";
 import type { QrCode } from "@workspace/api-client-react";
 import {
@@ -40,81 +38,104 @@ function buildQrByBurialMap(rows: QrCode[] | undefined): Map<number, QrCode> {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case "available":    return "bg-[#40916c] hover:bg-[#40916c]/80";
-    case "reserved":     return "bg-[#d4a843] hover:bg-[#d4a843]/80";
-    case "occupied":     return "bg-[#374151] hover:bg-[#374151]/80";
-    case "maintenance":  return "bg-[#ef4444] hover:bg-[#ef4444]/80";
-    default:             return "bg-secondary hover:bg-secondary/80";
+    case "available":   return "bg-[#40916c] hover:bg-[#40916c]/80";
+    case "reserved":    return "bg-[#d4a843] hover:bg-[#d4a843]/80";
+    case "occupied":    return "bg-[#374151] hover:bg-[#374151]/80";
+    case "maintenance": return "bg-[#ef4444] hover:bg-[#ef4444]/80";
+    default:            return "bg-secondary hover:bg-secondary/80";
   }
 }
 
-// Generate a QR code for a single burial by calling POST /api/qr-codes.
-// Returns the created QrCode row on success.
-async function generateQrForBurial(opts: {
-  burialId: number;
-  plotId: number | null;
-  organizationId: number;
-}): Promise<QrCode> {
-  const res = await fetch("/api/qr-codes", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      burialId: opts.burialId,
-      plotId: opts.plotId ?? undefined,
-      organizationId: opts.organizationId,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error ?? `Failed to generate QR (${res.status})`);
-  }
-  return res.json() as Promise<QrCode>;
-}
+// ─── Per-burial QR panel ──────────────────────────────────────────────────────
+// Self-contained: owns its own QR state so it doesn't depend on shared hook
+// timing. Starts with whatever the parent found in the cache, then lets the
+// operator generate if missing.
 
-// ─── Inline QR generator shown when a burial has no QR code yet ──────────────
-
-function GenerateQrButton({
-  burialId,
-  plotId,
-  organizationId,
-  onGenerated,
-}: {
+type BurialQrPanelProps = {
   burialId: number;
-  plotId: number | null;
+  plotId: number;
   organizationId: number;
-  onGenerated: (qr: QrCode) => void;
-}) {
-  const [loading, setLoading] = useState(false);
+  siteSlug: string | undefined;
+  initialQr: QrCode | undefined;
+  burial: {
+    name: string;
+    dob: string | null;
+    dod: string | null;
+    burialDate: string | null;
+    religion: string | null;
+    photoUrl: string | null;
+    notes: string | null;
+  };
+};
+
+function BurialQrPanel({ burialId, plotId, organizationId, siteSlug, initialQr, burial }: BurialQrPanelProps) {
+  const [qr, setQr] = useState<QrCode | undefined>(initialQr);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sync when the parent resolves its hook (e.g. initial render before cache hit)
+  useEffect(() => {
+    if (initialQr && !qr) setQr(initialQr);
+  }, [initialQr, qr]);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/qr-codes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ burialId, plotId, organizationId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `Failed (${res.status})`);
+      setQr(body as QrCode);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "QR generation failed.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-1.5 px-3 py-3 rounded-md border border-dashed border-sidebar-border bg-sidebar-accent/20">
-      <p className="text-xs text-sidebar-foreground/60">
-        No QR code yet. Generate one to link this burial to a memorial page.
-      </p>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <Button
-        size="sm"
-        variant="outline"
-        className="gap-1.5 self-start"
-        disabled={loading}
-        onClick={async () => {
-          setLoading(true);
-          setError(null);
-          try {
-            const qr = await generateQrForBurial({ burialId, plotId, organizationId });
-            onGenerated(qr);
-          } catch (err) {
-            setError(err instanceof Error ? err.message : "Generation failed.");
-          } finally {
-            setLoading(false);
-          }
+    <div className="space-y-2">
+      <BurialDetails
+        variant="admin"
+        siteSlug={siteSlug}
+        burial={{
+          name: burial.name,
+          dob: burial.dob,
+          dod: burial.dod,
+          burialDate: burial.burialDate,
+          religion: burial.religion,
+          photoUrl: burial.photoUrl,
+          notes: burial.notes,
+          memorialCode: qr?.code ?? null,
+          qrImageUrl: qr?.qrImageUrl ?? null,
+          editPin: qr?.editPin ?? null,
         }}
-      >
-        <QrCodeIcon className="h-3.5 w-3.5" />
-        {loading ? "Generating…" : "Generate QR Code"}
-      </Button>
+      />
+
+      {/* Show Generate button only when no QR exists */}
+      {!qr && (
+        <div className="flex flex-col gap-1.5 px-3 py-3 rounded-md border border-dashed border-sidebar-border bg-sidebar-accent/20">
+          <p className="text-xs text-sidebar-foreground/60">
+            No QR code yet — generate one to link this burial to a memorial page.
+          </p>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 self-start"
+            disabled={generating}
+            onClick={handleGenerate}
+          >
+            <QrCodeIcon className="h-3.5 w-3.5" />
+            {generating ? "Generating…" : "Generate QR Code"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -129,39 +150,29 @@ export type PlotDetailSheetProps = {
 
 export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDetailSheetProps) {
   const orgId = organizationId ?? 0;
-  const queryClient = useQueryClient();
+  const enabled = organizationId != null && plotId != null;
 
   const { data: plots } = useListPlots(
     { organizationId: orgId },
     { query: { enabled: organizationId != null } },
   );
-  const plot = plots?.find((p) => p.id === plotId);
+  const plot = plots?.find((p: any) => p.id === plotId);
 
-  const burialsParams = plotId != null ? { organizationId: orgId, plotId } : undefined;
+  const burialsParams = enabled ? { organizationId: orgId, plotId: plotId! } : undefined;
   const { data: burials, isLoading: burialsLoading } = useListBurials(burialsParams, {
     query: {
-      enabled: plotId != null && organizationId != null,
+      enabled,
       queryKey: getListBurialsQueryKey(burialsParams),
     },
   });
 
-  const { data: qrCodes, refetch: refetchQrCodes } = useListQrCodes(
+  const { data: qrCodes } = useListQrCodes(
     { organizationId: orgId },
     { query: { enabled: organizationId != null } },
   );
-  const { data: org } = useGetOrganization(orgId, { query: { enabled: organizationId != null } });
+  const { data: org } = useGetOrganization(orgId);
+
   const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
-
-  // Local QR overrides — applied immediately after inline generation so the
-  // QR shows without waiting for the server cache to refresh.
-  const [localQrOverrides, setLocalQrOverrides] = useState<Map<number, QrCode>>(new Map());
-
-  function handleQrGenerated(burialId: number, qr: QrCode) {
-    setLocalQrOverrides((prev) => new Map(prev).set(burialId, qr));
-    // Also refresh the global QR list so other parts of the UI see the new code
-    void refetchQrCodes();
-    void queryClient.invalidateQueries({ queryKey: getListQrCodesQueryKey({ organizationId: orgId }) });
-  }
 
   return (
     <Sheet open={plotId != null} onOpenChange={onOpenChange}>
@@ -233,7 +244,6 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
                   {burialsLoading ? (
                     <div className="space-y-2">
                       <Skeleton className="h-24 rounded-md bg-sidebar-accent/40" />
-                      <Skeleton className="h-24 rounded-md bg-sidebar-accent/40" />
                     </div>
                   ) : !burials || burials.length === 0 ? (
                     <p className="text-xs text-sidebar-foreground/60 italic py-3 px-3 rounded-md border border-dashed border-sidebar-border bg-sidebar-accent/20">
@@ -241,44 +251,30 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
                     </p>
                   ) : (
                     <ul className="space-y-4" data-testid="burial-list">
-                      {burials.map((b) => {
-                        const qr = localQrOverrides.get(b.id) ?? qrByBurial.get(b.id);
-                        return (
-                          <li key={b.id} data-testid={`burial-${b.id}`} className="space-y-2">
-                            <BurialDetails
-                              variant="admin"
-                              siteSlug={org?.slug}
-                              burial={{
-                                name: b.deceasedName,
-                                dob: b.deceasedDob,
-                                dod: b.deceasedDod,
-                                burialDate: b.burialDate,
-                                religion: b.religion,
-                                photoUrl: b.photoUrl,
-                                notes: b.notes,
-                                memorialCode: qr?.code ?? null,
-                                qrImageUrl: qr?.qrImageUrl ?? null,
-                                editPin: qr?.editPin ?? null,
-                              }}
-                            />
-
-                            {/* Inline QR generator when no code exists yet */}
-                            {!qr && organizationId != null && (
-                              <GenerateQrButton
-                                burialId={b.id}
-                                plotId={b.plotId}
-                                organizationId={organizationId}
-                                onGenerated={(newQr) => handleQrGenerated(b.id, newQr)}
-                              />
-                            )}
-
-                            <BurialFamilyLinks burialId={b.id} />
-                            <div className="px-3 py-1.5 text-[10px] text-sidebar-foreground/50">
-                              Burial spot #{b.plotId} · Record #{b.id}
-                            </div>
-                          </li>
-                        );
-                      })}
+                      {(burials as any[]).map((b) => (
+                        <li key={b.id} data-testid={`burial-${b.id}`} className="space-y-1.5">
+                          <BurialQrPanel
+                            burialId={b.id}
+                            plotId={b.plotId}
+                            organizationId={orgId}
+                            siteSlug={org?.slug}
+                            initialQr={qrByBurial.get(b.id)}
+                            burial={{
+                              name: b.deceasedName,
+                              dob: b.deceasedDob,
+                              dod: b.deceasedDod,
+                              burialDate: b.burialDate,
+                              religion: b.religion,
+                              photoUrl: b.photoUrl,
+                              notes: b.notes,
+                            }}
+                          />
+                          <BurialFamilyLinks burialId={b.id} />
+                          <div className="px-3 py-1 text-[10px] text-sidebar-foreground/50">
+                            Burial spot #{b.plotId} · Record #{b.id}
+                          </div>
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </section>
@@ -291,7 +287,7 @@ export function PlotDetailSheet({ plotId, organizationId, onOpenChange }: PlotDe
   );
 }
 
-// ─── BurialDetailSheet (used by the Burials list page) ───────────────────────
+// ─── BurialDetailSheet (used by Burials list page) ───────────────────────────
 
 export type BurialRecord = {
   id: number;
@@ -316,19 +312,9 @@ export function BurialDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
-  const { data: qrCodes, refetch: refetchQrCodes } = useListQrCodes({ organizationId });
+  const { data: qrCodes } = useListQrCodes({ organizationId });
   const { data: org } = useGetOrganization(organizationId);
   const qrByBurial = useMemo(() => buildQrByBurialMap(qrCodes), [qrCodes]);
-  const [localQr, setLocalQr] = useState<QrCode | null>(null);
-
-  const qr = localQr ?? (burial ? qrByBurial.get(burial.id) : undefined);
-
-  function handleQrGenerated(newQr: QrCode) {
-    setLocalQr(newQr);
-    void refetchQrCodes();
-    void queryClient.invalidateQueries({ queryKey: getListQrCodesQueryKey({ organizationId }) });
-  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -346,9 +332,12 @@ export function BurialDetailSheet({
 
             {burial && (
               <div className="mt-8 space-y-3" data-testid="burial-detail">
-                <BurialDetails
-                  variant="admin"
+                <BurialQrPanel
+                  burialId={burial.id}
+                  plotId={burial.plotId}
+                  organizationId={organizationId}
                   siteSlug={org?.slug}
+                  initialQr={qrByBurial.get(burial.id)}
                   burial={{
                     name: burial.deceasedName,
                     dob: burial.deceasedDob,
@@ -357,21 +346,8 @@ export function BurialDetailSheet({
                     religion: burial.religion,
                     photoUrl: burial.photoUrl,
                     notes: burial.notes,
-                    memorialCode: qr?.code ?? null,
-                    qrImageUrl: qr?.qrImageUrl ?? null,
-                    editPin: qr?.editPin ?? null,
                   }}
                 />
-
-                {!qr && (
-                  <GenerateQrButton
-                    burialId={burial.id}
-                    plotId={burial.plotId}
-                    organizationId={organizationId}
-                    onGenerated={handleQrGenerated}
-                  />
-                )}
-
                 <BurialFamilyLinks burialId={burial.id} />
               </div>
             )}
