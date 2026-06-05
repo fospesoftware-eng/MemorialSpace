@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Users, QrCode as QrCodeIcon } from "lucide-react";
+import { Plus, Search, Users, QrCode as QrCodeIcon, Download } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { BurialDetailSheet, type BurialRecord } from "@/components/plot-detail-sheet";
@@ -73,6 +73,23 @@ export default function Burials() {
           <p className="text-muted-foreground mt-1">Manage burial records and deceased information.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              const url = `${BASE}/api/cemetery-roster/csv?organizationId=${ORG_ID}`;
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = "cemetery-roster.csv";
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }}
+            disabled={(burials?.length ?? 0) === 0}
+          >
+            <Download className="h-4 w-4" />
+            Download Roster
+          </Button>
           <Button
             variant="outline"
             className="gap-2"

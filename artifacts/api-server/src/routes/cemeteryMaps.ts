@@ -707,5 +707,352 @@ authedRouter.post("/cemetery-maps/rebuild-all", async (_req, res) => {
   res.json({ ok: true, rebuilt: results.filter((r) => r.status.startsWith("rebuilt")).length, results });
 });
 
+// ---------------------------------------------------------------------------
+// Field survey CSV import helpers
+// ---------------------------------------------------------------------------
+
+function parseSimpleCsv(text: string): Array<Record<string, string>> {
+  // Strip BOM and normalise line endings
+  const cleaned = text.replace(/^﻿/, "").replace(/\r\n|\r/g, "\n");
+  const lines = cleaned.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const parseRow = (line: string): string[] => {
+    const fields: string[] = [];
+    let field = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { field += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { field += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { fields.push(field); field = ""; }
+        else { field += ch; }
+      }
+    }
+    fields.push(field);
+    return fields;
+  };
+
+  const headers = parseRow(lines[0]).map((h) => h.trim());
+  const result: Array<Record<string, string>> = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseRow(lines[i]);
+    const obj: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      obj[headers[j]] = (values[j] ?? "").trim();
+    }
+    result.push(obj);
+  }
+  return result;
+}
+
+interface CoordSystem {
+  minX: number; minY: number; maxX: number; maxY: number;
+  scale: number; pad: number; width: number; height: number;
+}
+
+function buildCoordSystem(allPoints: Array<{ x: number; y: number }>): CoordSystem {
+  const width = 2200;
+  const height = 1800;
+  const pad = 72;
+  const minX = Math.min(...allPoints.map((p) => p.x));
+  const maxX = Math.max(...allPoints.map((p) => p.x));
+  const minY = Math.min(...allPoints.map((p) => p.y));
+  const maxY = Math.max(...allPoints.map((p) => p.y));
+  const rangeX = Math.max(1, maxX - minX);
+  const rangeY = Math.max(1, maxY - minY);
+  const scale = Math.min((width - 2 * pad) / rangeX, (height - 2 * pad) / rangeY);
+  return { minX, minY, maxX, maxY, scale, pad, width, height };
+}
+
+function projectPoint(cs: CoordSystem, x: number, y: number): { x: number; y: number } {
+  return {
+    x: (x - cs.minX) * cs.scale + cs.pad,
+    y: cs.height - ((y - cs.minY) * cs.scale + cs.pad),
+  };
+}
+
+function parseWktPolygon(wkt: string): Array<{ x: number; y: number }> {
+  // Handles POLYGON Z((x y z, ...)) and POLYGON((x y, ...))
+  const inner = wkt.replace(/^POLYGON\s*Z?\s*\(\(/, "").replace(/\)\)\s*$/, "");
+  return inner.split(",").map((part) => {
+    const coords = part.trim().split(/\s+/);
+    return { x: parseFloat(coords[0] ?? "0"), y: parseFloat(coords[1] ?? "0") };
+  }).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
+function fullName(first: string, middle: string, last: string): string {
+  return [first, middle, last].map((s) => s.trim()).filter(Boolean).join(" ");
+}
+
+function canvasDistance(ax: number, ay: number, bx: number, by: number): number {
+  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/field-survey-import
+// ---------------------------------------------------------------------------
+authedRouter.post("/field-survey-import", async (req, res) => {
+  const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+  const organizationId = asPositiveId(body.organizationId);
+  if (!organizationId) {
+    res.status(400).json({ error: "Valid organizationId is required." });
+    return;
+  }
+
+  const org = await getOrganizationById(organizationId);
+  if (!org) {
+    res.status(404).json({ error: "Cemetery not found." });
+    return;
+  }
+
+  const burialCsvText = typeof body.burialCsv === "string" ? body.burialCsv : "";
+  const gprCsvText = typeof body.gprCsv === "string" ? body.gprCsv : "";
+  const copingCsvText = typeof body.copingCsv === "string" ? body.copingCsv : "";
+  const miscCsvText = typeof body.miscCsv === "string" ? body.miscCsv : "";
+
+  const burialRows = burialCsvText ? parseSimpleCsv(burialCsvText) : [];
+  const gprRows = gprCsvText ? parseSimpleCsv(gprCsvText) : [];
+  const copingRows = copingCsvText ? parseSimpleCsv(copingCsvText) : [];
+  const miscRows = miscCsvText ? parseSimpleCsv(miscCsvText) : [];
+
+  // Collect all raw projected points to build coordinate system
+  const allRawPoints: Array<{ x: number; y: number }> = [];
+  for (const r of burialRows) {
+    const x = parseFloat(r.X ?? r.x ?? ""); const y = parseFloat(r.Y ?? r.y ?? "");
+    if (Number.isFinite(x) && Number.isFinite(y)) allRawPoints.push({ x, y });
+  }
+  for (const r of gprRows) {
+    const x = parseFloat(r.X ?? r.x ?? ""); const y = parseFloat(r.Y ?? r.y ?? "");
+    if (Number.isFinite(x) && Number.isFinite(y)) allRawPoints.push({ x, y });
+  }
+  for (const r of copingRows) {
+    const wkt = r.WKT ?? r.wkt ?? r.geometry ?? "";
+    const pts = wkt ? parseWktPolygon(wkt) : [];
+    allRawPoints.push(...pts);
+  }
+  for (const r of miscRows) {
+    const x = parseFloat(r.X ?? r.x ?? ""); const y = parseFloat(r.Y ?? r.y ?? "");
+    if (Number.isFinite(x) && Number.isFinite(y)) allRawPoints.push({ x, y });
+  }
+
+  if (allRawPoints.length < 2) {
+    res.status(400).json({ error: "Not enough coordinate data in CSVs to build a coordinate system." });
+    return;
+  }
+
+  const cs = buildCoordSystem(allRawPoints);
+
+  const spots: Array<Record<string, unknown>> = [];
+
+  // --- Burial spots ---
+  const burialCanvasPoints: Array<{ cx: number; cy: number }> = [];
+  for (let i = 0; i < burialRows.length; i++) {
+    const r = burialRows[i];
+    const rawX = parseFloat(r.X ?? r.x ?? "");
+    const rawY = parseFloat(r.Y ?? r.y ?? "");
+    if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
+    const { x: cx, y: cy } = projectPoint(cs, rawX, rawY);
+    const name = fullName(r.FirstName ?? "", r.Middle ?? "", r.LastName ?? "");
+    const imagePath = r.Image ? r.Image.trim() : null;
+    const veteranStatus = r.VeteranStatus ? r.VeteranStatus.trim() : null;
+    const spotTypeId = veteranStatus && veteranStatus.toLowerCase() !== "no" && veteranStatus.toLowerCase() !== "false"
+      ? "veteran" : "standard";
+    const spotId = `CSV-${i + 1}`;
+    spots.push({
+      id: spotId,
+      x: cx, y: cy,
+      gprX: rawX, gprY: rawY, gprZ: parseFloat(r.Z ?? r.z ?? "0") || 0,
+      name: name || null,
+      dob: r.DOB ?? null,
+      dod: r.DOD ?? null,
+      imagePath,
+      veteranStatus,
+      spotTypeId,
+      reviewStatus: name ? "published" : "draft",
+      spotCategory: "burial",
+    });
+    burialCanvasPoints.push({ cx, cy });
+  }
+
+  // --- GPR spots (only those not within 25 canvas pixels of a burial) ---
+  let importedGpr = 0;
+  for (let i = 0; i < gprRows.length; i++) {
+    const r = gprRows[i];
+    const rawX = parseFloat(r.X ?? r.x ?? "");
+    const rawY = parseFloat(r.Y ?? r.y ?? "");
+    if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
+    const { x: cx, y: cy } = projectPoint(cs, rawX, rawY);
+    const tooClose = burialCanvasPoints.some(({ cx: bx, cy: by }) => canvasDistance(cx, cy, bx, by) < 25);
+    if (tooClose) continue;
+    const choice = r.Choice ?? r.choice ?? "Adult";
+    spots.push({
+      id: `GPR-${i + 1}`,
+      x: cx, y: cy,
+      gprX: rawX, gprY: rawY, gprZ: parseFloat(r.Z ?? r.z ?? "0") || 0,
+      name: null,
+      spotTypeId: `gpr-${choice.toLowerCase()}`,
+      spotCategory: "gpr",
+      reviewStatus: "draft",
+    });
+    importedGpr++;
+  }
+
+  // --- Coping polygons ---
+  const polygons: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < copingRows.length; i++) {
+    const r = copingRows[i];
+    const wkt = r.WKT ?? r.wkt ?? r.geometry ?? "";
+    if (!wkt) continue;
+    const rawPoints = parseWktPolygon(wkt);
+    const projectedPoints = rawPoints.map(({ x, y }) => projectPoint(cs, x, y));
+    polygons.push({
+      id: `COPING-${i + 1}`,
+      type: "coping",
+      points: projectedPoints,
+      label: r.Name ?? r.name ?? null,
+    });
+  }
+
+  // --- Misc points ---
+  for (let i = 0; i < miscRows.length; i++) {
+    const r = miscRows[i];
+    const rawX = parseFloat(r.X ?? r.x ?? "");
+    const rawY = parseFloat(r.Y ?? r.y ?? "");
+    if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
+    const { x: cx, y: cy } = projectPoint(cs, rawX, rawY);
+    spots.push({
+      id: `MISC-${i + 1}`,
+      x: cx, y: cy,
+      gprX: rawX, gprY: rawY,
+      name: r.Name ?? r.name ?? r.Type ?? r.type ?? "Misc",
+      spotTypeId: "misc",
+      spotCategory: "misc",
+      reviewStatus: "draft",
+    });
+  }
+
+  // Build map doc
+  const cemetery = { id: org.id, name: org.name, slug: org.slug };
+  const doc = {
+    cemeteryId: org.id,
+    projectStatus: "published",
+    coordinateSystem: cs,
+    spots,
+    polygons,
+  };
+  const payload: MapPayload = {
+    doc,
+    plotTypes: [],
+    spotTypes: [],
+    cemetery,
+    publishedAt: Date.now(),
+  };
+
+  const folder = mapFolder(org.id);
+  await mkdir(folder.absolute, { recursive: true });
+  await writeFile(path.join(folder.absolute, "draft-map.json"), JSON.stringify(payload, null, 2), "utf8");
+  await writeFile(path.join(folder.absolute, "published-map.json"), JSON.stringify(payload, null, 2), "utf8");
+
+  // Sync burial spots to DB
+  let syncedToDb = 0;
+  const existingPlots = await db.select().from(plotsTable).where(eq(plotsTable.organizationId, organizationId));
+  const existingBurials = await db.select().from(burialsTable).where(eq(burialsTable.organizationId, organizationId));
+  const byPlotNumber = new Map(existingPlots.map((p) => [p.plotNumber.toLowerCase(), p]));
+  const byPlotId = new Map(existingBurials.map((b) => [b.plotId ?? -1, b]));
+
+  for (const spot of spots) {
+    if (spot.spotCategory === "gpr") {
+      // GPR-only: insert plot as available
+      const pn = String(spot.id);
+      const existingPlot = byPlotNumber.get(pn.toLowerCase());
+      if (!existingPlot) {
+        await db.insert(plotsTable).values({
+          organizationId,
+          plotNumber: pn,
+          status: "available",
+          type: "standard",
+          geoJson: JSON.stringify({ source: "field-survey", mapSpotId: spot.id, x: spot.x, y: spot.y, gprX: spot.gprX, gprY: spot.gprY }),
+        });
+        syncedToDb++;
+      }
+      continue;
+    }
+    if (spot.spotCategory !== "burial" && spot.spotCategory !== "misc") continue;
+
+    const pn = String(spot.id);
+    const name = typeof spot.name === "string" && spot.name ? spot.name : null;
+    const dob = normalizeSqlDate(spot.dob);
+    const dod = normalizeSqlDate(spot.dod);
+    const imagePath = typeof spot.imagePath === "string" && spot.imagePath ? spot.imagePath : null;
+    const veteranStatus = typeof spot.veteranStatus === "string" && spot.veteranStatus ? spot.veteranStatus : null;
+    const plotStatus = name ? "occupied" : "available";
+    const geoMeta = { source: "field-survey", mapSpotId: spot.id, x: spot.x, y: spot.y, gprX: spot.gprX, gprY: spot.gprY, gprZ: spot.gprZ, imagePath };
+
+    const existingPlot = byPlotNumber.get(pn.toLowerCase());
+    const [plot] = existingPlot
+      ? await db.update(plotsTable).set({ status: plotStatus as "available" | "occupied", geoJson: JSON.stringify(geoMeta) })
+          .where(eq(plotsTable.id, existingPlot.id)).returning()
+      : await db.insert(plotsTable).values({
+          organizationId,
+          plotNumber: pn,
+          status: plotStatus as "available" | "occupied",
+          type: (typeof spot.spotTypeId === "string" && spot.spotTypeId === "veteran") ? "standard" : "standard",
+          geoJson: JSON.stringify(geoMeta),
+        }).returning();
+
+    byPlotNumber.set(pn.toLowerCase(), plot);
+    syncedToDb++;
+
+    if (name) {
+      const existingBurial = byPlotId.get(plot.id);
+      const burialNotes = imagePath ? `Headstone: ${imagePath}` : null;
+      if (existingBurial) {
+        await db.update(burialsTable).set({
+          deceasedName: name,
+          deceasedDob: dob,
+          deceasedDod: dod,
+          photoUrl: imagePath ?? existingBurial.photoUrl,
+          veteranStatus,
+          spotTypeId: typeof spot.spotTypeId === "string" ? spot.spotTypeId : null,
+          headstoneImages: imagePath ? JSON.stringify([imagePath]) : null,
+          notes: burialNotes ?? existingBurial.notes,
+        }).where(eq(burialsTable.id, existingBurial.id));
+      } else {
+        const [inserted] = await db.insert(burialsTable).values({
+          organizationId,
+          plotId: plot.id,
+          deceasedName: name,
+          deceasedDob: dob,
+          deceasedDod: dod,
+          photoUrl: imagePath,
+          veteranStatus,
+          spotTypeId: typeof spot.spotTypeId === "string" ? spot.spotTypeId : null,
+          headstoneImages: imagePath ? JSON.stringify([imagePath]) : null,
+          notes: burialNotes,
+        }).returning();
+        byPlotId.set(plot.id, inserted);
+      }
+    }
+  }
+
+  const importedBurials = burialRows.length;
+  const importedCoping = copingRows.length;
+  const totalSpots = spots.length;
+
+  res.json({
+    ok: true,
+    importedBurials,
+    importedGpr,
+    importedCoping,
+    totalSpots,
+    syncedToDb,
+  });
+});
+
 export { publicRouter as cemeteryMapsPublicRouter };
 export default authedRouter;
