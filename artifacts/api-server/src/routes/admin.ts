@@ -8,6 +8,7 @@ import {
   platformInvoicesTable,
   platformPaymentsTable,
   auditLogTable,
+  productsTable,
   insertSubscriptionPlanSchema,
   insertSubscriptionSchema,
   insertPlatformInvoiceSchema,
@@ -1097,6 +1098,39 @@ router.get("/admin/users", async (req, res) => {
     .orderBy(desc(usersTable.createdAt))
     .limit(limit);
   res.json(rows);
+});
+
+/* ── Demo store seed ─────────────────────────────────────────────────── */
+
+function pollImg(prompt: string, seed: number) {
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1400&height=1000&model=flux&seed=${seed}&nologo=true`;
+}
+
+const DEMO_PRODUCTS: Array<{
+  name: string; description: string;
+  category: "flowers" | "urns" | "services" | "other";
+  price: number; imageUrl: string; inStock: boolean; stockCount: number;
+}> = [
+  { name: "White Rose Memorial Bouquet", description: "12 long-stem white roses hand-tied with satin ribbon. Delivered fresh to the gravesite.", category: "flowers", price: 49.99, imageUrl: pollImg("studio product photo of a white rose memorial bouquet with satin ribbon on a neutral stone surface, soft natural light, photorealistic", 101), inStock: true, stockCount: 50 },
+  { name: "Sympathy Lilies Arrangement", description: "Elegant white lilies with eucalyptus and baby's breath in a ceramic vase.", category: "flowers", price: 79.99, imageUrl: pollImg("elegant sympathy lilies arrangement in ceramic vase, memorial tribute floral product photography, clean background, photorealistic", 102), inStock: true, stockCount: 30 },
+  { name: "White Chrysanthemum Wreath", description: "Traditional circular wreath of white chrysanthemums — a dignified tribute for any memorial.", category: "flowers", price: 89.99, imageUrl: pollImg("white chrysanthemum memorial wreath standing upright, respectful funeral product shot, realistic details, soft shadows", 103), inStock: true, stockCount: 20 },
+  { name: "Forget-Me-Not Memory Basket", description: "Delicate forget-me-nots nestled in a woven willow basket with moss.", category: "flowers", price: 59.99, imageUrl: pollImg("forget me not flowers in a woven willow memory basket with moss, memorial gift product image, realistic", 104), inStock: true, stockCount: 40 },
+  { name: "Classic Bronze Urn", description: "Hand-cast solid bronze urn with brushed finish and engraved nameplate. Holds up to 200 cubic inches.", category: "urns", price: 249.99, imageUrl: pollImg("classic bronze cremation urn with brushed metal finish and engraved plate, premium product photography, photorealistic", 201), inStock: true, stockCount: 15 },
+  { name: "Biodegradable Earth Urn", description: "Eco-friendly sand and gelatin urn designed for water or earth burial. Dissolves naturally within 48 hours.", category: "urns", price: 129.99, imageUrl: pollImg("biodegradable eco urn made of natural sand material, modern memorial product photo on neutral background, realistic", 202), inStock: true, stockCount: 25 },
+  { name: "Marble Keepsake Urn", description: "Carrara marble mini urn for sharing ashes among family. Sealed brass threaded lid.", category: "urns", price: 189.99, imageUrl: pollImg("small carrara marble keepsake urn with brass lid, close up studio product image, realistic stone texture", 203), inStock: true, stockCount: 18 },
+  { name: "Granite Headstone — Classic Gray", description: "Polished gray granite headstone with beveled edges. Includes custom engraving of name and dates.", category: "other", price: 899.99, imageUrl: pollImg("polished gray granite headstone with engraved text in cemetery display setting, product-focused composition, photorealistic", 301), inStock: true, stockCount: 8 },
+  { name: "Bronze Memorial Plaque", description: "Cast bronze wall or ground plaque with UV-resistant lacquer. 8×10 inches, mounting hardware included.", category: "other", price: 349.99, imageUrl: pollImg("cast bronze memorial plaque with mounting hardware on stone background, high detail product photo, realistic", 302), inStock: true, stockCount: 12 },
+  { name: "Upright Marble Monument", description: "Statuary white marble upright monument with carved floral relief. Full installation coordination included.", category: "other", price: 1499.99, imageUrl: pollImg("upright white marble monument with carved floral relief, premium memorial product image, realistic lighting", 303), inStock: true, stockCount: 5 },
+  { name: "Weekly Grave Care Plan", description: "Ongoing maintenance: trimming, debris removal, flower refreshing, and seasonal decorations.", category: "services", price: 29.99, imageUrl: pollImg("professional grave care service scene with caretaker cleaning headstone and fresh flowers, respectful realistic photo", 401), inStock: true, stockCount: 100 },
+  { name: "Memorial Photography Session", description: "Professional photographer captures the memorial site, floral tributes, and family portraits.", category: "services", price: 149.99, imageUrl: pollImg("memorial photography service concept with camera and framed floral gravesite in background, realistic professional look", 402), inStock: true, stockCount: 20 },
+  { name: "Headstone Cleaning & Restoration", description: "Gentle non-abrasive cleaning, moss removal, and minor repair of weathered inscriptions.", category: "services", price: 199.99, imageUrl: pollImg("headstone cleaning and restoration service in progress, before and after style visual, realistic respectful scene", 403), inStock: true, stockCount: 15 },
+];
+
+router.post("/admin/seed-store", async (_req, res) => {
+  // Wipe existing demo products and replace with fresh set
+  await db.delete(productsTable);
+  const inserted = await db.insert(productsTable).values(DEMO_PRODUCTS).returning({ id: productsTable.id, name: productsTable.name });
+  res.json({ seeded: inserted.length, products: inserted.map(p => p.name) });
 });
 
 export default router;
