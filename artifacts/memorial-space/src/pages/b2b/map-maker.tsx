@@ -4089,6 +4089,7 @@ function PublicFullScreenMap({
   const [panMode, setPanMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
+  const [viewMode, setViewMode] = useState<"map" | "grid">("map");
   const mapScrollRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
   const spotTypeMap = useMemo(() => new Map(spotTypes.map((type) => [type.id, type])), [spotTypes]);
@@ -4120,6 +4121,22 @@ function PublicFullScreenMap({
 
   const selectedSpot = selectedId ? doc.spots.find((s) => s.id === selectedId) ?? null : null;
   const visibleIds = new Set(visibleSpots.map((s) => s.id));
+
+  // Grid sections: group visibleSpots by A-D column × 1-5 row (matching the map grid).
+  // Section label = column letter + row number, e.g. "A1", "B3", "D5".
+  const gridSections = useMemo(() => {
+    const COL = ["A", "B", "C", "D"];
+    const map = new Map<string, typeof doc.spots>();
+    for (const spot of visibleSpots) {
+      const col = COL[Math.min(3, Math.floor((spot.x / Math.max(doc.imgWidth, 1)) * 4))];
+      const row = Math.min(5, Math.floor((spot.y / Math.max(doc.imgHeight, 1)) * 5) + 1);
+      const key = `${col}${row}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(spot);
+    }
+    // Sort A1 → A5 → B1 → … → D5
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [doc.imgHeight, doc.imgWidth, visibleSpots]);
 
   // Pan handlers — drag to scroll the map container
   const onMapPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -4176,8 +4193,29 @@ function PublicFullScreenMap({
             <span className="shrink-0 text-[10px] text-[#576657]">{visibleSpots.length}/{doc.spots.length} spots</span>
           </div>
         </div>
-        {/* Pan + Zoom controls */}
-        <div className="hidden items-center gap-0.5 sm:flex">
+
+        {/* View toggle: Map ↔ Grid View */}
+        <div className="hidden items-center rounded-lg border border-white/10 bg-[#0e1510] p-0.5 sm:flex">
+          <button
+            type="button"
+            onClick={() => setViewMode("map")}
+            className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors",
+              viewMode === "map" ? "bg-[#2d4a35] text-white shadow-sm" : "text-[#576657] hover:text-[#b8c4b4]")}
+          >
+            <Layers className="h-3.5 w-3.5" /> Map
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors",
+              viewMode === "grid" ? "bg-[#2d4a35] text-white shadow-sm" : "text-[#576657] hover:text-[#b8c4b4]")}
+          >
+            <Database className="h-3.5 w-3.5" /> Grid View
+          </button>
+        </div>
+
+        {/* Pan + Zoom controls — map view only */}
+        <div className={cn("hidden items-center gap-0.5 sm:flex", viewMode !== "map" && "invisible")}>
           <Button size="icon" variant="ghost" className={cn("h-8 w-8 hover:bg-white/10", panMode ? "bg-white/20 text-white" : "text-[#b8c4b4]")} onClick={() => setPanMode((v) => !v)} title="Pan / drag map (H)">
             <Hand className="h-4 w-4" />
           </Button>
@@ -4280,8 +4318,75 @@ function PublicFullScreenMap({
           </aside>
         )}
 
+        {/* ── Grid View ── */}
+        {viewMode === "grid" && (
+          <div className="flex-1 overflow-auto bg-[#0a0f0a] p-5">
+            {gridSections.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-[#576657] text-sm">
+                No burial spots match the current filter.
+              </div>
+            ) : (
+              <div className="mx-auto max-w-5xl space-y-5">
+                {gridSections.map(([sectionKey, spots]) => (
+                  <div key={sectionKey} className="overflow-hidden rounded-xl border border-white/10 bg-[#0e1510]">
+                    {/* Section header */}
+                    <div className="flex items-center gap-3 border-b border-white/10 bg-[#141d14] px-4 py-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-[#1e3a28]">
+                        <span className="text-sm font-bold text-white">{sectionKey}</span>
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-white">Grid {sectionKey}</div>
+                        <div className="text-[10px] text-[#576657]">{spots.length} burial spot{spots.length !== 1 ? "s" : ""}</div>
+                      </div>
+                    </div>
+                    {/* Spot boxes — same box shape as map view */}
+                    <div className="flex flex-wrap gap-1.5 p-4">
+                      {spots.map((spot) => {
+                        const meta = spotTypeMap.get(spot.spotTypeId) ?? FALLBACK_SPOT_TYPE;
+                        const dob = spot.dob ? String(spot.dob).slice(-4) : null;
+                        const dod = spot.dod ? String(spot.dod).slice(-4) : null;
+                        const active = selectedId === spot.id;
+                        return (
+                          <button
+                            key={spot.id}
+                            type="button"
+                            onClick={() => setSelectedId((p) => p === spot.id ? null : spot.id)}
+                            className={cn(
+                              "overflow-hidden rounded border bg-white text-left shadow-sm transition hover:shadow-md hover:scale-105",
+                              active && "ring-2 ring-[#0f766e] shadow-lg scale-105",
+                            )}
+                            style={{
+                              width: Math.max(54, spotW),
+                              minHeight: Math.max(28, spotH),
+                              borderTopColor: meta.color,
+                              borderTopWidth: 3,
+                              borderColor: active ? "#0f766e" : "#b0b0a8",
+                              fontSize: Math.max(8, spotFontPx),
+                              fontFamily: "ui-sans-serif,system-ui,sans-serif",
+                            }}
+                            title={`${spot.name || spot.temporaryId || "Unknown"}${dob || dod ? ` · ${dob ?? "?"}–${dod ?? "?"}` : ""}`}
+                          >
+                            <span className="block w-full truncate px-1 pt-0.5 font-semibold leading-tight">
+                              {spot.name || spot.temporaryId || "Unknown"}
+                            </span>
+                            {(dob || dod) && (
+                              <span className="block w-full truncate px-1 pb-0.5 font-normal leading-tight opacity-60">
+                                {dob ?? "?"}–{dod ?? "?"}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Map area: native size, scroll or pan-drag to navigate ── */}
-        <div
+        {viewMode === "map" && <div
           ref={mapScrollRef}
           className="relative flex-1 overflow-auto bg-[#1a1f1a]"
           onWheel={onMapWheel}
@@ -4390,7 +4495,7 @@ function PublicFullScreenMap({
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* ── Selected spot full detail panel ── */}
         {selectedSpot && (() => {
