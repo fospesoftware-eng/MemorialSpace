@@ -114,6 +114,8 @@ export interface BurialSpot {
   memorialCode?: string | null;
   /** Pre-rendered QR image URL from the qr_codes table. */
   qrImageUrl?: string | null;
+  /** Database burial ID — present after hydration so the preview can generate QR codes. */
+  burialId?: number | null;
 }
 
 /** Hard cap so a single spot can't grow without bound and bust localStorage. */

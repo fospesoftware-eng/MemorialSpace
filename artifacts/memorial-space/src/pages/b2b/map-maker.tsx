@@ -637,6 +637,10 @@ function migrateDoc(raw: unknown): MapDoc {
         aiData: typeof (s as LegacySpot & { aiData?: unknown }).aiData === "object"
           ? (s as BurialSpot).aiData
           : undefined,
+        // Hydrated-from-server fields — preserve as-is so QR data survives migration
+        burialId: typeof (s as BurialSpot).burialId === "number" ? (s as BurialSpot).burialId : null,
+        memorialCode: safeOptStr((s as BurialSpot).memorialCode) ?? null,
+        qrImageUrl: safeOptStr((s as BurialSpot).qrImageUrl) ?? null,
       };
     }),
     importSource: d.importSource,
@@ -3995,6 +3999,122 @@ function MapMakerEditor() {
 
 // ===== Subcomponents =====
 
+// Self-contained QR section for a single burial spot in the map preview.
+// Fetches current QR state on mount; shows the QR code if it exists, or
+// a per-spot "Generate QR Code" button if it doesn't.
+function SpotQrSection({ spot, cemeteryId }: { spot: BurialSpot; cemeteryId: number | null }) {
+  type QrRow = { id: number; code: string; burialId?: number | null; qrImageUrl?: string | null; editPin?: string | null };
+  const [qr, setQr] = useState<QrRow | null>(null);
+  const [fetching, setFetching] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  // Use spot's hydrated values if already present (avoids an extra network call)
+  useEffect(() => {
+    if (spot.memorialCode) {
+      setQr({ id: 0, code: spot.memorialCode, qrImageUrl: spot.qrImageUrl ?? null });
+      setFetching(false);
+      return;
+    }
+    if (!cemeteryId || !spot.burialId) {
+      setFetching(false);
+      return;
+    }
+    let cancelled = false;
+    setFetching(true);
+    fetch(`/api/qr-codes?organizationId=${cemeteryId}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((codes: unknown) => {
+        if (cancelled) return;
+        if (Array.isArray(codes)) {
+          const found = codes.find((c: any) => Number(c.burialId) === spot.burialId) as QrRow | undefined;
+          setQr(found ?? null);
+        }
+      })
+      .catch(() => { if (!cancelled) setQr(null); })
+      .finally(() => { if (!cancelled) setFetching(false); });
+    return () => { cancelled = true; };
+  }, [spot.id, spot.memorialCode, spot.burialId, cemeteryId]);
+
+  const memorialUrl = qr?.code ? buildMemorialUrl({ memorialCode: qr.code }) : null;
+  const qrSrc = qr?.qrImageUrl ?? (memorialUrl ? buildMemorialQrImageUrl(memorialUrl, 200) : null);
+
+  async function handleGenerate() {
+    if (!cemeteryId || !spot.burialId) return;
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const res = await fetch("/api/qr-codes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ burialId: spot.burialId, organizationId: cemeteryId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `Failed (${res.status})`);
+      setQr(body as QrRow);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "QR generation failed.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (fetching) return null;
+
+  if (qrSrc) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <QrCode className="h-4 w-4 text-[#576657]" />
+          <span className="text-[10px] uppercase tracking-wider text-[#576657]">Memorial QR Code</span>
+        </div>
+        <div className="flex items-start gap-4">
+          <img src={qrSrc} alt="Memorial QR code" className="h-24 w-24 shrink-0 rounded border border-white/10 bg-white p-1" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-[#b8c4b4] leading-relaxed">Scan to open the memorial page for {spot.name || "this burial"}.</p>
+            {memorialUrl && (
+              <a
+                href={memorialUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 rounded border border-[#3d7a5a]/50 bg-[#1e3a28] px-2.5 py-1.5 text-[11px] font-medium text-[#6dbb8a] hover:bg-[#243d2c] transition"
+              >
+                <ExternalLink className="h-3 w-3" /> Open memorial page
+              </a>
+            )}
+            {qr?.editPin && (
+              <p className="mt-1.5 text-[10px] text-[#576657]">Edit PIN: <span className="font-mono font-semibold text-[#b8c4b4]">{qr.editPin}</span></p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cemeteryId || !spot.burialId) return null;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <QrCode className="h-4 w-4 text-[#576657]" />
+        <span className="text-[10px] uppercase tracking-wider text-[#576657]">Memorial QR Code</span>
+      </div>
+      <p className="mb-2 text-[11px] text-[#576657]">No QR code yet for this burial.</p>
+      {genError && <p className="mb-2 text-[11px] text-red-400">{genError}</p>}
+      <button
+        type="button"
+        disabled={generating}
+        onClick={handleGenerate}
+        className="inline-flex items-center gap-1.5 rounded border border-[#3d7a5a]/50 bg-[#1e3a28] px-2.5 py-1.5 text-[11px] font-medium text-[#6dbb8a] hover:bg-[#243d2c] transition disabled:opacity-60"
+      >
+        <QrCode className="h-3 w-3" />
+        {generating ? "Generating…" : "Generate QR Code"}
+      </button>
+    </div>
+  );
+}
+
 function PublishedMapPreview({ slug }: { slug: string }) {
   const [plotTypes] = usePlotTypes();
   const [spotTypes] = useSpotTypes();
@@ -4061,6 +4181,7 @@ function PublishedMapPreview({ slug }: { slug: string }) {
       doc={doc}
       spotTypes={effectiveSpotTypes}
       cemeteryName={payload?.cemetery?.name ?? slug}
+      cemeteryId={payload?.cemetery?.id ?? null}
     />
   );
 }
@@ -4073,10 +4194,12 @@ function PublicFullScreenMap({
   doc,
   spotTypes,
   cemeteryName,
+  cemeteryId,
 }: {
   doc: MapDoc;
   spotTypes: SpotType[];
   cemeteryName: string;
+  cemeteryId?: number | null;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -4594,30 +4717,10 @@ function PublicFullScreenMap({
                   )}
 
                   {/* QR Code + Memorial page */}
-                  {qrSrc && (
-                    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                      <div className="mb-2 flex items-center gap-2">
-                        <QrCode className="h-4 w-4 text-[#576657]" />
-                        <span className="text-[10px] uppercase tracking-wider text-[#576657]">Memorial QR Code</span>
-                      </div>
-                      <div className="flex items-start gap-4">
-                        <img src={qrSrc} alt="Memorial QR code" className="h-24 w-24 shrink-0 rounded border border-white/10 bg-white p-1" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] text-[#b8c4b4] leading-relaxed">Scan to open the memorial page for {selectedSpot.name || "this burial"}.</p>
-                          {memorialUrl && (
-                            <a
-                              href={memorialUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-2 inline-flex items-center gap-1 rounded border border-[#3d7a5a]/50 bg-[#1e3a28] px-2.5 py-1.5 text-[11px] font-medium text-[#6dbb8a] hover:bg-[#243d2c] transition"
-                            >
-                              <ExternalLink className="h-3 w-3" /> Open memorial page
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <SpotQrSection
+                    spot={selectedSpot}
+                    cemeteryId={cemeteryId ?? null}
+                  />
 
                   {/* AI inscription data */}
                   {selectedSpot.aiData?.inscription && (

@@ -367,6 +367,7 @@ async function hydratePayloadWithGlobalSpots(organizationId: number, payload: Ma
       notes: burial?.notes ?? plot.notes ?? spot.notes,
       reviewStatus: "published",
       // Memorial QR code fields (null when not yet generated)
+      burialId: burial?.id ?? null,
       memorialCode: qr?.code ?? null,
       qrImageUrl: qr?.qrImageUrl ?? null,
     };
